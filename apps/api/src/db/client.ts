@@ -3,10 +3,22 @@ import postgres from "postgres";
 
 import * as schema from "./schema/index.js";
 
+/**
+ * متغیرهای محیطی همین‌جا و در زمان بارگذاری ماژول خوانده می‌شوند، نه از
+ * طریق `ConfigModule` نست.
+ *
+ * دلیل: این ماژول از سرویس‌های فارغ از فریم‌ورک و از تست‌ها و اسکریپت‌های
+ * مایگریشن هم import می‌شود، جایی که اصلاً Nest بالا نیامده. پس `.env`
+ * باید پیش از هر import بار شده باشد — اسکریپت‌های `dev` و `start` این
+ * کار را با `--env-file-if-exists` نود انجام می‌دهند و تست‌ها با
+ * `src/test/setup.ts`.
+ */
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("متغیر محیطی DATABASE_URL تعریف نشده است");
+  throw new Error(
+    "متغیر محیطی DATABASE_URL تعریف نشده است. `cp .env.example .env` را اجرا کنید.",
+  );
 }
 
 /**

@@ -1,6 +1,30 @@
+import swc from "unplugin-swc";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  plugins: [
+    /**
+     * ترنسفورم با SWC به‌جای esbuild پیش‌فرض ویتست.
+     *
+     * تزریق وابستگی نست به فراداده‌ی `design:paramtypes` تکیه دارد که
+     * `emitDecoratorMetadata` تولیدش می‌کند — و **esbuild از آن پشتیبانی
+     * نمی‌کند**. بدون این پلاگین، نست فکر می‌کند کنترلرها هیچ وابستگی
+     * ندارند و آن‌ها را بدون آرگومان می‌سازد، پس سرویس‌ها در زمان اجرا
+     * `undefined` می‌شوند — بدون هیچ خطای راه‌اندازی.
+     *
+     * سرور واقعی این مشکل را ندارد چون از `@swc-node/register` استفاده
+     * می‌کند. این تنظیم فقط محیط تست را با آن هم‌تراز می‌کند.
+     */
+    swc.vite({
+      module: { type: "es6" },
+      jsc: {
+        target: "es2023",
+        parser: { syntax: "typescript", decorators: true },
+        transform: { legacyDecorator: true, decoratorMetadata: true },
+        keepClassNames: true,
+      },
+    }),
+  ],
   test: {
     setupFiles: ["./src/test/setup.ts"],
     /**
