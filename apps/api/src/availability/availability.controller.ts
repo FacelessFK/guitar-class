@@ -15,6 +15,7 @@ import {
   previewPackage,
 } from "./availability.service.js";
 import { zodPipe } from "../common/validation.pipe.js";
+import { Public } from "../auth/auth.guard.js";
 import {
   dateKeySchema,
   dateRangeSchema,
@@ -79,6 +80,11 @@ const availabilityQuerySchema = dateRangeSchema.and(
   z.object({ teacherProfileId: uuidSchema }),
 );
 
+/**
+ * مرور اسلات‌های آزاد نیازی به ورود ندارد — هنرجو باید پیش از
+ * ثبت‌نام بتواند برنامه‌ی استاد را ببیند. رزرو کردن نیاز به ورود دارد.
+ */
+@Public()
 @Controller("offerings/:offeringId")
 export class AvailabilityController {
   constructor(private readonly availability: AvailabilityProvider) {}

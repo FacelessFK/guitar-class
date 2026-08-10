@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import { db, sqlClient } from "../db/client.js";
+import { closeRedis, redis } from "../redis/client.js";
 import {
   availabilityRules,
   instruments,
@@ -32,6 +33,21 @@ export async function resetDatabase(): Promise<void> {
 
 export async function closeDatabase(): Promise<void> {
   await sqlClient.end();
+  await closeRedis();
+}
+
+/** حالت‌های ردیس (کد ورود، محدودسازی نرخ) را بین تست‌ها پاک می‌کند. */
+export async function resetRedis(): Promise<void> {
+  await redis.flushdb();
+}
+
+/**
+ * توکن دسترسی معتبر برای یک کاربر می‌سازد.
+ * تست‌های e2e برای عبور از گارد سراسری به آن نیاز دارند.
+ */
+export async function accessTokenFor(userId: string, isAdmin = false): Promise<string> {
+  const { issueAccessToken } = await import("../auth/token.service.js");
+  return issueAccessToken({ userId, isAdmin });
 }
 
 export interface Fixture {
@@ -73,9 +89,9 @@ export async function seedFixture(options: SeedOptions = {}): Promise<Fixture> {
   const insertedUsers = await db
     .insert(users)
     .values([
-      { phone: "09120000001", fullName: "هنرجوی الف" },
-      { phone: "09120000002", fullName: "هنرجوی ب" },
-      { phone: "09120000003", fullName: "استاد رضایی" },
+      { phone: "+989120000001", fullName: "هنرجوی الف" },
+      { phone: "+989120000002", fullName: "هنرجوی ب" },
+      { phone: "+989120000003", fullName: "استاد رضایی" },
     ])
     .returning({ id: users.id });
 

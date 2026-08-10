@@ -10,6 +10,7 @@ import {
   users,
 } from "../db/schema/index.js";
 import { zodPipe } from "../common/validation.pipe.js";
+import { Public } from "../auth/auth.guard.js";
 
 const slugSchema = z
   .string()
@@ -136,6 +137,8 @@ function buildTeacherCard(
   };
 }
 
+/** کاتالوگ عمومی است — صفحات سئوی Next.js بدون ورود مصرفش می‌کنند. */
+@Public()
 @Controller()
 export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}

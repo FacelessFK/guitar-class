@@ -6,8 +6,16 @@ import type { App } from "supertest/types.js";
 
 import { AppModule } from "./app.module.js";
 import { BookingExceptionFilter } from "./common/booking-exception.filter.js";
+import { AuthExceptionFilter } from "./common/auth-exception.filter.js";
 import { BigIntSerializationInterceptor } from "./common/serialization.interceptor.js";
-import { closeDatabase, resetDatabase, seedFixture, type Fixture } from "./test/fixtures.js";
+import {
+  accessTokenFor,
+  closeDatabase,
+  resetDatabase,
+  resetRedis,
+  seedFixture,
+  type Fixture,
+} from "./test/fixtures.js";
 
 /**
  * تست‌های end-to-end لایه‌ی HTTP.
@@ -22,13 +30,17 @@ const SATURDAY = "2026-08-15";
 let app: INestApplication;
 let server: App;
 let fixture: Fixture;
+/** توکن‌های واقعی — گارد سراسری دیگر هدر جای‌نگه‌دار را نمی‌پذیرد. */
+let studentToken: string;
+let otherStudentToken: string;
+let teacherToken: string;
 
 beforeAll(async () => {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
 
   app = moduleRef.createNestApplication();
   app.setGlobalPrefix("api");
-  app.useGlobalFilters(new BookingExceptionFilter());
+  app.useGlobalFilters(new AuthExceptionFilter(), new BookingExceptionFilter());
   app.useGlobalInterceptors(new BigIntSerializationInterceptor());
   await app.init();
 
@@ -37,7 +49,14 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetDatabase();
+  await resetRedis();
   fixture = await seedFixture();
+
+  [studentToken, otherStudentToken, teacherToken] = await Promise.all([
+    accessTokenFor(fixture.studentId),
+    accessTokenFor(fixture.otherStudentId),
+    accessTokenFor(fixture.teacherUserId),
+  ]);
 });
 
 afterAll(async () => {
@@ -46,9 +65,9 @@ afterAll(async () => {
 });
 
 describe("GET /api/health", () => {
-  it("سلامت سرویس و دیتابیس را گزارش می‌کند", async () => {
+  it("سلامت سرویس، دیتابیس و ردیس را گزارش می‌کند", async () => {
     const response = await request(server).get("/api/health").expect(200);
-    expect(response.body).toEqual({ status: "ok", database: "ok" });
+    expect(response.body).toEqual({ status: "ok", database: "ok", redis: "ok" });
   });
 });
 
@@ -147,7 +166,7 @@ describe("GET /api/offerings/:id/availability", () => {
 describe("POST /api/bookings/single", () => {
   const slot = { date: SATURDAY, startMinute: 17 * 60 };
 
-  it("بدون هدر کاربر، ۴۰۱ می‌دهد", async () => {
+  it("بدون توکن، ۴۰۱ می‌دهد", async () => {
     await request(server)
       .post("/api/bookings/single")
       .send({ ...slot, teacherProfileId: fixture.teacherProfileId, offeringId: fixture.offeringId })
@@ -157,7 +176,7 @@ describe("POST /api/bookings/single", () => {
   it("رزرو می‌سازد و مهلت پرداخت را برمی‌گرداند", async () => {
     const response = await request(server)
       .post("/api/bookings/single")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send({
         ...slot,
         teacherProfileId: fixture.teacherProfileId,
@@ -179,7 +198,7 @@ describe("POST /api/bookings/single", () => {
   it("اسلات پرشده را ۴۰۹ با کد ماشین‌خوان می‌دهد", async () => {
     await request(server)
       .post("/api/bookings/single")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send({
         ...slot,
         teacherProfileId: fixture.teacherProfileId,
@@ -189,7 +208,7 @@ describe("POST /api/bookings/single", () => {
 
     const response = await request(server)
       .post("/api/bookings/single")
-      .set("x-user-id", fixture.otherStudentId)
+      .set("authorization", `Bearer ${otherStudentToken}`)
       .send({
         ...slot,
         teacherProfileId: fixture.teacherProfileId,
@@ -204,7 +223,7 @@ describe("POST /api/bookings/single", () => {
   it("ساعت خارج از برنامه‌ی استاد را ۴۰۹ می‌دهد", async () => {
     const response = await request(server)
       .post("/api/bookings/single")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send({
         date: SATURDAY,
         startMinute: 9 * 60,
@@ -219,7 +238,7 @@ describe("POST /api/bookings/single", () => {
   it("دقیقه‌ی خارج از بازه را ۴۰۰ می‌دهد", async () => {
     await request(server)
       .post("/api/bookings/single")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send({
         date: SATURDAY,
         startMinute: 5000,
@@ -234,7 +253,7 @@ describe("POST /api/bookings/trial", () => {
   it("جلسه‌ی رایگان قطعی می‌سازد", async () => {
     const response = await request(server)
       .post("/api/bookings/trial")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send({
         date: SATURDAY,
         startMinute: 16 * 60,
@@ -257,13 +276,13 @@ describe("POST /api/bookings/trial", () => {
 
     await request(server)
       .post("/api/bookings/trial")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send(body)
       .expect(201);
 
     const response = await request(server)
       .post("/api/bookings/trial")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send({ ...body, startMinute: 18 * 60 })
       .expect(409);
 
@@ -282,7 +301,7 @@ describe("POST /api/bookings/package", () => {
   it("چهار جلسه و مبلغ کل را برمی‌گرداند", async () => {
     const response = await request(server)
       .post("/api/bookings/package")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send(body())
       .expect(201);
 
@@ -294,7 +313,7 @@ describe("POST /api/bookings/package", () => {
   it("تداخل را با فهرست هفته‌های مشکل‌دار برمی‌گرداند", async () => {
     await request(server)
       .post("/api/bookings/single")
-      .set("x-user-id", fixture.otherStudentId)
+      .set("authorization", `Bearer ${otherStudentToken}`)
       .send({
         teacherProfileId: fixture.teacherProfileId,
         offeringId: fixture.offeringId,
@@ -305,7 +324,7 @@ describe("POST /api/bookings/package", () => {
 
     const response = await request(server)
       .post("/api/bookings/package")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send(body())
       .expect(409);
 
@@ -333,7 +352,7 @@ describe("پیش‌نمایش پکیج", () => {
     // هیچ رزروی نباید ساخته شده باشد
     const mine = await request(server)
       .get("/api/bookings/me")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .expect(200);
     expect(mine.body.bookings).toHaveLength(0);
   });
@@ -343,7 +362,7 @@ describe("لغو و فهرست رزروها", () => {
   async function bookOne() {
     const response = await request(server)
       .post("/api/bookings/single")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send({
         teacherProfileId: fixture.teacherProfileId,
         offeringId: fixture.offeringId,
@@ -359,7 +378,7 @@ describe("لغو و فهرست رزروها", () => {
 
     const response = await request(server)
       .get("/api/bookings/me")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .expect(200);
 
     expect(response.body.bookings).toHaveLength(1);
@@ -370,7 +389,7 @@ describe("لغو و فهرست رزروها", () => {
 
     const response = await request(server)
       .get("/api/bookings/me")
-      .set("x-user-id", fixture.teacherUserId)
+      .set("authorization", `Bearer ${teacherToken}`)
       .expect(200);
 
     expect(response.body.bookings).toHaveLength(1);
@@ -381,7 +400,7 @@ describe("لغو و فهرست رزروها", () => {
 
     const response = await request(server)
       .post(`/api/bookings/${bookingId}/cancel`)
-      .set("x-user-id", fixture.otherStudentId)
+      .set("authorization", `Bearer ${otherStudentToken}`)
       .send({})
       .expect(403);
 
@@ -393,7 +412,7 @@ describe("لغو و فهرست رزروها", () => {
 
     const response = await request(server)
       .post(`/api/bookings/${bookingId}/cancel`)
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .send({ reason: "برنامه‌ام عوض شد" })
       .expect(201);
 
@@ -405,7 +424,7 @@ describe("لغو و فهرست رزروها", () => {
     // شناسه تفسیر می‌شود و اعتبارسنجی UUID آن را رد می‌کند
     await request(server)
       .get("/api/bookings/me")
-      .set("x-user-id", fixture.studentId)
+      .set("authorization", `Bearer ${studentToken}`)
       .expect(200);
   });
 });
