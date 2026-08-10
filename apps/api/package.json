@@ -1,0 +1,27 @@
+{
+  "name": "@music/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
+    "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate",
+    "db:push": "dotenv -e ../../.env -- drizzle-kit push",
+    "db:studio": "dotenv -e ../../.env -- drizzle-kit studio",
+    "db:check": "drizzle-kit check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@music/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
