@@ -43,12 +43,16 @@ export interface TeacherScheduleInput {
   now?: Date;
 }
 
-interface LoadedSchedule {
+export interface LoadedSchedule {
   rules: AvailabilityRule[];
   exceptions: AvailabilityException[];
   busy: Interval[];
   sessionMinutes: number;
   bufferMinutes: number;
+  /** شناسه‌ی `users` استاد — رزروها به این اشاره می‌کنند، نه به پروفایل */
+  teacherUserId: string;
+  price: bigint;
+  commissionRate: string;
 }
 
 /**
@@ -57,7 +61,7 @@ interface LoadedSchedule {
  * یک روز حاشیه در دو طرف بازه گرفته می‌شود، چون پنجره‌ی کاری که به وقت
  * تهران تعریف شده می‌تواند در UTC به روز مجاور سرریز کند.
  */
-async function loadSchedule(
+export async function loadSchedule(
   teacherProfileId: string,
   offeringId: string,
   from: DateKey,
@@ -72,7 +76,9 @@ async function loadSchedule(
     db
       .select({
         durationMinutes: offerings.durationMinutes,
+        price: offerings.price,
         bufferMinutes: teacherProfiles.bufferMinutes,
+        commissionRate: teacherProfiles.commissionRate,
         teacherUserId: teacherProfiles.userId,
       })
       .from(offerings)
@@ -129,6 +135,9 @@ async function loadSchedule(
   return {
     sessionMinutes: offering.durationMinutes,
     bufferMinutes: offering.bufferMinutes,
+    teacherUserId: offering.teacherUserId,
+    price: offering.price,
+    commissionRate: offering.commissionRate,
     rules: ruleRows.map((rule) => ({
       weekday: rule.weekday as Weekday,
       startMinute: rule.startMinute,
