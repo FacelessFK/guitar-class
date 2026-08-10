@@ -1,0 +1,43 @@
+name: music-platform
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: music_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: music
+      POSTGRES_PASSWORD: music_dev_password
+      POSTGRES_DB: music
+      # وقت سرور دیتابیس UTC است. تبدیل به تهران فقط در لایه‌ی نمایش انجام می‌شود.
+      TZ: UTC
+      PGTZ: UTC
+    # پورت‌ها عمداً غیرپیش‌فرض‌اند تا با پستگرس/ردیس نصب‌شده روی سیستم تداخل نکنند
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U music -d music"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: music_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
