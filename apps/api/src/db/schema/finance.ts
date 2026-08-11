@@ -1,5 +1,14 @@
 import { relations, sql } from "drizzle-orm";
-import { check, date, index, pgTable, text, uuid, varchar } from "drizzle-orm/pg-core";
+import {
+  check,
+  date,
+  index,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 import { createdAt, primaryId, rial, tstz, updatedAt } from "./columns.js";
 import { ledgerType, orderStatus, payoutStatus } from "./enums.js";
@@ -30,7 +39,15 @@ export const orders = pgTable(
   },
   (table) => [
     index("orders_student_status_idx").on(table.studentId, table.status),
-    index("orders_gateway_authority_idx").on(table.gatewayAuthority),
+    /**
+     * شناسه‌ی درگاه یکتاست، نه فقط ایندکس‌شده.
+     *
+     * کال‌بک درگاه فقط همین شناسه را دارد و سفارش از روی آن پیدا
+     * می‌شود. اگر دو سفارش یک شناسه بگیرند، تأیید پرداخت ممکن است
+     * سفارش اشتباه را قطعی کند. `NULL` چندتایی مجاز است، چون سفارش
+     * پیش از رفتن به درگاه هنوز شناسه ندارد.
+     */
+    uniqueIndex("orders_gateway_authority_key").on(table.gatewayAuthority),
     check("orders_amount_positive", sql`${table.amount} > 0`),
   ],
 );
@@ -82,6 +99,21 @@ export const ledgerEntries = pgTable(
   (table) => [
     index("ledger_teacher_created_idx").on(table.teacherId, table.createdAt),
     index("ledger_type_created_idx").on(table.type, table.createdAt),
+    /**
+     * هر رزرو حداکثر یک سطر درآمد دارد.
+     *
+     * کال‌بک درگاه ممکن است چند بار برسد — کاربر صفحه را رفرش می‌کند،
+     * یا درگاه دوباره می‌فرستد. سرویس پرداخت با یک `UPDATE` شرطی
+     * ایدمپوتنت است، ولی دفتر کل جایی نیست که به درستی کد اپلیکیشن
+     * تکیه کنیم: درآمد دوباره‌ثبت‌شده یعنی دو برابر پول به استاد.
+     * این ایندکس آن را در سطح دیتابیس ناممکن می‌کند.
+     *
+     * بازپرداخت‌ها عمداً بیرون شرط‌اند: یک رزرو می‌تواند درآمد داشته
+     * باشد و بعد بازپرداخت.
+     */
+    uniqueIndex("ledger_one_earning_per_booking")
+      .on(table.bookingId)
+      .where(sql`${table.type} = 'EARNING'`),
     check(
       "ledger_amounts_balance",
       sql`${table.grossAmount} = ${table.commission} + ${table.netAmount}`,

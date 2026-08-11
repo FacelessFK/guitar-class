@@ -391,7 +391,7 @@ describe("انقضای مهلت پرداخت", () => {
       now: NOW,
     });
 
-    expect(await confirmBookings([booking.id])).toBe(1);
+    expect(await confirmBookings([booking.id])).toEqual([booking.id]);
     expect(await expireStaleHolds(new Date(NOW.getTime() + 60 * 60_000))).toBe(0);
 
     const [stored] = await db

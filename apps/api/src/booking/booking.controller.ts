@@ -27,6 +27,7 @@ import {
   createSingleBooking,
   createTrialBooking,
 } from "./booking.service.js";
+import { recordCancellationRefund } from "../payment/payment.service.js";
 import { zodPipe } from "../common/validation.pipe.js";
 import { CurrentUserId } from "../common/current-user.decorator.js";
 import { dateKeySchema, minuteOfDaySchema, uuidSchema } from "../common/schemas.js";
@@ -37,6 +38,12 @@ export class BookingProvider {
   readonly createSingle = createSingleBooking;
   readonly createPackage = createPackageEnrollment;
   readonly cancel = cancelBooking;
+  /**
+   * سرویس رزرو فقط تصمیم می‌گیرد جلسه برمی‌گردد یا می‌سوزد؛ ثبت مالی
+   * کار ماژول پرداخت است. جهت وابستگی همین است و برعکسش نه — دامنه‌ی
+   * رزرو نباید از وجود دفتر کل خبر داشته باشد.
+   */
+  readonly recordRefund = recordCancellationRefund;
 }
 
 /**
@@ -180,14 +187,28 @@ export class BookingController {
     @CurrentUserId() actorId: string,
     @Param("bookingId", zodPipe(uuidSchema)) bookingId: string,
     @Body(zodPipe(cancelSchema)) body: z.infer<typeof cancelSchema>,
-  ): Promise<{ status: string; refundable: boolean }> {
+  ): Promise<{ status: string; refundable: boolean; refunded: boolean }> {
     const result = await this.booking.cancel({
       bookingId,
       actorId,
       reason: body.reason,
     });
 
-    return { status: result.status, refundable: result.refundable };
+    /**
+     * `refundable` تصمیم سیاست است و `refunded` اتفاق مالی.
+     * لغو یک رزروِ هنوز پرداخت‌نشده، برگشت‌پذیر است ولی چیزی برای
+     * برگرداندن ندارد — فرانت باید این دو را از هم جدا ببیند.
+     */
+    const refund = await this.booking.recordRefund({
+      bookingId,
+      refundable: result.refundable,
+    });
+
+    return {
+      status: result.status,
+      refundable: result.refundable,
+      refunded: refund !== null,
+    };
   }
 
   /** رزروهای کاربر جاری، چه به عنوان هنرجو و چه به عنوان استاد. */

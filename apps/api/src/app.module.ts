@@ -13,6 +13,7 @@ import {
 } from "./availability/availability.controller.js";
 import { BookingController, BookingProvider } from "./booking/booking.controller.js";
 import { CatalogController, CatalogService } from "./catalog/catalog.controller.js";
+import { PaymentController, PaymentProvider } from "./payment/payment.controller.js";
 
 @Controller("health")
 export class HealthController {
@@ -60,12 +61,14 @@ export class HealthController {
     CatalogController,
     AvailabilityController,
     BookingController,
+    PaymentController,
   ],
   providers: [
     AuthProvider,
     CatalogService,
     AvailabilityProvider,
     BookingProvider,
+    PaymentProvider,
     {
       /**
        * گارد احراز هویت سراسری است و مسیرها باید صریحاً با `@Public()`

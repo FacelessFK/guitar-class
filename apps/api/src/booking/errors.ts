@@ -1,20 +1,9 @@
 import type { DateKey, Interval } from "@music/shared";
 
-/**
- * خطاهای دامنه‌ی رزرو.
- *
- * پیام‌ها فارسی و مستقیماً قابل نمایش به کاربرند، ولی `code` ماشین‌خوان
- * است تا لایه‌ی بالاتر بتواند بدون تکیه بر متن، تصمیم بگیرد.
- */
-export class BookingError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-  ) {
-    super(message);
-    this.name = new.target.name;
-  }
-}
+import { DomainError } from "../common/domain-error.js";
+
+/** خطاهای دامنه‌ی رزرو. */
+export class BookingError extends DomainError {}
 
 /**
  * اسلات بین لحظه‌ای که کاربر لیست را دید تا لحظه‌ای که دکمه را زد، پر شد.

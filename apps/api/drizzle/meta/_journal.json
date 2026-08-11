@@ -15,6 +15,13 @@
       "when": 1786381918648,
       "tag": "0001_booking_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786470058802,
+      "tag": "0002_payment_idempotency",
+      "breakpoints": true
     }
   ]
 }

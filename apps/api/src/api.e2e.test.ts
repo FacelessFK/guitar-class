@@ -5,7 +5,7 @@ import request from "supertest";
 import type { App } from "supertest/types.js";
 
 import { AppModule } from "./app.module.js";
-import { BookingExceptionFilter } from "./common/booking-exception.filter.js";
+import { DomainExceptionFilter } from "./common/domain-exception.filter.js";
 import { AuthExceptionFilter } from "./common/auth-exception.filter.js";
 import { BigIntSerializationInterceptor } from "./common/serialization.interceptor.js";
 import {
@@ -40,7 +40,7 @@ beforeAll(async () => {
 
   app = moduleRef.createNestApplication();
   app.setGlobalPrefix("api");
-  app.useGlobalFilters(new AuthExceptionFilter(), new BookingExceptionFilter());
+  app.useGlobalFilters(new AuthExceptionFilter(), new DomainExceptionFilter());
   app.useGlobalInterceptors(new BigIntSerializationInterceptor());
   await app.init();
 

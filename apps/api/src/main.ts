@@ -5,7 +5,7 @@ import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module.js";
 import { AuthExceptionFilter } from "./common/auth-exception.filter.js";
-import { BookingExceptionFilter } from "./common/booking-exception.filter.js";
+import { DomainExceptionFilter } from "./common/domain-exception.filter.js";
 import { BigIntSerializationInterceptor } from "./common/serialization.interceptor.js";
 
 async function bootstrap(): Promise<void> {
@@ -18,7 +18,7 @@ async function bootstrap(): Promise<void> {
   // `class-validator` و `class-transformer` نیاز دارد و ما اعتبارسنجی
   // را با Zod انجام می‌دهیم. هر اندپوینت اسکیمای خودش را صریح اعلام
   // می‌کند، پس ورودی اعتبارسنجی‌نشده‌ای وجود ندارد.
-  app.useGlobalFilters(new AuthExceptionFilter(), new BookingExceptionFilter());
+  app.useGlobalFilters(new AuthExceptionFilter(), new DomainExceptionFilter());
   app.useGlobalInterceptors(new BigIntSerializationInterceptor());
 
   app.enableCors({

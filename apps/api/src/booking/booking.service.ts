@@ -356,12 +356,20 @@ export async function expireStaleHolds(now: Date = new Date()): Promise<number> 
   return expired.length;
 }
 
-/** پس از پرداخت موفق، رزرو را قطعی می‌کند. */
+/**
+ * پس از پرداخت موفق، رزرو را قطعی می‌کند.
+ *
+ * شرط `PENDING_PAYMENT` در `WHERE` عمدی است و شناسه‌های واقعاً
+ * قطعی‌شده برمی‌گردند، نه شناسه‌هایی که خواسته شده بودند. رزروی که در
+ * فاصله‌ی رفتن به درگاه و برگشتن منقضی شده، اسلاتش را از دست داده و
+ * قطعی کردنش می‌تواند با رزرو کس دیگری تداخل کند. لایه‌ی پرداخت باید
+ * این تفاوت را ببیند تا پولِ بی‌جلسه گم نشود.
+ */
 export async function confirmBookings(
   bookingIds: string[],
   tx: Transaction | Database = db,
-): Promise<number> {
-  if (bookingIds.length === 0) return 0;
+): Promise<string[]> {
+  if (bookingIds.length === 0) return [];
 
   const confirmed = await tx
     .update(bookings)
@@ -371,7 +379,7 @@ export async function confirmBookings(
     )
     .returning({ id: bookings.id });
 
-  return confirmed.length;
+  return confirmed.map((row) => row.id);
 }
 
 export interface CancelBookingInput {
