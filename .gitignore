@@ -23,3 +23,6 @@ coverage/
 # Prisma
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal
+
+# فایل‌های موقت Playwright MCP
+.playwright-mcp/
