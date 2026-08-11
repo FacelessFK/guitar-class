@@ -8,6 +8,7 @@ import { AppModule } from "./app.module.js";
 import { DomainExceptionFilter } from "./common/domain-exception.filter.js";
 import { AuthExceptionFilter } from "./common/auth-exception.filter.js";
 import { BigIntSerializationInterceptor } from "./common/serialization.interceptor.js";
+import { recordHeartbeat } from "./queue/heartbeat.js";
 import {
   accessTokenFor,
   closeDatabase,
@@ -65,9 +66,40 @@ afterAll(async () => {
 });
 
 describe("GET /api/health", () => {
-  it("سلامت سرویس، دیتابیس و ردیس را گزارش می‌کند", async () => {
+  /**
+   * بدون ضربان وُرکر، سرویس «سالم» نیست حتی اگر همه‌ی درخواست‌ها جواب
+   * بدهند. وُرکرِ خوابیده یعنی اسلات‌های رزروِ پرداخت‌نشده هرگز آزاد
+   * نمی‌شوند — خرابی‌ای که هیچ اندپوینتی خطا نمی‌دهد.
+   */
+  it("نبودن وُرکر را گزارش می‌کند", async () => {
     const response = await request(server).get("/api/health").expect(200);
-    expect(response.body).toEqual({ status: "ok", database: "ok", redis: "ok" });
+
+    expect(response.body).toEqual({
+      status: "degraded",
+      database: "ok",
+      redis: "ok",
+      worker: "never",
+      workerLastRunAt: null,
+    });
+  });
+
+  it("با ضربان تازه‌ی وُرکر سالم می‌شود", async () => {
+    await recordHeartbeat();
+
+    const response = await request(server).get("/api/health").expect(200);
+
+    expect(response.body.status).toBe("ok");
+    expect(response.body.worker).toBe("ok");
+    expect(response.body.workerLastRunAt).not.toBeNull();
+  });
+
+  it("ضربان کهنه را «کهنه» گزارش می‌کند، نه سالم", async () => {
+    await recordHeartbeat(new Date(Date.now() - 60 * 60_000));
+
+    const response = await request(server).get("/api/health").expect(200);
+
+    expect(response.body.status).toBe("degraded");
+    expect(response.body.worker).toBe("stale");
   });
 });
 

@@ -10,6 +10,7 @@
     "dev:infra": "docker compose up -d",
     "dev:infra:down": "docker compose down",
     "dev:infra:reset": "docker compose down -v && docker compose up -d",
+    "dev:worker": "pnpm --filter @music/api dev:worker",
     "db:migrate": "pnpm --filter @music/api db:migrate",
     "db:studio": "pnpm --filter @music/api db:studio",
     "db:generate": "pnpm --filter @music/api db:generate",

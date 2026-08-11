@@ -1,0 +1,50 @@
+import { Logger } from "@nestjs/common";
+import { Worker, type Job } from "bullmq";
+
+import { createQueueConnection } from "./connection.js";
+import {
+  EXPIRE_HOLDS_JOB,
+  MAINTENANCE_QUEUE,
+  runMaintenance,
+  type MaintenanceResult,
+} from "./maintenance.job.js";
+
+const logger = new Logger("Worker");
+
+/**
+ * جاب را به هندلرش می‌رساند.
+ *
+ * جابِ ناشناخته صریح خطا می‌دهد و بی‌صدا رد نمی‌شود. اگر نام جابی عوض
+ * شود و یک طرف به‌روز نشود، باید همان‌جا سر و صدا کند نه اینکه کارها
+ * بی‌صدا انجام نشوند.
+ */
+export async function processMaintenanceJob(job: Job): Promise<MaintenanceResult> {
+  switch (job.name) {
+    case EXPIRE_HOLDS_JOB:
+      return runMaintenance();
+    default:
+      throw new Error(`جاب ناشناخته در صف ${MAINTENANCE_QUEUE}: «${job.name}»`);
+  }
+}
+
+export function createMaintenanceWorker(): Worker {
+  const worker = new Worker(MAINTENANCE_QUEUE, processMaintenanceJob, {
+    connection: createQueueConnection(),
+    /**
+     * یک جاب در لحظه. جارو ایدمپوتنت است ولی موازی اجرا کردنش فقط
+     * باعث می‌شود دو تراکنش سر همان سطرها با هم قفل بیفتند.
+     */
+    concurrency: 1,
+  });
+
+  worker.on("failed", (job, error) => {
+    logger.error(`جاب «${job?.name ?? "?"}» شکست خورد: ${error.message}`, error.stack);
+  });
+
+  worker.on("error", (error) => {
+    // خطای خود وُرکر (مثلاً قطع شدن ردیس)، نه خطای یک جاب
+    logger.error(`خطای وُرکر: ${error.message}`);
+  });
+
+  return worker;
+}

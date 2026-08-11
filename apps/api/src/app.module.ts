@@ -14,6 +14,7 @@ import {
 import { BookingController, BookingProvider } from "./booking/booking.controller.js";
 import { CatalogController, CatalogService } from "./catalog/catalog.controller.js";
 import { PaymentController, PaymentProvider } from "./payment/payment.controller.js";
+import { readWorkerStatus, type WorkerStatus } from "./queue/heartbeat.js";
 
 @Controller("health")
 export class HealthController {
@@ -22,11 +23,21 @@ export class HealthController {
    *
    * عمداً به دیتابیس و ردیس هم می‌زند: اپلیکیشنی که بالا باشد ولی به
    * آن‌ها نرسد، از نظر عملی پایین است و لودبالانسر باید بداند.
+   *
+   * وُرکر هم گزارش می‌شود، چون پروسه‌ی جدایی است و مرگش از بیرون دیده
+   * نمی‌شود. وُرکرِ خوابیده یعنی اسلات‌های رزروِ پرداخت‌نشده هرگز آزاد
+   * نمی‌شوند — خرابی‌ای که هیچ درخواستی خطا نمی‌دهد.
    */
   @Public()
   @Get()
-  async check(): Promise<{ status: string; database: string; redis: string }> {
-    const [database, redisStatus] = await Promise.all([
+  async check(): Promise<{
+    status: string;
+    database: string;
+    redis: string;
+    worker: string;
+    workerLastRunAt: string | null;
+  }> {
+    const [database, redisStatus, worker] = await Promise.all([
       db
         .execute(sql`SELECT 1`)
         .then(() => "ok")
@@ -35,14 +46,19 @@ export class HealthController {
         .ping()
         .then(() => "ok")
         .catch(() => "unreachable"),
+      readWorkerStatus().catch(
+        (): WorkerStatus => ({ status: "never", lastRunAt: null }),
+      ),
     ]);
 
-    const healthy = database === "ok" && redisStatus === "ok";
+    const healthy = database === "ok" && redisStatus === "ok" && worker.status === "ok";
 
     return {
       status: healthy ? "ok" : "degraded",
       database,
       redis: redisStatus,
+      worker: worker.status,
+      workerLastRunAt: worker.lastRunAt,
     };
   }
 }
