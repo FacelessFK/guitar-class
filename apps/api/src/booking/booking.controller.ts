@@ -9,6 +9,7 @@ import {
   Post,
 } from "@nestjs/common";
 import { and, desc, eq, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import {
   formatMinutes,
@@ -20,7 +21,13 @@ import {
 } from "@music/shared";
 
 import { db } from "../db/client.js";
-import { bookings } from "../db/schema/index.js";
+import {
+  bookings,
+  instruments,
+  offerings,
+  teacherProfiles,
+  users,
+} from "../db/schema/index.js";
 import {
   cancelBooking,
   createPackageEnrollment,
@@ -73,6 +80,13 @@ const cancelSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
+/**
+ * رزرو، همان‌طور که بلافاصله پس از ساخته شدن برمی‌گردد.
+ *
+ * ساعت هم به صورت لحظه‌ی مطلق UTC می‌آید و هم به صورت ساعت دیواری
+ * تهران. اگر فقط اولی بود، فرانت باید خودش تبدیل می‌کرد و منطق منطقه‌ی
+ * زمانی در دو جا تکرار می‌شد.
+ */
 interface BookingView {
   id: string;
   roomId: string;
@@ -82,9 +96,32 @@ interface BookingView {
   endsAt: string;
   date: string;
   startTime: string;
+  endTime: string;
   weekdayName: string;
+  durationMinutes: number;
   holdExpiresAt: string | null;
   price: string;
+}
+
+/**
+ * همان رزرو، به‌علاوه‌ی چیزهایی که فقط در فهرست معنا دارند.
+ *
+ * جدا از `BookingView` است چون پر کردنش به سه `JOIN` نیاز دارد و
+ * اندپوینت‌های ساخت رزرو هیچ‌کدامشان را لازم ندارند — کاربر بعد از رزرو
+ * مستقیم به درگاه می‌رود، نه به صفحه‌ای که نام ساز را نشان دهد.
+ *
+ * `role` می‌گوید کاربر جاری در این رزرو هنرجوست یا استاد. یک اندپوینت
+ * برای هر دو نقش است (`GET bookings/me`) و بدون این فیلد، فرانت باید
+ * شناسه‌ی کاربر را با `studentId` مقایسه کند — یعنی همان تصمیم را دوباره
+ * و این بار سمت کلاینت بگیرد.
+ */
+interface BookingDetailView extends BookingView {
+  role: "STUDENT" | "TEACHER";
+  /** نام طرف مقابل: برای هنرجو نام استاد، برای استاد نام هنرجو */
+  counterpartName: string;
+  /** اسلاگ پروفایل عمومی استاد — فقط برای لینک، ممکن است نباشد */
+  teacherSlug: string | null;
+  instrumentName: string;
 }
 
 function toBookingView(booking: {
@@ -94,6 +131,7 @@ function toBookingView(booking: {
   status: string;
   scheduledAt: Date;
   endsAt: Date;
+  durationMinutes?: number;
   holdExpiresAt: Date | null;
   priceSnapshot: bigint;
 }): BookingView {
@@ -106,7 +144,11 @@ function toBookingView(booking: {
     endsAt: booking.endsAt.toISOString(),
     date: tehranDateKey(booking.scheduledAt),
     startTime: formatMinutes(tehranMinutesOfDay(booking.scheduledAt)),
+    endTime: formatMinutes(tehranMinutesOfDay(booking.endsAt)),
     weekdayName: weekdayNameFa(tehranWeekday(booking.scheduledAt)),
+    durationMinutes:
+      booking.durationMinutes ??
+      Math.round((booking.endsAt.getTime() - booking.scheduledAt.getTime()) / 60_000),
     holdExpiresAt: booking.holdExpiresAt?.toISOString() ?? null,
     price: booking.priceSnapshot.toString(),
   };
@@ -213,15 +255,15 @@ export class BookingController {
 
   /** رزروهای کاربر جاری، چه به عنوان هنرجو و چه به عنوان استاد. */
   @Get("me")
-  async listMine(@CurrentUserId() userId: string): Promise<{ bookings: BookingView[] }> {
-    const rows = await db
-      .select()
-      .from(bookings)
+  async listMine(
+    @CurrentUserId() userId: string,
+  ): Promise<{ bookings: BookingDetailView[] }> {
+    const rows = await detailQuery()
       .where(or(eq(bookings.studentId, userId), eq(bookings.teacherId, userId)))
       .orderBy(desc(bookings.scheduledAt))
       .limit(100);
 
-    return { bookings: rows.map(toBookingView) };
+    return { bookings: rows.map((row) => toBookingDetailView(row, userId)) };
   }
 
   /** جزئیات یک رزرو. فقط طرفین آن دسترسی دارند. */
@@ -229,10 +271,8 @@ export class BookingController {
   async getOne(
     @CurrentUserId() userId: string,
     @Param("bookingId", zodPipe(uuidSchema)) bookingId: string,
-  ): Promise<BookingView | null> {
-    const [row] = await db
-      .select()
-      .from(bookings)
+  ): Promise<BookingDetailView | null> {
+    const [row] = await detailQuery()
       .where(
         and(
           eq(bookings.id, bookingId),
@@ -241,6 +281,63 @@ export class BookingController {
       )
       .limit(1);
 
-    return row ? toBookingView(row) : null;
+    return row ? toBookingDetailView(row, userId) : null;
   }
+}
+
+/**
+ * دو بار `users` در یک کوئری لازم است — یک بار برای هنرجو و یک بار
+ * برای استاد — پس هر کدام نام مستعار خودش را می‌گیرد.
+ */
+const studentUser = alias(users, "student_user");
+const teacherUser = alias(users, "teacher_user");
+
+/**
+ * پایه‌ی کوئریِ فهرست و جزئیات.
+ *
+ * یکی است چون هر دو دقیقاً یک شکل داده برمی‌گردانند و فقط شرطشان فرق
+ * دارد؛ دو نسخه‌ی جدا یعنی اضافه شدن یک ستون به یکی و نه به دیگری.
+ *
+ * `teacherProfiles` با `leftJoin` می‌آید نه `innerJoin`: اگر روزی
+ * پروفایل استادی حذف شود، رزروهای گذشته‌اش باید همچنان در فهرست هنرجو
+ * دیده شوند، فقط بدون لینک به صفحه‌ی عمومی.
+ */
+function detailQuery() {
+  return db
+    .select({
+      id: bookings.id,
+      roomId: bookings.roomId,
+      type: bookings.type,
+      status: bookings.status,
+      scheduledAt: bookings.scheduledAt,
+      endsAt: bookings.endsAt,
+      durationMinutes: bookings.durationMinutes,
+      holdExpiresAt: bookings.holdExpiresAt,
+      priceSnapshot: bookings.priceSnapshot,
+      studentId: bookings.studentId,
+      studentName: studentUser.fullName,
+      teacherName: teacherUser.fullName,
+      teacherSlug: teacherProfiles.slug,
+      instrumentName: instruments.nameFa,
+    })
+    .from(bookings)
+    .innerJoin(studentUser, eq(bookings.studentId, studentUser.id))
+    .innerJoin(teacherUser, eq(bookings.teacherId, teacherUser.id))
+    .leftJoin(teacherProfiles, eq(teacherProfiles.userId, bookings.teacherId))
+    .innerJoin(offerings, eq(bookings.offeringId, offerings.id))
+    .innerJoin(instruments, eq(offerings.instrumentId, instruments.id));
+}
+
+type DetailRow = Awaited<ReturnType<ReturnType<typeof detailQuery>["execute"]>>[number];
+
+function toBookingDetailView(row: DetailRow, userId: string): BookingDetailView {
+  const isStudent = row.studentId === userId;
+
+  return {
+    ...toBookingView(row),
+    role: isStudent ? "STUDENT" : "TEACHER",
+    counterpartName: isStudent ? row.teacherName : row.studentName,
+    teacherSlug: row.teacherSlug,
+    instrumentName: row.instrumentName,
+  };
 }

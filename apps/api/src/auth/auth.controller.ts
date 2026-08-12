@@ -20,6 +20,7 @@ import { Public, type AuthenticatedRequest } from "./auth.guard.js";
 import { requestLoginCode, refreshSession, verifyLoginCode } from "./auth.service.js";
 import { revokeAllUserTokens, revokeRefreshToken, type AccessTokenPayload } from "./token.service.js";
 import { createSmsSender, type SmsSender } from "../notification/sms.port.js";
+import { findTeacherProfileId } from "../teacher/teacher.service.js";
 
 @Injectable()
 export class AuthProvider {
@@ -140,7 +141,16 @@ export class AuthController {
     return { message: "از همه‌ی دستگاه‌ها خارج شدید.", revokedSessions: count };
   }
 
-  /** پروفایل کاربر واردشده. */
+  /**
+   * پروفایل کاربر واردشده.
+   *
+   * `teacherProfileId` هم برمی‌گردد چون فرانت در همان اولین درخواستِ
+   * راه‌اندازی نشست باید بداند کدام بخش‌ها را نشان دهد. یک درخواست
+   * جدا برای «آیا استاد هستم؟» یعنی پوسته‌ی اپ دو بار جابه‌جا شود.
+   *
+   * فقط شناسه می‌آید نه کل پروفایل: جزئیات استاد را `GET /api/teacher/me`
+   * می‌دهد و فقط پنل استاد لازمش دارد.
+   */
   @Get("me")
   async me(@CurrentUser() user: AccessTokenPayload) {
     const [row] = await db
@@ -162,6 +172,7 @@ export class AuthController {
       ...row,
       phone: toLocalPhone(row.phone),
       trialUsed: row.trialUsedAt !== null,
+      teacherProfileId: await findTeacherProfileId(row.id),
     };
   }
 }

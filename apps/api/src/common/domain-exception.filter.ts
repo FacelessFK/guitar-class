@@ -40,6 +40,13 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   ROOM_CLOSED: HttpStatus.CONFLICT,
   NOT_JOINABLE: HttpStatus.CONFLICT,
 
+  // پنل استاد
+  // «استاد نیستی» ۴۰۳ است نه ۴۰۴: کاربر معتبر است و مسیر هم وجود دارد،
+  // فقط این بخش مال او نیست.
+  NOT_A_TEACHER: HttpStatus.FORBIDDEN,
+  AVAILABILITY_ENTRY_NOT_FOUND: HttpStatus.NOT_FOUND,
+  OVERLAPPING_RULE: HttpStatus.CONFLICT,
+
   // پرداخت
   ORDER_NOT_FOUND: HttpStatus.NOT_FOUND,
   NOT_PAYABLE: HttpStatus.CONFLICT,

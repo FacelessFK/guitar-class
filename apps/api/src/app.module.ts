@@ -18,6 +18,7 @@ import {
   ClassroomProvider,
 } from "./classroom/classroom.controller.js";
 import { PaymentController, PaymentProvider } from "./payment/payment.controller.js";
+import { TeacherController, TeacherProvider } from "./teacher/teacher.controller.js";
 import { readWorkerStatus, type WorkerStatus } from "./queue/heartbeat.js";
 
 @Controller("health")
@@ -83,6 +84,7 @@ export class HealthController {
     BookingController,
     ClassroomController,
     PaymentController,
+    TeacherController,
   ],
   providers: [
     AuthProvider,
@@ -91,6 +93,7 @@ export class HealthController {
     BookingProvider,
     ClassroomProvider,
     PaymentProvider,
+    TeacherProvider,
     {
       /**
        * گارد احراز هویت سراسری است و مسیرها باید صریحاً با `@Public()`
