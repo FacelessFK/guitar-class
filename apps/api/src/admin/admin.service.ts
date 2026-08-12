@@ -31,6 +31,7 @@ import {
   users,
 } from "../db/schema/index.js";
 import { teacherEarningsBreakdown } from "../payment/payment.service.js";
+import { pageBounds, type Page, type PageQuery } from "./pagination.js";
 import { countOpenReviews, openReviewsForBookings } from "./review.service.js";
 import { IN_APP_TYPES, notifyInApp } from "../notification/in-app.service.js";
 import { TeacherSlugTakenError } from "../teacher/errors.js";
@@ -45,8 +46,16 @@ import {
 type TeacherStatus = "PENDING" | "APPROVED" | "SUSPENDED";
 type SkillLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
 
-/** سقف هر فهرست. صفحه‌بندی واقعی وقتی لازم می‌شود که داده‌اش وجود داشته باشد. */
+/**
+ * سقف هر فهرست، برای فهرست‌هایی که با **اندازه‌ی کاتالوگ** بزرگ می‌شوند
+ * نه با حجم استفاده: سازها و استادها. تعدادشان از مرتبه‌ی ده‌هاست و
+ * ادمین معمولاً همه را با هم می‌خواهد.
+ *
+ * فهرست‌هایی که با هر رزرو و هر پرداخت رشد می‌کنند صفحه‌بندی واقعی
+ * دارند — `paginate` را ببینید.
+ */
 const LIST_LIMIT = 200;
+
 
 // ---------------------------------------------------------------------------
 // استادها
@@ -494,8 +503,10 @@ export interface AdminBookingRow {
  * امروز» می‌خواهد و امروزِ تهران سه‌ونیم ساعت با UTC فرق دارد.
  */
 export async function listBookings(
-  filter: AdminBookingFilter,
-): Promise<AdminBookingRow[]> {
+  filter: AdminBookingFilter & PageQuery,
+): Promise<Page<AdminBookingRow>> {
+  const { limit, offset } = pageBounds(filter);
+
   const teacherUsers = db
     .select({
       userId: teacherProfiles.userId,
@@ -513,6 +524,22 @@ export async function listBookings(
     .select({ id: users.id, fullName: users.fullName })
     .from(users)
     .as("teacher");
+
+  /**
+   * شرط یک بار ساخته می‌شود و هم به فهرست می‌رود هم به شمارش.
+   *
+   * نوشتنش دو بار یعنی اولین فیلتری که فقط در یکی اضافه شود، `total` را
+   * با صفحه‌ها ناسازگار کند — و آن خرابی خودش را به شکل «صفحه‌ی آخر خالی
+   * است» نشان می‌دهد، که شبیه هیچ باگی نیست.
+   */
+  const where = and(
+    filter.status?.length ? inArray(bookings.status, filter.status as never) : undefined,
+    filter.teacherProfileId
+      ? eq(teacherUsers.profileId, filter.teacherProfileId)
+      : undefined,
+    filter.from ? gte(bookings.scheduledAt, tehranDayStart(filter.from)) : undefined,
+    filter.to ? lte(bookings.scheduledAt, tehranDayEnd(filter.to)) : undefined,
+  );
 
   const rows = await db
     .select({
@@ -540,30 +567,36 @@ export async function listBookings(
     .leftJoin(teacherUsers, eq(bookings.teacherId, teacherUsers.userId))
     .innerJoin(offerings, eq(bookings.offeringId, offerings.id))
     .innerJoin(instruments, eq(offerings.instrumentId, instruments.id))
-    .where(
-      and(
-        filter.status?.length ? inArray(bookings.status, filter.status as never) : undefined,
-        filter.teacherProfileId
-          ? eq(teacherUsers.profileId, filter.teacherProfileId)
-          : undefined,
-        filter.from ? gte(bookings.scheduledAt, tehranDayStart(filter.from)) : undefined,
-        filter.to ? lte(bookings.scheduledAt, tehranDayEnd(filter.to)) : undefined,
-      ),
-    )
+    .where(where)
     .orderBy(desc(bookings.scheduledAt))
-    .limit(LIST_LIMIT);
+    .limit(limit)
+    .offset(offset);
 
-  const openReviews = await openReviewsForBookings(rows.map((row) => row.id));
+  const [total, openReviews] = await Promise.all([
+    countRows(
+      db
+        .select({ value: count() })
+        .from(bookings)
+        .leftJoin(teacherUsers, eq(bookings.teacherId, teacherUsers.userId))
+        .where(where),
+    ),
+    openReviewsForBookings(rows.map((row) => row.id)),
+  ]);
 
-  return rows.map((row) => ({
-    ...row,
-    scheduledAt: row.scheduledAt.toISOString(),
-    endsAt: row.endsAt.toISOString(),
-    price: row.price.toString(),
-    teacherJoinedAt: row.teacherJoinedAt?.toISOString() ?? null,
-    studentJoinedAt: row.studentJoinedAt?.toISOString() ?? null,
-    openReviewId: openReviews.get(row.id) ?? null,
-  }));
+  return {
+    rows: rows.map((row) => ({
+      ...row,
+      scheduledAt: row.scheduledAt.toISOString(),
+      endsAt: row.endsAt.toISOString(),
+      price: row.price.toString(),
+      teacherJoinedAt: row.teacherJoinedAt?.toISOString() ?? null,
+      studentJoinedAt: row.studentJoinedAt?.toISOString() ?? null,
+      openReviewId: openReviews.get(row.id) ?? null,
+    })),
+    total,
+    limit,
+    offset,
+  };
 }
 
 /**
@@ -594,31 +627,45 @@ export interface AdminOrderRow {
   studentPhone: string;
 }
 
-export async function listOrders(status?: string): Promise<AdminOrderRow[]> {
-  const rows = await db
-    .select({
-      id: orders.id,
-      amount: orders.amount,
-      status: orders.status,
-      gateway: orders.gateway,
-      refId: orders.gatewayRefId,
-      paidAt: orders.paidAt,
-      createdAt: orders.createdAt,
-      studentName: users.fullName,
-      studentPhone: users.phone,
-    })
-    .from(orders)
-    .innerJoin(users, eq(orders.studentId, users.id))
-    .where(status ? eq(orders.status, status as never) : undefined)
-    .orderBy(desc(orders.createdAt))
-    .limit(LIST_LIMIT);
+export async function listOrders(
+  query: { status?: string } & PageQuery = {},
+): Promise<Page<AdminOrderRow>> {
+  const { limit, offset } = pageBounds(query);
+  const where = query.status ? eq(orders.status, query.status as never) : undefined;
 
-  return rows.map((row) => ({
-    ...row,
-    amount: row.amount.toString(),
-    paidAt: row.paidAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
-  }));
+  const [rows, total] = await Promise.all([
+    db
+      .select({
+        id: orders.id,
+        amount: orders.amount,
+        status: orders.status,
+        gateway: orders.gateway,
+        refId: orders.gatewayRefId,
+        paidAt: orders.paidAt,
+        createdAt: orders.createdAt,
+        studentName: users.fullName,
+        studentPhone: users.phone,
+      })
+      .from(orders)
+      .innerJoin(users, eq(orders.studentId, users.id))
+      .where(where)
+      .orderBy(desc(orders.createdAt))
+      .limit(limit)
+      .offset(offset),
+    countRows(db.select({ value: count() }).from(orders).where(where)),
+  ]);
+
+  return {
+    rows: rows.map((row) => ({
+      ...row,
+      amount: row.amount.toString(),
+      paidAt: row.paidAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+    })),
+    total,
+    limit,
+    offset,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -639,8 +686,9 @@ export interface AdminPayoutRow {
   createdAt: string;
 }
 
-export async function listPayouts(teacherProfileId?: string): Promise<AdminPayoutRow[]> {
-  const rows = await db
+/** یک کوئری، هم برای فهرست و هم برای خواندنِ تکی. */
+function payoutQuery() {
+  return db
     .select({
       id: payouts.id,
       teacherProfileId: payouts.teacherId,
@@ -656,17 +704,34 @@ export async function listPayouts(teacherProfileId?: string): Promise<AdminPayou
     })
     .from(payouts)
     .innerJoin(teacherProfiles, eq(payouts.teacherId, teacherProfiles.id))
-    .innerJoin(users, eq(teacherProfiles.userId, users.id))
-    .where(teacherProfileId ? eq(payouts.teacherId, teacherProfileId) : undefined)
-    .orderBy(desc(payouts.createdAt))
-    .limit(LIST_LIMIT);
+    .innerJoin(users, eq(teacherProfiles.userId, users.id));
+}
 
-  return rows.map((row) => ({
+type PayoutQueryRow = Awaited<ReturnType<typeof payoutQuery>>[number];
+
+function toPayoutRow(row: PayoutQueryRow): AdminPayoutRow {
+  return {
     ...row,
     amount: row.amount.toString(),
     paidAt: row.paidAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
-  }));
+  };
+}
+
+export async function listPayouts(
+  query: { teacherProfileId?: string } & PageQuery = {},
+): Promise<Page<AdminPayoutRow>> {
+  const { limit, offset } = pageBounds(query);
+  const where = query.teacherProfileId
+    ? eq(payouts.teacherId, query.teacherProfileId)
+    : undefined;
+
+  const [rows, total] = await Promise.all([
+    payoutQuery().where(where).orderBy(desc(payouts.createdAt)).limit(limit).offset(offset),
+    countRows(db.select({ value: count() }).from(payouts).where(where)),
+  ]);
+
+  return { rows: rows.map(toPayoutRow), total, limit, offset };
 }
 
 export interface CreatePayoutInput {
@@ -802,13 +867,20 @@ export async function markPayoutPaid(
   return requirePayout(payoutId);
 }
 
+/**
+ * یک تسویه با شناسه.
+ *
+ * مستقیم پرسیده می‌شود و نه با گشتن در `listPayouts()`. آن شکل تا وقتی
+ * فهرست سقف ثابت داشت کار می‌کرد و با آمدن صفحه‌بندی بی‌صدا می‌شکست:
+ * تسویه‌ای که در صفحه‌ی اول نباشد «پیدا نشد» می‌گرفت — یعنی درست بعد از
+ * پنجاهمین تسویه، ثبت پرداخت برای همه‌ی قدیمی‌ها از کار می‌افتاد.
+ */
 async function requirePayout(payoutId: string): Promise<AdminPayoutRow> {
-  const rows = await listPayouts();
-  const found = rows.find((row) => row.id === payoutId);
+  const [row] = await payoutQuery().where(eq(payouts.id, payoutId)).limit(1);
 
-  if (!found) throw new AdminRecordNotFoundError("تسویه");
+  if (!row) throw new AdminRecordNotFoundError("تسویه");
 
-  return found;
+  return toPayoutRow(row);
 }
 
 // ---------------------------------------------------------------------------

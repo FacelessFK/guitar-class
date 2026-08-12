@@ -26,8 +26,7 @@ import {
   users,
 } from "../db/schema/index.js";
 import { AdminRecordNotFoundError } from "./errors.js";
-
-const LIST_LIMIT = 200;
+import { pageBounds, type Page, type PageQuery } from "./pagination.js";
 
 /**
  * پرونده‌ی بررسی برای یک جلسه باز می‌کند.
@@ -120,17 +119,27 @@ function reviewQuery() {
  * است: در صف، آنچه بیشترین وقت منتظر مانده مهم‌ترین است، نه تازه‌ترین.
  * برای پرونده‌های بسته‌شده برعکس — آنجا «آخرین کاری که کردم» را می‌خواهی.
  */
-export async function listSessionReviews(filter: {
-  status?: SessionReviewStatus;
-} = {}): Promise<AdminReviewRow[]> {
+export async function listSessionReviews(
+  filter: { status?: SessionReviewStatus } & PageQuery = {},
+): Promise<Page<AdminReviewRow>> {
   const open = filter.status !== "RESOLVED";
+  const { limit, offset } = pageBounds(filter);
+  const where = filter.status ? eq(sessionReviews.status, filter.status) : undefined;
 
-  const rows = await reviewQuery()
-    .where(filter.status ? eq(sessionReviews.status, filter.status) : undefined)
-    .orderBy(open ? asc(sessionReviews.createdAt) : desc(sessionReviews.createdAt))
-    .limit(LIST_LIMIT);
+  const [rows, total] = await Promise.all([
+    reviewQuery()
+      .where(where)
+      .orderBy(open ? asc(sessionReviews.createdAt) : desc(sessionReviews.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ value: count() })
+      .from(sessionReviews)
+      .where(where)
+      .then((result) => result[0]?.value ?? 0),
+  ]);
 
-  return rows.map(toRow);
+  return { rows: rows.map(toRow), total, limit, offset };
 }
 
 /**

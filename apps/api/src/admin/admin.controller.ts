@@ -40,6 +40,7 @@ import {
   type AdminTeacherDetail,
   type AdminTeacherRow,
 } from "./admin.service.js";
+import type { Page } from "./pagination.js";
 import {
   listSessionReviews,
   resolveSessionReview,
@@ -175,7 +176,31 @@ const updateOfferingSchema = z
  * «همه‌ی حالت‌های عدم حضور» را با هم می‌خواهد و سه درخواست جدا برای
  * چیزی که یک نگاه است، بی‌معنی است.
  */
-const bookingFilterSchema = z.object({
+/**
+ * صفحه‌بندی از کوئری می‌آید، پس رشته است نه عدد.
+ *
+ * `coerce` نمی‌گیریم چون `Number("")` صفر است و `Number("abc")` هم
+ * `NaN` — هر دو بی‌صدا به عددی تبدیل می‌شوند که کاربر نخواسته. با
+ * `regex` فقط رقم قبول می‌شود و بقیه خطای روشن می‌گیرند.
+ */
+const reviewStatusSchema = z.enum(["OPEN", "RESOLVED"], {
+  message: "وضعیت پرونده نامعتبر است",
+});
+
+const pageQuerySchema = z.object({
+  limit: z
+    .string()
+    .regex(/^\d{1,4}$/, "limit باید عدد باشد")
+    .transform(Number)
+    .optional(),
+  offset: z
+    .string()
+    .regex(/^\d{1,9}$/, "offset باید عدد باشد")
+    .transform(Number)
+    .optional(),
+});
+
+const bookingFilterSchema = pageQuerySchema.extend({
   status: z
     .string()
     .optional()
@@ -190,6 +215,18 @@ const bookingFilterSchema = z.object({
   teacherProfileId: uuidSchema.optional(),
   from: dateKeySchema.optional(),
   to: dateKeySchema.optional(),
+});
+
+const orderFilterSchema = pageQuerySchema.extend({
+  status: z.enum(["PENDING", "PAID", "FAILED", "REFUNDED"]).optional(),
+});
+
+const payoutFilterSchema = pageQuerySchema.extend({
+  teacherProfileId: uuidSchema.optional(),
+});
+
+const reviewFilterSchema = pageQuerySchema.extend({
+  status: reviewStatusSchema.optional(),
 });
 
 const createPayoutSchema = z
@@ -209,10 +246,6 @@ const markPaidSchema = z.object({
   trackingCode: z.string().trim().max(120).optional(),
 });
 
-const reviewStatusSchema = z.enum(["OPEN", "RESOLVED"], {
-  message: "وضعیت پرونده نامعتبر است",
-});
-
 /**
  * یادداشت رسیدگی.
  *
@@ -223,6 +256,32 @@ const reviewStatusSchema = z.enum(["OPEN", "RESOLVED"], {
 const resolveReviewSchema = z.object({
   resolution: z.string().trim().max(2000).optional(),
 });
+
+/**
+ * `Page<T>` سرویس را به شکل پاسخ HTTP درمی‌آورد.
+ *
+ * کلیدِ سطرها اسم دامنه‌ی خودش را نگه می‌دارد (`bookings`، `orders`، …)
+ * نه یک `rows` عمومی: پاسخ‌های قبلی همین شکل را داشتند و عوض کردنشان
+ * یعنی هر صفحه‌ی فرانت هم‌زمان با این تغییر عوض شود، بی‌آنکه چیزی به دست
+ * بیاید.
+ */
+type Paged<Row, Key extends string> = Record<Key, Row[]> & {
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+function paged<Row, Key extends string>(
+  key: Key,
+  page: Page<Row>,
+): Paged<Row, Key> {
+  return {
+    [key]: page.rows,
+    total: page.total,
+    limit: page.limit,
+    offset: page.offset,
+  } as Paged<Row, Key>;
+}
 
 // ---------------------------------------------------------------------------
 // کنترلر
@@ -331,19 +390,25 @@ export class AdminController {
 
   // --- رزروها و تراکنش‌ها ---
 
+  /**
+   * پاسخ کنار سطرها `total` هم می‌دهد.
+   *
+   * نامِ کلیدِ سطرها همان قبلی می‌ماند (`bookings`) و صفحه‌بندی کنارش
+   * می‌نشیند: فرانتی که هنوز صفحه‌بندی را نمی‌خواند، همچنان صفحه‌ی اول
+   * را درست نشان می‌دهد.
+   */
   @Get("bookings")
   async listBookings(
     @Query(zodPipe(bookingFilterSchema)) query: z.infer<typeof bookingFilterSchema>,
-  ): Promise<{ bookings: AdminBookingRow[] }> {
-    return { bookings: await this.admin.listBookings(query) };
+  ): Promise<Paged<AdminBookingRow, "bookings">> {
+    return paged("bookings", await this.admin.listBookings(query));
   }
 
   @Get("orders")
   async listOrders(
-    @Query("status", zodPipe(z.enum(["PENDING", "PAID", "FAILED", "REFUNDED"]).optional()))
-    status?: string,
-  ): Promise<{ orders: AdminOrderRow[] }> {
-    return { orders: await this.admin.listOrders(status) };
+    @Query(zodPipe(orderFilterSchema)) query: z.infer<typeof orderFilterSchema>,
+  ): Promise<Paged<AdminOrderRow, "orders">> {
+    return paged("orders", await this.admin.listOrders(query));
   }
 
   // --- صف بررسی ---
@@ -357,10 +422,12 @@ export class AdminController {
    */
   @Get("reviews")
   async listReviews(
-    @Query("status", zodPipe(reviewStatusSchema.optional()))
-    status?: "OPEN" | "RESOLVED",
-  ): Promise<{ reviews: AdminReviewRow[] }> {
-    return { reviews: await this.admin.listReviews({ status: status ?? "OPEN" }) };
+    @Query(zodPipe(reviewFilterSchema)) query: z.infer<typeof reviewFilterSchema>,
+  ): Promise<Paged<AdminReviewRow, "reviews">> {
+    return paged(
+      "reviews",
+      await this.admin.listReviews({ ...query, status: query.status ?? "OPEN" }),
+    );
   }
 
   /**
@@ -388,9 +455,9 @@ export class AdminController {
 
   @Get("payouts")
   async listPayouts(
-    @Query("teacherProfileId", zodPipe(uuidSchema.optional())) teacherProfileId?: string,
-  ): Promise<{ payouts: AdminPayoutRow[] }> {
-    return { payouts: await this.admin.listPayouts(teacherProfileId) };
+    @Query(zodPipe(payoutFilterSchema)) query: z.infer<typeof payoutFilterSchema>,
+  ): Promise<Paged<AdminPayoutRow, "payouts">> {
+    return paged("payouts", await this.admin.listPayouts(query));
   }
 
   @Post("payouts")

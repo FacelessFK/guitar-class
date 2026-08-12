@@ -10,7 +10,14 @@ import { AuthExceptionFilter } from "../common/auth-exception.filter.js";
 import { DomainExceptionFilter } from "../common/domain-exception.filter.js";
 import { BigIntSerializationInterceptor } from "../common/serialization.interceptor.js";
 import { db } from "../db/client.js";
-import { bookings, ledgerEntries, sessionReviews, users } from "../db/schema/index.js";
+import {
+  bookings,
+  ledgerEntries,
+  orders,
+  payouts,
+  sessionReviews,
+  users,
+} from "../db/schema/index.js";
 import {
   accessTokenFor,
   closeDatabase,
@@ -768,6 +775,139 @@ describe("صف بررسی", () => {
       .set("authorization", `Bearer ${studentToken}`)
       .send({ resolution: "خودم حلش کردم" })
       .expect(403);
+  });
+});
+
+describe("صفحه‌بندی", () => {
+  /**
+   * سقف ثابتِ ۲۰۰ سطر مسئله را پنهان می‌کرد نه حل: بعد از آن، ادمین
+   * بی‌آنکه بفهمد فقط تازه‌ترین‌ها را می‌دید. اینجا با سه سفارش و
+   * `limit=2` همان رفتار در کوچک‌ترین مقیاسش سنجیده می‌شود.
+   */
+  async function seedOrders(count: number): Promise<void> {
+    await db.insert(orders).values(
+      Array.from({ length: count }, (_, index) => ({
+        studentId: fixture.studentId,
+        amount: BigInt((index + 1) * 1_000_000),
+        status: "PAID" as const,
+        gateway: "FAKE",
+        gatewayAuthority: `AUTH-${index}`,
+        createdAt: new Date(Date.now() - index * 60_000),
+      })),
+    );
+  }
+
+  it("صفحه، بازه و کل را با هم می‌دهد", async () => {
+    await seedOrders(3);
+
+    const first = await request(server)
+      .get("/api/admin/orders")
+      .query({ limit: 2 })
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(first.body.orders).toHaveLength(2);
+    expect(first.body).toMatchObject({ total: 3, limit: 2, offset: 0 });
+
+    const second = await request(server)
+      .get("/api/admin/orders")
+      .query({ limit: 2, offset: 2 })
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(second.body.orders).toHaveLength(1);
+    expect(second.body).toMatchObject({ total: 3, offset: 2 });
+
+    // و صفحه‌ها روی هم نمی‌افتند
+    const ids = [...first.body.orders, ...second.body.orders].map(
+      (row: { id: string }) => row.id,
+    );
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  /**
+   * `total` باید با **همان** فیلترِ فهرست شمرده شود.
+   *
+   * اگر شرط در شمارش و در فهرست دو جا نوشته شود، اولین فیلتری که فقط
+   * به یکی اضافه شود، صفحه‌بندی را از داده جدا می‌کند — و آن خرابی خودش
+   * را به شکل «صفحه‌ی آخر خالی است» نشان می‌دهد، که شبیه هیچ باگی نیست.
+   */
+  it("total با فیلتر می‌خواند، نه با کل جدول", async () => {
+    await seedOrders(3);
+    await db.insert(orders).values({
+      studentId: fixture.studentId,
+      amount: 500_000n,
+      status: "FAILED",
+      gateway: "FAKE",
+      gatewayAuthority: "AUTH-FAILED",
+    });
+
+    const paid = await request(server)
+      .get("/api/admin/orders")
+      .query({ status: "PAID" })
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(paid.body.total).toBe(3);
+
+    const failed = await request(server)
+      .get("/api/admin/orders")
+      .query({ status: "FAILED" })
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(failed.body.total).toBe(1);
+  });
+
+  /** `limit` از کوئری می‌آید؛ بدون سقف، یک درخواست کل جدول را می‌خواند. */
+  it("limit بزرگ به سقف محدود می‌شود و ورودی نامعتبر رد", async () => {
+    await seedOrders(3);
+
+    const huge = await request(server)
+      .get("/api/admin/orders")
+      .query({ limit: 9999 })
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(huge.body.limit).toBe(200);
+
+    await request(server)
+      .get("/api/admin/orders")
+      .query({ limit: "abc" })
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(400);
+  });
+
+  /**
+   * تسویه با شناسه خوانده می‌شود، نه با گشتن در صفحه‌ی اولِ فهرست.
+   *
+   * پیش از صفحه‌بندی، `requirePayout` کل فهرست را می‌گشت. با صفحه‌بندی،
+   * آن شکل درست بعد از پنجاهمین تسویه بی‌صدا می‌شکست: هر تسویه‌ی
+   * قدیمی‌تر «پیدا نشد» می‌گرفت و دیگر نمی‌شد پرداختش را ثبت کرد.
+   */
+  it("تسویه‌ای که بیرون صفحه‌ی اول است هم پرداخت‌شده می‌شود", async () => {
+    const rows = Array.from({ length: 3 }, (_, index) => ({
+      teacherId: fixture.teacherProfileId,
+      amount: 100_000n,
+      periodStart: `2026-0${index + 1}-01`,
+      periodEnd: `2026-0${index + 1}-28`,
+    }));
+
+    const inserted = await db
+      .insert(payouts)
+      .values(rows)
+      .returning({ id: payouts.id });
+
+    const oldest = inserted[0]!.id;
+
+    const paid = await request(server)
+      .post(`/api/admin/payouts/${oldest}/paid`)
+      .query({ limit: 1 })
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({})
+      .expect(200);
+
+    expect(paid.body).toMatchObject({ id: oldest, status: "PAID" });
   });
 });
 

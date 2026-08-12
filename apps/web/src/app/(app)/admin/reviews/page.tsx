@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { Pager } from "@/components/pager";
 import { errorMessage } from "@/lib/api-client";
 import {
+  ADMIN_PAGE_SIZE,
   getAdminReviews,
   resolveReview,
+  type AdminPage,
   type AdminReview,
   type SessionReviewStatus,
 } from "@/lib/app-api";
@@ -35,24 +38,33 @@ const TABS: Array<{ label: string; value: SessionReviewStatus }> = [
 
 export default function AdminReviewsPage() {
   const [status, setStatus] = useState<SessionReviewStatus>("OPEN");
-  const [reviews, setReviews] = useState<AdminReview[] | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState<AdminPage<AdminReview> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setReviews(null);
+    setPage(null);
     try {
-      setReviews(await getAdminReviews(status));
+      setPage(await getAdminReviews({ status, offset, limit: ADMIN_PAGE_SIZE }));
       setError(null);
     } catch (caught) {
       setError(errorMessage(caught));
-      setReviews([]);
+      setPage({ rows: [], total: 0, limit: ADMIN_PAGE_SIZE, offset: 0 });
     }
-  }, [status]);
+  }, [status, offset]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** جابه‌جایی بین «مانده» و «رسیدگی‌شده» صفحه را به اول برمی‌گرداند. */
+  function changeStatus(value: SessionReviewStatus) {
+    setStatus(value);
+    setOffset(0);
+  }
+
+  const reviews = page?.rows ?? null;
 
   async function resolve(review: AdminReview) {
     const note = window.prompt(
@@ -89,7 +101,7 @@ export default function AdminReviewsPage() {
           <button
             key={tab.value}
             type="button"
-            onClick={() => setStatus(tab.value)}
+            onClick={() => changeStatus(tab.value)}
             className={
               status === tab.value
                 ? "rounded-full bg-accent px-4 py-1.5 text-sm text-accent-ink"
@@ -173,6 +185,16 @@ export default function AdminReviewsPage() {
           ))}
         </ul>
       )}
+
+      {page ? (
+        <Pager
+          total={page.total}
+          limit={page.limit}
+          offset={page.offset}
+          busy={busyId !== null}
+          onChange={setOffset}
+        />
+      ) : null}
     </div>
   );
 }

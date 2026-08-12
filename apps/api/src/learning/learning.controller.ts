@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -18,6 +19,9 @@ import { zodPipe } from "../common/validation.pipe.js";
 import {
   createAssignment,
   createSubmission,
+  deleteAssignment,
+  deleteAttachment,
+  deleteSubmission,
   getSessionLearning,
   listPractice,
   updateAssignment,
@@ -36,7 +40,10 @@ export class LearningProvider {
   readonly writeNote = writeSessionNote;
   readonly createAssignment = createAssignment;
   readonly updateAssignment = updateAssignment;
+  readonly deleteAssignment = deleteAssignment;
+  readonly deleteAttachment = deleteAttachment;
   readonly createSubmission = createSubmission;
+  readonly deleteSubmission = deleteSubmission;
   readonly writeFeedback = writeFeedback;
   readonly practice = listPractice;
 }
@@ -78,6 +85,11 @@ const updateAssignmentSchema = z
   .refine((value) => Object.keys(value).length > 0, {
     message: "چیزی برای تغییر فرستاده نشده است",
   });
+
+/** پیوستی که قرار است حذف شود، با همان نشانی‌ای که در فهرست آمده. */
+const attachmentRefSchema = z.object({
+  url: z.string().trim().min(1).max(500),
+});
 
 const submissionSchema = z.object({
   objectKey: z.string().trim().min(1).max(300),
@@ -156,6 +168,37 @@ export class LearningController {
     return this.learning.updateAssignment(assignmentId, userId, body);
   }
 
+  /**
+   * حذف تمرین، با اجراها و بازخوردهایش.
+   *
+   * `204` برمی‌گرداند نه سطر حذف‌شده: چیزی برای نشان دادن نمانده و
+   * فرانت هم بعدش کل حلقه را دوباره می‌خواند.
+   */
+  @Delete("assignments/:assignmentId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteAssignment(
+    @CurrentUserId() userId: string,
+    @Param("assignmentId", zodPipe(uuidSchema)) assignmentId: string,
+  ): Promise<void> {
+    await this.learning.deleteAssignment(assignmentId, userId);
+  }
+
+  /**
+   * حذف یک پیوست.
+   *
+   * نشانی در **بدنه** می‌آید نه در مسیر: پیوست شناسه‌ی خودش را ندارد و
+   * نشانی‌اش هم اسلش و کاراکترهای کدشده دارد، که در پارامتر مسیر
+   * دردسر است. `DELETE` با بدنه مجاز است و اینجا صادق‌ترین شکل کار.
+   */
+  @Delete("assignments/:assignmentId/attachments")
+  async deleteAttachment(
+    @CurrentUserId() userId: string,
+    @Param("assignmentId", zodPipe(uuidSchema)) assignmentId: string,
+    @Body(zodPipe(attachmentRefSchema)) body: z.infer<typeof attachmentRefSchema>,
+  ): Promise<AssignmentView> {
+    return this.learning.deleteAttachment(assignmentId, userId, body.url);
+  }
+
   @Post("assignments/:assignmentId/submissions")
   @HttpCode(HttpStatus.CREATED)
   async createSubmission(
@@ -167,6 +210,16 @@ export class LearningController {
       objectKey: body.objectKey,
       durationSeconds: body.durationSeconds ?? null,
     });
+  }
+
+  /** حذف اجرا — فقط خودِ هنرجو، و فقط تا وقتی بازخورد نگرفته. */
+  @Delete("submissions/:submissionId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteSubmission(
+    @CurrentUserId() userId: string,
+    @Param("submissionId", zodPipe(uuidSchema)) submissionId: string,
+  ): Promise<void> {
+    await this.learning.deleteSubmission(submissionId, userId);
   }
 
   /** بازخورد روی یک اجرا. یکی به ازای هر اجرا، پس دوباره فرستادن ویرایش است. */

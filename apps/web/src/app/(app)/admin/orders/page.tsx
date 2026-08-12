@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { Pager } from "@/components/pager";
 import { errorMessage } from "@/lib/api-client";
-import { getAdminOrders, type AdminOrder } from "@/lib/app-api";
+import {
+  ADMIN_PAGE_SIZE,
+  getAdminOrders,
+  type AdminOrder,
+  type AdminPage,
+} from "@/lib/app-api";
 import { formatJalaliDate, formatTehranTime, formatToman } from "@/lib/format";
 
 const FILTERS = [
@@ -37,23 +43,32 @@ const STATUS_TONE: Record<AdminOrder["status"], string> = {
  */
 export default function AdminOrdersPage() {
   const [status, setStatus] = useState<string | undefined>(undefined);
-  const [orders, setOrders] = useState<AdminOrder[] | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState<AdminPage<AdminOrder> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setOrders(null);
+    setPage(null);
     try {
-      setOrders(await getAdminOrders(status));
+      setPage(await getAdminOrders({ status, offset, limit: ADMIN_PAGE_SIZE }));
       setError(null);
     } catch (caught) {
       setError(errorMessage(caught));
-      setOrders([]);
+      setPage({ rows: [], total: 0, limit: ADMIN_PAGE_SIZE, offset: 0 });
     }
-  }, [status]);
+  }, [status, offset]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** عوض شدن فیلتر، صفحه‌بندی را به اول برمی‌گرداند. */
+  function changeFilter(value: string | undefined) {
+    setStatus(value);
+    setOffset(0);
+  }
+
+  const orders = page?.rows ?? null;
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12">
@@ -64,7 +79,7 @@ export default function AdminOrdersPage() {
           <button
             key={filter.label}
             type="button"
-            onClick={() => setStatus(filter.value)}
+            onClick={() => changeFilter(filter.value)}
             className={
               status === filter.value
                 ? "rounded-full bg-accent px-4 py-1.5 text-sm text-accent-ink"
@@ -113,6 +128,15 @@ export default function AdminOrdersPage() {
           ))}
         </ul>
       )}
+
+      {page ? (
+        <Pager
+          total={page.total}
+          limit={page.limit}
+          offset={page.offset}
+          onChange={setOffset}
+        />
+      ) : null}
     </div>
   );
 }

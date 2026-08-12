@@ -56,7 +56,10 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   STUDENT_ONLY: HttpStatus.FORBIDDEN,
   ASSIGNMENT_NOT_FOUND: HttpStatus.NOT_FOUND,
   SUBMISSION_NOT_FOUND: HttpStatus.NOT_FOUND,
+  ATTACHMENT_NOT_FOUND: HttpStatus.NOT_FOUND,
   SESSION_NOT_TEACHABLE: HttpStatus.CONFLICT,
+  // درخواست درست است ولی با حالت فعلیِ اجرا نمی‌خواند — مثل بقیه‌ی ۴۰۹ها
+  SUBMISSION_HAS_FEEDBACK: HttpStatus.CONFLICT,
 
   // رسانه
   UNSUPPORTED_MEDIA: HttpStatus.UNSUPPORTED_MEDIA_TYPE,

@@ -40,8 +40,10 @@ import { objectStorage } from "../media/storage.port.js";
 import { IN_APP_TYPES, notifyInApp } from "../notification/in-app.service.js";
 import {
   AssignmentNotFoundError,
+  AttachmentNotFoundError,
   SessionNotTeachableYetError,
   StudentOnlyActionError,
+  SubmissionHasFeedbackError,
   SubmissionNotFoundError,
   TeacherOnlyActionError,
 } from "./errors.js";
@@ -432,6 +434,138 @@ async function requireAssignment(
   if (!row) throw new AssignmentNotFoundError();
 
   return row;
+}
+
+/**
+ * حذف تمرین، با همه‌ی چیزهایی که زیرش است.
+ *
+ * سطرها را `ON DELETE CASCADE` می‌برد (اجرا و بازخوردش)، ولی فایل‌ها را
+ * نه: کاسکید فقط دیتابیس را می‌شناسد. هرچه اینجا از قلم بیفتد تا ابد در
+ * باکت می‌ماند، چون جاروی پاک‌سازی از روی جدول کار می‌کند نه فهرست
+ * باکت — و سطرش دیگر وجود ندارد.
+ *
+ * **کلیدها پیش از حذف جمع می‌شوند، فایل‌ها بعد از آن پاک.** ترتیب
+ * برعکس یعنی اگر حذف سطر شکست بخورد، فایل‌ها رفته‌اند و صفحه، اجرای
+ * موجودی را با پخش‌کننده‌ی خراب نشان می‌دهد. این ترتیب بدترین حالتش
+ * فایل یتیم است.
+ */
+export async function deleteAssignment(
+  assignmentId: string,
+  userId: string,
+): Promise<void> {
+  const assignment = await requireAssignment(assignmentId);
+  await requireTeacherOfSession(assignment.bookingId, userId);
+
+  const keys = [
+    ...normalizeAttachments(assignment.attachments).map((item) => item.url),
+    ...(await submissionKeysOf([assignmentId])),
+  ];
+
+  await db.delete(assignments).where(eq(assignments.id, assignmentId));
+
+  await purgeObjects(keys);
+}
+
+/**
+ * حذف یک اجرا.
+ *
+ * فقط خودِ هنرجو، و فقط تا وقتی بازخورد نگرفته. اجرایی که استاد رویش
+ * وقت گذاشته با حذف شدنش بازخورد را هم می‌برد (کاسکید) و در تاریخچه‌ی
+ * یادگیری سوراخ می‌سازد — همان چیزی که سیاست نگه‌داری با «فایل را ببر،
+ * سطر را نگه دار» از آن پرهیز می‌کند.
+ *
+ * وضعیت تمرین برنمی‌گردد به `ASSIGNED`، حتی اگر آخرین اجرا حذف شود:
+ * هنرجویی که فرستاده و پشیمان شده، هنوز کارش را «انجام نداده» نیست.
+ * فرستادن اجرای تازه خودش دوباره `SUBMITTED` می‌کند.
+ */
+export async function deleteSubmission(
+  submissionId: string,
+  userId: string,
+): Promise<void> {
+  const [row] = await db
+    .select({
+      id: submissions.id,
+      studentId: submissions.studentId,
+      objectKey: submissions.objectKey,
+      feedbackId: feedbacks.id,
+    })
+    .from(submissions)
+    .leftJoin(feedbacks, eq(feedbacks.submissionId, submissions.id))
+    .where(eq(submissions.id, submissionId))
+    .limit(1);
+
+  if (!row) throw new SubmissionNotFoundError();
+  if (row.studentId !== userId) throw new StudentOnlyActionError();
+  if (row.feedbackId) throw new SubmissionHasFeedbackError();
+
+  await db.delete(submissions).where(eq(submissions.id, submissionId));
+
+  await purgeObjects([row.objectKey]);
+}
+
+/**
+ * حذف یک پیوست از تمرین.
+ *
+ * پیوست‌ها در ستون `jsonb` می‌نشینند و سطر خودشان را ندارند، پس حذفشان
+ * بازنویسی کل آرایه است. با `url` شناسایی می‌شوند چون همان چیزی است که
+ * صفحه نشان می‌دهد و کلیک می‌کند؛ کلید جدا برایشان ذخیره نشده.
+ */
+export async function deleteAttachment(
+  assignmentId: string,
+  userId: string,
+  url: string,
+): Promise<AssignmentView> {
+  const assignment = await requireAssignment(assignmentId);
+  await requireTeacherOfSession(assignment.bookingId, userId);
+
+  const attachments = normalizeAttachments(assignment.attachments);
+  const remaining = attachments.filter((item) => item.url !== url);
+
+  if (remaining.length === attachments.length) throw new AttachmentNotFoundError();
+
+  await db
+    .update(assignments)
+    .set({ attachments: remaining })
+    .where(eq(assignments.id, assignmentId));
+
+  await purgeObjects([url]);
+
+  return (await attachSubmissions([await requireAssignment(assignmentId)]))[0]!;
+}
+
+/** کلیدِ فایلِ همه‌ی اجراهای این تمرین‌ها. */
+async function submissionKeysOf(assignmentIds: string[]): Promise<string[]> {
+  const rows = await db
+    .select({ objectKey: submissions.objectKey, voiceKey: feedbacks.voiceObjectKey })
+    .from(submissions)
+    .leftJoin(feedbacks, eq(feedbacks.submissionId, submissions.id))
+    .where(inArray(submissions.assignmentId, assignmentIds));
+
+  return rows.flatMap((row) => [row.objectKey, row.voiceKey]).filter(
+    (key): key is string => key !== null,
+  );
+}
+
+/**
+ * فایل‌ها را از باکت پاک می‌کند — با خطای بلعیده‌شده.
+ *
+ * همان قاعده‌ی `notifyInApp` و حذف بازخورد صوتی قبلی: حذف فایل اثر
+ * جانبی است، نه بخشی از کاری که کاربر خواسته. سطر رفته و برنمی‌گردد؛
+ * نرسیدن به استوریج نباید حذفی را که انجام شده به خطا تبدیل کند.
+ *
+ * ورودی می‌تواند کلید باشد یا نشانی — پیوست‌ها فقط نشانی دارند.
+ */
+async function purgeObjects(keysOrUrls: string[]): Promise<void> {
+  const storage = objectStorage();
+  const base = storage.publicUrlFor("");
+
+  await Promise.all(
+    keysOrUrls.map((value) =>
+      storage
+        .deleteObject(value.startsWith(base) ? value.slice(base.length) : value)
+        .catch(() => undefined),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------

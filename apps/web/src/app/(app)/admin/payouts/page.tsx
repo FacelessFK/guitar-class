@@ -3,8 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { Pager } from "@/components/pager";
 import { errorMessage } from "@/lib/api-client";
-import { getAdminPayouts, markPayoutPaid, type AdminPayout } from "@/lib/app-api";
+import {
+  ADMIN_PAGE_SIZE,
+  getAdminPayouts,
+  markPayoutPaid,
+  type AdminPage,
+  type AdminPayout,
+} from "@/lib/app-api";
 import { formatJalaliDate, formatToman } from "@/lib/format";
 
 /**
@@ -18,23 +25,26 @@ import { formatJalaliDate, formatToman } from "@/lib/format";
  * می‌نشیند و دفتر کل هرگز ویرایش نمی‌شود. برای همین تأیید می‌گیرد.
  */
 export default function AdminPayoutsPage() {
-  const [payouts, setPayouts] = useState<AdminPayout[] | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState<AdminPage<AdminPayout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setPayouts(await getAdminPayouts());
+      setPage(await getAdminPayouts({ offset, limit: ADMIN_PAGE_SIZE }));
       setError(null);
     } catch (caught) {
       setError(errorMessage(caught));
-      setPayouts([]);
+      setPage({ rows: [], total: 0, limit: ADMIN_PAGE_SIZE, offset: 0 });
     }
-  }, []);
+  }, [offset]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const payouts = page?.rows ?? null;
 
   async function confirmPaid(payout: AdminPayout) {
     const tracking = window.prompt(
@@ -122,6 +132,16 @@ export default function AdminPayoutsPage() {
           ))}
         </ul>
       )}
+
+      {page ? (
+        <Pager
+          total={page.total}
+          limit={page.limit}
+          offset={page.offset}
+          busy={busy}
+          onChange={setOffset}
+        />
+      ) : null}
     </div>
   );
 }

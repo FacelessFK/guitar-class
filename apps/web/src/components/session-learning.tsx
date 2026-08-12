@@ -6,8 +6,12 @@ import { errorMessage } from "@/lib/api-client";
 import {
   createAssignment,
   createSubmission,
+  deleteAssignment,
+  deleteAttachment,
+  deleteSubmission,
   getSessionLearning,
   readMediaDuration,
+  updateAssignment,
   uploadFile,
   writeFeedback,
   writeSessionNote,
@@ -248,6 +252,52 @@ function AssignmentCard({
   onError: (message: string | null) => void;
 }) {
   const badge = STATUS_BADGE[assignment.status];
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    onError(null);
+    try {
+      await action();
+      await onChanged();
+    } catch (caught) {
+      onError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    /**
+     * تأیید می‌گیرد چون برگشت‌ناپذیر است و بیش از چیزی که دیده می‌شود
+     * را می‌برد: اجراهای هنرجو و بازخوردها هم با کاسکید می‌روند، و
+     * فایل‌هایشان از باکت پاک می‌شوند.
+     */
+    const count = assignment.submissions.length;
+    const warning = count
+      ? `\n${faNumber(count)} اجرای هنرجو و بازخوردهایشان هم پاک می‌شوند.`
+      : "";
+
+    if (!window.confirm(`تمرین «${assignment.title}» حذف شود؟${warning}`)) return;
+
+    await run(() => deleteAssignment(assignment.id));
+  }
+
+  if (editing) {
+    return (
+      <li className="card">
+        <EditAssignmentForm
+          assignment={assignment}
+          onDone={async (changed) => {
+            setEditing(false);
+            if (changed) await onChanged();
+          }}
+          onError={onError}
+        />
+      </li>
+    );
+  }
 
   return (
     <li className="card">
@@ -260,7 +310,31 @@ function AssignmentCard({
             </p>
           ) : null}
         </div>
-        <span className={`badge ${badge.tone}`}>{badge.label}</span>
+
+        <div className="flex items-center gap-3">
+          <span className={`badge ${badge.tone}`}>{badge.label}</span>
+
+          {isTeacher ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                disabled={busy}
+                className="text-sm text-ink-muted underline"
+              >
+                ویرایش
+              </button>
+              <button
+                type="button"
+                onClick={() => void remove()}
+                disabled={busy}
+                className="text-sm text-danger underline"
+              >
+                حذف
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {assignment.description ? (
@@ -270,7 +344,7 @@ function AssignmentCard({
       {assignment.attachments.length > 0 ? (
         <ul className="mt-3 flex flex-wrap gap-3 text-sm">
           {assignment.attachments.map((attachment) => (
-            <li key={attachment.url}>
+            <li key={attachment.url} className="flex items-center gap-2">
               <a
                 href={attachment.url}
                 target="_blank"
@@ -279,6 +353,18 @@ function AssignmentCard({
               >
                 {attachment.name}
               </a>
+              {isTeacher ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void run(() => deleteAttachment(assignment.id, attachment.url))
+                  }
+                  disabled={busy}
+                  className="text-xs text-ink-muted underline"
+                >
+                  حذف
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -333,14 +419,51 @@ function SubmissionRow({
   onChanged: () => Promise<void>;
   onError: (message: string | null) => void;
 }) {
+  const [busy, setBusy] = useState(false);
+
+  /**
+   * حذف فقط برای هنرجو، و فقط تا وقتی بازخورد نگرفته.
+   *
+   * دکمه پس از آمدن بازخورد هم پنهان می‌شود — سرور ۴۰۹ می‌دهد، ولی
+   * دکمه‌ای که همیشه خطا می‌دهد بدتر از دکمه‌ای است که وجود ندارد.
+   */
+  const canDelete = !isTeacher && !submission.feedback;
+
+  async function remove() {
+    if (!window.confirm("این اجرا و فایلش حذف شود؟")) return;
+
+    setBusy(true);
+    onError(null);
+    try {
+      await deleteSubmission(submission.id);
+      await onChanged();
+    } catch (caught) {
+      onError(errorMessage(caught));
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="rounded-lg bg-surface-muted p-4">
-      <p className="text-sm text-ink-muted">
-        اجرای {formatJalaliDate(submission.createdAt.slice(0, 10))}
-        {submission.durationSeconds
-          ? ` · ${faNumber(Math.round(submission.durationSeconds))} ثانیه`
-          : ""}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-ink-muted">
+          اجرای {formatJalaliDate(submission.createdAt.slice(0, 10))}
+          {submission.durationSeconds
+            ? ` · ${faNumber(Math.round(submission.durationSeconds))} ثانیه`
+            : ""}
+        </p>
+
+        {canDelete ? (
+          <button
+            type="button"
+            onClick={() => void remove()}
+            disabled={busy}
+            className="text-xs text-ink-muted underline"
+          >
+            حذف اجرا
+          </button>
+        ) : null}
+      </div>
 
       {/*
         فایلِ پاک‌شده صریح گفته می‌شود، نه با پخش‌کننده‌ی خراب.
@@ -395,6 +518,122 @@ function SubmissionRow({
 // ---------------------------------------------------------------------------
 // فرم‌ها
 // ---------------------------------------------------------------------------
+
+/**
+ * ویرایش تمرین.
+ *
+ * `PATCH /assignments/:id` از فاز قبل وجود داشت و هیچ صفحه‌ای صدایش
+ * نمی‌زد: استادی که عنوان را غلط تایپ کرده بود، تنها راهش حذف و ساختن
+ * دوباره بود — که اجراهای هنرجو را هم می‌برد.
+ *
+ * پیوست‌ها اینجا نیستند و جدا حذف می‌شوند: تمرینِ در حال ویرایش
+ * نمی‌تواند فایلی را که هنرجو همین حالا دارد دانلود می‌کند، با یک
+ * ذخیره‌ی ناخواسته از بین ببرد.
+ *
+ * فقط فیلدهای **عوض‌شده** فرستاده می‌شوند. فرستادن همه یعنی مقدار
+ * تهیِ یک فیلد دست‌نخورده، آن را روی سرور پاک کند.
+ */
+function EditAssignmentForm({
+  assignment,
+  onDone,
+  onError,
+}: {
+  assignment: Assignment;
+  onDone: (changed: boolean) => Promise<void>;
+  onError: (message: string | null) => void;
+}) {
+  const [title, setTitle] = useState(assignment.title);
+  const [description, setDescription] = useState(assignment.description ?? "");
+  const [dueDate, setDueDate] = useState(assignment.dueDate ?? "");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+
+    const body: { title?: string; description?: string | null; dueDate?: string | null } =
+      {};
+
+    if (title.trim() !== assignment.title) body.title = title.trim();
+    if (description.trim() !== (assignment.description ?? "")) {
+      // رشته‌ی خالی یعنی «پاکش کن»، و `null` همان را به سرور می‌گوید
+      body.description = description.trim() || null;
+    }
+    if (dueDate !== (assignment.dueDate ?? "")) body.dueDate = dueDate || null;
+
+    if (Object.keys(body).length === 0) {
+      await onDone(false);
+      return;
+    }
+
+    setBusy(true);
+    onError(null);
+
+    try {
+      await updateAssignment(assignment.id, body);
+      await onDone(true);
+    } catch (caught) {
+      onError(errorMessage(caught));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="space-y-4">
+      <div>
+        <label className="label" htmlFor={`edit-title-${assignment.id}`}>
+          عنوان تمرین
+        </label>
+        <input
+          id={`edit-title-${assignment.id}`}
+          className="input"
+          value={title}
+          maxLength={160}
+          onChange={(event) => setTitle(event.target.value)}
+          required
+        />
+      </div>
+
+      <div>
+        <label className="label" htmlFor={`edit-description-${assignment.id}`}>
+          توضیح
+        </label>
+        <textarea
+          id={`edit-description-${assignment.id}`}
+          className="input min-h-24"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+        />
+      </div>
+
+      <div>
+        <label className="label" htmlFor={`edit-due-${assignment.id}`}>
+          مهلت
+        </label>
+        <input
+          id={`edit-due-${assignment.id}`}
+          className="input"
+          type="date"
+          value={dueDate}
+          onChange={(event) => setDueDate(event.target.value)}
+        />
+      </div>
+
+      <div className="flex gap-3">
+        <button type="submit" className="btn-primary" disabled={busy}>
+          {busy ? "در حال ذخیره…" : "ذخیره"}
+        </button>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={busy}
+          onClick={() => void onDone(false)}
+        >
+          انصراف
+        </button>
+      </div>
+    </form>
+  );
+}
 
 function NewAssignmentForm({
   bookingId,

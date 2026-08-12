@@ -11,7 +11,11 @@ import { DomainExceptionFilter } from "../common/domain-exception.filter.js";
 import { BigIntSerializationInterceptor } from "../common/serialization.interceptor.js";
 import { db } from "../db/client.js";
 import { assignments, bookings } from "../db/schema/index.js";
-import { InMemoryObjectStorage, setObjectStorage } from "../media/storage.port.js";
+import {
+  InMemoryObjectStorage,
+  setObjectStorage,
+  type UploadRequest,
+} from "../media/storage.port.js";
 import {
   accessTokenFor,
   closeDatabase,
@@ -624,5 +628,192 @@ describe("GET /api/practice", () => {
       .expect(200);
 
     expect(response.body.assignments).toEqual([]);
+  });
+});
+
+/**
+ * حذف.
+ *
+ * چیزی که اینجا سنجیده می‌شود فقط «سطر رفت» نیست، بلکه **فایل هم رفت**
+ * است. فایلی که سطرش حذف شود و خودش بماند، یتیم است: جاروی پاک‌سازی از
+ * روی جدول کار می‌کند نه فهرست باکت، پس هیچ‌وقت پیدایش نمی‌کند و هزینه‌ی
+ * ذخیره‌سازی‌اش تا ابد پرداخت می‌شود.
+ */
+describe("حذف تمرین، اجرا و پیوست", () => {
+  async function assignmentWithSubmission() {
+    const attachmentKey = await upload(
+      teacherToken,
+      "ASSIGNMENT_ATTACHMENT",
+      "application/pdf",
+      "note.pdf",
+    );
+
+    const assignment = await request(server)
+      .post(`/api/bookings/${bookingId}/assignments`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({
+        title: "آرپژ",
+        attachments: [{ objectKey: attachmentKey, name: "نت" }],
+      })
+      .expect(201);
+
+    const submissionKey = await upload(studentToken, "SUBMISSION", "audio/mpeg");
+    const submission = await request(server)
+      .post(`/api/assignments/${assignment.body.id}/submissions`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ objectKey: submissionKey })
+      .expect(201);
+
+    return {
+      assignmentId: assignment.body.id as string,
+      submissionId: submission.body.id as string,
+      attachmentKey,
+      attachmentUrl: assignment.body.attachments[0].url as string,
+      submissionKey,
+    };
+  }
+
+  it("حذف تمرین، اجرا و فایل‌هایش را هم می‌برد", async () => {
+    const { assignmentId, attachmentKey, submissionKey } =
+      await assignmentWithSubmission();
+
+    await request(server)
+      .delete(`/api/assignments/${assignmentId}`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .expect(204);
+
+    const [row] = await db
+      .select({ id: assignments.id })
+      .from(assignments)
+      .where(eq(assignments.id, assignmentId));
+    expect(row).toBeUndefined();
+
+    // و مهم‌تر: هیچ فایلی در باکت جا نمانده
+    expect(storage.get(attachmentKey)).toBeNull();
+    expect(storage.get(submissionKey)).toBeNull();
+  });
+
+  it("حذف تمرین فقط از استاد همان جلسه برمی‌آید", async () => {
+    const { assignmentId } = await assignmentWithSubmission();
+
+    await request(server)
+      .delete(`/api/assignments/${assignmentId}`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .expect(403);
+
+    await request(server)
+      .delete(`/api/assignments/${assignmentId}`)
+      .set("authorization", `Bearer ${otherToken}`)
+      .expect(403);
+  });
+
+  it("هنرجو اجرای خودش را حذف می‌کند و فایلش پاک می‌شود", async () => {
+    const { assignmentId, submissionId, submissionKey } =
+      await assignmentWithSubmission();
+
+    await request(server)
+      .delete(`/api/submissions/${submissionId}`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .expect(204);
+
+    expect(storage.get(submissionKey)).toBeNull();
+
+    // تمرین سر جایش می‌ماند — فقط اجرا رفته
+    const seen = await request(server)
+      .get(`/api/bookings/${bookingId}/learning`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .expect(200);
+
+    expect(seen.body.assignments[0].id).toBe(assignmentId);
+    expect(seen.body.assignments[0].submissions).toEqual([]);
+  });
+
+  it("استاد اجرای هنرجو را حذف نمی‌کند", async () => {
+    const { submissionId } = await assignmentWithSubmission();
+
+    await request(server)
+      .delete(`/api/submissions/${submissionId}`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .expect(403);
+  });
+
+  /**
+   * اجرایی که بازخورد گرفته حذف نمی‌شود: کاسکید بازخورد را هم می‌برد و
+   * در تاریخچه‌ی یادگیری سوراخ می‌سازد — همان چیزی که سیاست نگه‌داری با
+   * «فایل را ببر، سطر را نگه دار» عمداً از آن پرهیز می‌کند.
+   */
+  it("اجرای بازخوردگرفته حذف نمی‌شود و فایلش هم می‌ماند", async () => {
+    const { submissionId, submissionKey } = await assignmentWithSubmission();
+
+    await request(server)
+      .put(`/api/submissions/${submissionId}/feedback`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ content: "خوب بود" })
+      .expect(200);
+
+    const response = await request(server)
+      .delete(`/api/submissions/${submissionId}`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .expect(409);
+
+    expect(response.body.code).toBe("SUBMISSION_HAS_FEEDBACK");
+    expect(storage.get(submissionKey)).not.toBeNull();
+  });
+
+  it("حذف پیوست، فایلش را هم پاک می‌کند و بقیه‌ی تمرین می‌ماند", async () => {
+    const { assignmentId, attachmentUrl, attachmentKey } =
+      await assignmentWithSubmission();
+
+    const updated = await request(server)
+      .delete(`/api/assignments/${assignmentId}/attachments`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ url: attachmentUrl })
+      .expect(200);
+
+    expect(updated.body.attachments).toEqual([]);
+    expect(updated.body.title).toBe("آرپژ");
+    expect(storage.get(attachmentKey)).toBeNull();
+  });
+
+  it("پیوستی که در تمرین نیست ۴۰۴ می‌دهد", async () => {
+    const { assignmentId } = await assignmentWithSubmission();
+
+    await request(server)
+      .delete(`/api/assignments/${assignmentId}/attachments`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ url: "https://example.com/other.pdf" })
+      .expect(404);
+  });
+
+  /**
+   * حذف فایل اثر جانبی است، نه بخشی از کاری که کاربر خواسته. سطر رفته و
+   * برنمی‌گردد؛ نرسیدن به استوریج نباید حذفی را که انجام شده به خطا
+   * تبدیل کند — بدترین حالتش یک فایل یتیم است.
+   */
+  it("خرابی استوریج جلوی حذف سطر را نمی‌گیرد", async () => {
+    const { assignmentId } = await assignmentWithSubmission();
+
+    setObjectStorage({
+      name: "broken",
+      createUploadTicket: (input: UploadRequest) => storage.createUploadTicket(input),
+      publicUrlFor: (objectKey: string) => storage.publicUrlFor(objectKey),
+      deleteObject: () => Promise.reject(new Error("سرویس در دسترس نیست")),
+    });
+
+    try {
+      await request(server)
+        .delete(`/api/assignments/${assignmentId}`)
+        .set("authorization", `Bearer ${teacherToken}`)
+        .expect(204);
+    } finally {
+      setObjectStorage(storage);
+    }
+
+    const [row] = await db
+      .select({ id: assignments.id })
+      .from(assignments)
+      .where(eq(assignments.id, assignmentId));
+
+    expect(row).toBeUndefined();
   });
 });

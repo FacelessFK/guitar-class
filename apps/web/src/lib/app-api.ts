@@ -573,6 +573,26 @@ export const createAssignment = (
   body,
 });
 
+export const updateAssignment = (
+  assignmentId: string,
+  body: {
+    title?: string;
+    description?: string | null;
+    dueDate?: string | null;
+  },
+) => apiFetch<Assignment>(`/assignments/${assignmentId}`, { method: "PATCH", body });
+
+/** تمرین را با اجراها، بازخوردها و فایل‌هایشان می‌برد. */
+export const deleteAssignment = (assignmentId: string) =>
+  apiFetch<void>(`/assignments/${assignmentId}`, { method: "DELETE" });
+
+/** پیوست شناسه‌ی خودش را ندارد، پس با نشانی‌اش شناسایی می‌شود. */
+export const deleteAttachment = (assignmentId: string, url: string) =>
+  apiFetch<Assignment>(`/assignments/${assignmentId}/attachments`, {
+    method: "DELETE",
+    body: { url },
+  });
+
 export const createSubmission = (
   assignmentId: string,
   body: { objectKey: string; durationSeconds?: number },
@@ -580,6 +600,10 @@ export const createSubmission = (
   method: "POST",
   body,
 });
+
+/** فقط تا وقتی بازخورد نگرفته — بعد از آن سرور ۴۰۹ می‌دهد. */
+export const deleteSubmission = (submissionId: string) =>
+  apiFetch<void>(`/submissions/${submissionId}`, { method: "DELETE" });
 
 export const writeFeedback = (
   submissionId: string,
@@ -770,16 +794,47 @@ export interface AdminBooking {
   openReviewId: string | null;
 }
 
-export const getAdminBookings = (filter: {
-  /** چند وضعیت با کاما */
-  status?: string;
-  teacherProfileId?: string;
-  from?: string;
-  to?: string;
-}) =>
-  apiFetch<{ bookings: AdminBooking[] }>("/admin/bookings", { query: filter }).then(
-    (data) => data.bookings,
-  );
+/**
+ * فهرست‌های رشدکننده‌ی پنل ادمین صفحه‌بندی دارند.
+ *
+ * `total` کل سطرهای منطبق با فیلتر است، نه طول این صفحه — بدون آن،
+ * صفحه نمی‌داند صفحه‌ی بعدی وجود دارد یا نه.
+ */
+export interface AdminPage<T> {
+  rows: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * `type` است و نه `interface`، و این عمدی است.
+ *
+ * `apiFetch` پارامترهای کوئری را `Record<string, …>` می‌گیرد، و
+ * تایپ‌اسکریپت فقط به **type alias**ها ایندکس‌سیگنچر ضمنی می‌دهد نه به
+ * اینترفیس‌ها. با `interface`، هر صدازننده‌ای که این را با فیلترش ترکیب
+ * کند خطای «Index signature is missing» می‌گیرد.
+ */
+export type PageQuery = {
+  limit?: number;
+  offset?: number;
+};
+
+export const ADMIN_PAGE_SIZE = 50;
+
+export const getAdminBookings = (
+  filter: {
+    /** چند وضعیت با کاما */
+    status?: string;
+    teacherProfileId?: string;
+    from?: string;
+    to?: string;
+  } & PageQuery,
+) =>
+  apiFetch<{ bookings: AdminBooking[] } & Omit<AdminPage<never>, "rows">>(
+    "/admin/bookings",
+    { query: filter },
+  ).then(({ bookings, ...page }) => ({ rows: bookings, ...page }));
 
 export interface AdminOrder {
   id: string;
@@ -793,10 +848,10 @@ export interface AdminOrder {
   studentPhone: string;
 }
 
-export const getAdminOrders = (status?: string) =>
-  apiFetch<{ orders: AdminOrder[] }>("/admin/orders", { query: { status } }).then(
-    (data) => data.orders,
-  );
+export const getAdminOrders = (query: { status?: string } & PageQuery = {}) =>
+  apiFetch<{ orders: AdminOrder[] } & Omit<AdminPage<never>, "rows">>("/admin/orders", {
+    query,
+  }).then(({ orders, ...page }) => ({ rows: orders, ...page }));
 
 export interface AdminPayout {
   id: string;
@@ -812,10 +867,13 @@ export interface AdminPayout {
   createdAt: string;
 }
 
-export const getAdminPayouts = (teacherProfileId?: string) =>
-  apiFetch<{ payouts: AdminPayout[] }>("/admin/payouts", {
-    query: { teacherProfileId },
-  }).then((data) => data.payouts);
+export const getAdminPayouts = (
+  query: { teacherProfileId?: string } & PageQuery = {},
+) =>
+  apiFetch<{ payouts: AdminPayout[] } & Omit<AdminPage<never>, "rows">>(
+    "/admin/payouts",
+    { query },
+  ).then(({ payouts, ...page }) => ({ rows: payouts, ...page }));
 
 export const createPayout = (body: {
   teacherProfileId: string;
@@ -857,10 +915,13 @@ export interface AdminReview {
 }
 
 /** پیش‌فرض سمت سرور `OPEN` است — صف، فهرست کارِ مانده است. */
-export const getAdminReviews = (status?: SessionReviewStatus) =>
-  apiFetch<{ reviews: AdminReview[] }>("/admin/reviews", { query: { status } }).then(
-    (data) => data.reviews,
-  );
+export const getAdminReviews = (
+  query: { status?: SessionReviewStatus } & PageQuery = {},
+) =>
+  apiFetch<{ reviews: AdminReview[] } & Omit<AdminPage<never>, "rows">>(
+    "/admin/reviews",
+    { query },
+  ).then(({ reviews, ...page }) => ({ rows: reviews, ...page }));
 
 export const resolveReview = (reviewId: string, resolution?: string) =>
   apiFetch<AdminReview>(`/admin/reviews/${reviewId}/resolve`, {

@@ -37,6 +37,28 @@ export class SubmissionNotFoundError extends LearningError {
 }
 
 /**
+ * اجرایی که بازخورد گرفته حذف نمی‌شود.
+ *
+ * حذفش بازخورد را هم می‌برد (کاسکید) و در تاریخچه‌ی یادگیری سوراخ
+ * می‌سازد — همان چیزی که سیاست نگه‌داری با «فایل را ببر، سطر را نگه
+ * دار» عمداً از آن پرهیز می‌کند. برای همین اینجا هم سطر نمی‌رود.
+ */
+export class SubmissionHasFeedbackError extends LearningError {
+  constructor() {
+    super(
+      "این اجرا بازخورد گرفته و دیگر حذف نمی‌شود. اجرای تازه بفرستید.",
+      "SUBMISSION_HAS_FEEDBACK",
+    );
+  }
+}
+
+export class AttachmentNotFoundError extends LearningError {
+  constructor() {
+    super("این پیوست در تمرین پیدا نشد.", "ATTACHMENT_NOT_FOUND");
+  }
+}
+
+/**
  * تمرین برای جلسه‌ای که هنوز برگزار نشده.
  *
  * حلقه‌ی یادگیری بعد از کلاس شروع می‌شود: نکات جلسه و برنامه‌ی تمرین

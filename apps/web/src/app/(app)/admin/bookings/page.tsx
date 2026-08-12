@@ -3,8 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { Pager } from "@/components/pager";
 import { errorMessage } from "@/lib/api-client";
-import { getAdminBookings, type AdminBooking } from "@/lib/app-api";
+import {
+  ADMIN_PAGE_SIZE,
+  getAdminBookings,
+  type AdminBooking,
+  type AdminPage,
+} from "@/lib/app-api";
 import { statusLabel } from "@/lib/booking-display";
 import { formatJalaliDayMonth, formatTehranTime, formatToman } from "@/lib/format";
 
@@ -26,23 +32,37 @@ const FILTERS = [
 
 export default function AdminBookingsPage() {
   const [status, setStatus] = useState<string | undefined>(undefined);
-  const [bookings, setBookings] = useState<AdminBooking[] | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState<AdminPage<AdminBooking> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setBookings(null);
+    setPage(null);
     try {
-      setBookings(await getAdminBookings({ status }));
+      setPage(await getAdminBookings({ status, offset, limit: ADMIN_PAGE_SIZE }));
       setError(null);
     } catch (caught) {
       setError(errorMessage(caught));
-      setBookings([]);
+      setPage({ rows: [], total: 0, limit: ADMIN_PAGE_SIZE, offset: 0 });
     }
-  }, [status]);
+  }, [status, offset]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * عوض شدن فیلتر، صفحه‌بندی را به اول برمی‌گرداند.
+   *
+   * بدون این، رفتن از فیلتری با صد سطر به فیلتری با ده سطر، صفحه‌ای
+   * خالی نشان می‌دهد و شبیه «چیزی پیدا نشد» به نظر می‌رسد.
+   */
+  function changeFilter(value: string | undefined) {
+    setStatus(value);
+    setOffset(0);
+  }
+
+  const bookings = page?.rows ?? null;
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12">
@@ -53,7 +73,7 @@ export default function AdminBookingsPage() {
           <button
             key={filter.label}
             type="button"
-            onClick={() => setStatus(filter.value)}
+            onClick={() => changeFilter(filter.value)}
             className={
               status === filter.value
                 ? "rounded-full bg-accent px-4 py-1.5 text-sm text-accent-ink"
@@ -121,6 +141,15 @@ export default function AdminBookingsPage() {
           ))}
         </ul>
       )}
+
+      {page ? (
+        <Pager
+          total={page.total}
+          limit={page.limit}
+          offset={page.offset}
+          onChange={setOffset}
+        />
+      ) : null}
     </div>
   );
 }
