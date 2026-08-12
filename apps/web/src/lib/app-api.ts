@@ -55,6 +55,28 @@ export const getTeachers = (instrument?: string) =>
   }).then((data) => data.teachers);
 
 // ---------------------------------------------------------------------------
+// پروفایل خودِ کاربر
+// ---------------------------------------------------------------------------
+
+/**
+ * ویرایش نام و عکس پروفایل.
+ *
+ * `avatarObjectKey` **کلید** است نه نشانی؛ نشانی را سرور از روی کلید
+ * می‌سازد. `null` صریح یعنی «عکس را بردار» و با نفرستادن فیلد فرق دارد.
+ *
+ * پس از این باید `loadUser()` صدا زده شود تا نام و عکس در پوسته‌ی اپ
+ * هم تازه شوند — پاسخ این درخواست فقط دو فیلد دارد، نه کل نشست.
+ */
+export const updateOwnProfile = (body: {
+  fullName?: string;
+  avatarObjectKey?: string | null;
+}) =>
+  apiFetch<{ fullName: string; avatarUrl: string | null }>("/auth/me", {
+    method: "PATCH",
+    body,
+  });
+
+// ---------------------------------------------------------------------------
 // دسترس‌پذیری
 // ---------------------------------------------------------------------------
 
@@ -388,7 +410,11 @@ export const markNotificationsRead = (ids?: string[]) =>
 // حلقه‌ی یادگیری
 // ---------------------------------------------------------------------------
 
-export type MediaPurpose = "SUBMISSION" | "FEEDBACK_VOICE" | "ASSIGNMENT_ATTACHMENT";
+export type MediaPurpose =
+  | "SUBMISSION"
+  | "FEEDBACK_VOICE"
+  | "ASSIGNMENT_ATTACHMENT"
+  | "AVATAR";
 
 export interface UploadTicket {
   objectKey: string;
@@ -441,6 +467,43 @@ export async function uploadFile(
   }
 
   return ticket.objectKey;
+}
+
+/**
+ * مدت یک فایل صوتی یا ویدیویی، به ثانیه.
+ *
+ * ستون `duration_seconds` و اندپوینتش از روز اول وجود داشتند و همیشه
+ * تهی می‌ماندند، چون تنها جایی که این عدد را می‌شود گرفت همین‌جاست:
+ * سرور فایل را نمی‌بیند (آپلود مستقیم به باکت است) و کتابخانه‌ی
+ * استخراج متادیتا هم برای عددی که مرورگر رایگان می‌دهد گران است.
+ *
+ * `null` برمی‌گرداند به‌جای خطا. مدت، آرایش فهرست است نه بخشی از خودِ
+ * اجرا؛ فرمتی که مرورگر نمی‌شناسد یا فایل خرابی که متادیتایش خوانده
+ * نمی‌شود، نباید جلوی ارسال تمرینِ هنرجو را بگیرد.
+ */
+export function readMediaDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const element = file.type.startsWith("video/")
+      ? document.createElement("video")
+      : document.createElement("audio");
+
+    const url = URL.createObjectURL(file);
+
+    // نشانی موقت باید در هر مسیری آزاد شود، وگرنه فایل تا رفرش صفحه در
+    // حافظه می‌ماند — و اینجا فایل‌ها ده‌ها مگابایتی‌اند
+    const finish = (value: number | null) => {
+      URL.revokeObjectURL(url);
+      resolve(value);
+    };
+
+    element.preload = "metadata";
+    element.onloadedmetadata = () => {
+      // فایلِ در حال پخشِ زنده یا کانتینرِ بدون مدت، `Infinity` می‌دهد
+      finish(Number.isFinite(element.duration) ? Math.round(element.duration) : null);
+    };
+    element.onerror = () => finish(null);
+    element.src = url;
+  });
 }
 
 export interface Feedback {

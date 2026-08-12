@@ -461,7 +461,15 @@ export async function createSubmission(
 
   if (role !== "STUDENT") throw new StudentOnlyActionError();
 
-  const { url, contentType } = await consumeUploadTicket(
+  /**
+   * حجم از **رکورد بلیت** می‌آید، نه از بدنه‌ی این درخواست.
+   *
+   * کلاینت عدد را همان موقعِ گرفتن بلیت فرستاده و همان‌جا در برابر سقفِ
+   * مقصد بررسی شده. پرسیدنِ دوباره یعنی عددی که در دیتابیس می‌نشیند
+   * همانی نباشد که بررسی شد — یک ادعای دوم و دلخواه، درست مثل نشانی
+   * فایل که به همین دلیل از کلاینت گرفته نمی‌شود.
+   */
+  const { url, contentType, sizeBytes } = await consumeUploadTicket(
     input.objectKey,
     userId,
     "SUBMISSION",
@@ -480,6 +488,7 @@ export async function createSubmission(
         objectKey: input.objectKey,
         mediaType: mediaTypeOf(contentType),
         durationSeconds: input.durationSeconds,
+        sizeBytes: sizeBytes > 0 ? BigInt(sizeBytes) : null,
       })
       .returning();
 

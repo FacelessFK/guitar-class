@@ -345,6 +345,13 @@ describe("حلقه‌ی کامل: تمرین ← اجرا ← بازخورد", (
     expect(submission.body.mediaType).toBe("AUDIO");
     expect(submission.body.durationSeconds).toBe(95);
 
+    /**
+     * حجم از رکورد بلیت آمده، نه از بدنه‌ی این درخواست — که اصلاً
+     * حجمی نفرستاده. عدد همانی است که `upload()` هنگام گرفتن بلیت
+     * اعلام کرده و همان‌جا در برابر سقف مقصد بررسی شده.
+     */
+    expect(submission.body.sizeBytes).toBe("1024");
+
     // آپلود اجرا، وضعیت تمرین را جابه‌جا می‌کند
     const [afterSubmit] = await db
       .select({ status: assignments.status })

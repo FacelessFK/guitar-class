@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Injectable,
+  Patch,
   Post,
 } from "@nestjs/common";
 import { eq } from "drizzle-orm";
@@ -18,6 +19,7 @@ import { zodPipe } from "../common/validation.pipe.js";
 import { CurrentUser } from "../common/current-user.decorator.js";
 import { Public, type AuthenticatedRequest } from "./auth.guard.js";
 import { requestLoginCode, refreshSession, verifyLoginCode } from "./auth.service.js";
+import { updateOwnProfile, type ProfileUpdate } from "./profile.service.js";
 import { revokeAllUserTokens, revokeRefreshToken, type AccessTokenPayload } from "./token.service.js";
 import { createSmsSender, type SmsSender } from "../notification/sms.port.js";
 import { findTeacherProfileId } from "../teacher/teacher.service.js";
@@ -48,6 +50,24 @@ const verifyCodeSchema = z.object({
 const refreshSchema = z.object({
   refreshToken: z.string().min(20),
 });
+
+/**
+ * ویرایش پروفایل.
+ *
+ * `avatarObjectKey` کلید است نه نشانی — قاعده‌ی ثابت هر اندپوینتی که
+ * فایل می‌گیرد. `null` صریح یعنی «عکس را بردار»، و با نفرستادنِ فیلد
+ * فرق دارد که یعنی «دست نزن».
+ *
+ * شماره‌ی موبایل عمداً نیست: هویتِ ورود است، نه یک فیلد پروفایل.
+ */
+const updateProfileSchema = z
+  .object({
+    fullName: z.string().trim().min(2, "نام باید حداقل دو حرف باشد").max(120).optional(),
+    avatarObjectKey: z.string().trim().min(1).max(300).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "چیزی برای تغییر فرستاده نشده است",
+  });
 
 @Controller("auth")
 export class AuthController {
@@ -174,6 +194,23 @@ export class AuthController {
       trialUsed: row.trialUsedAt !== null,
       teacherProfileId: await findTeacherProfileId(row.id),
     };
+  }
+
+  /**
+   * ویرایش نام و عکس پروفایل.
+   *
+   * روی `auth` نشسته و نه یک ماژول `users` تازه، به همان دلیلی که سند
+   * معماری برای نداشتن آن ماژول آورده: تنها داده‌ی کاربر که مسیر
+   * نوشتنی می‌خواهد همین دو فیلد است، و کنارِ `GET me` جای طبیعی‌اش
+   * است. شناسه از نشست می‌آید، پس کسی نمی‌تواند پروفایل دیگری را
+   * عوض کند.
+   */
+  @Patch("me")
+  async updateMe(
+    @CurrentUser() user: AccessTokenPayload,
+    @Body(zodPipe(updateProfileSchema)) body: z.infer<typeof updateProfileSchema>,
+  ): Promise<ProfileUpdate> {
+    return updateOwnProfile(user.userId, body);
   }
 }
 

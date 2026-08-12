@@ -7,6 +7,7 @@ import {
   createAssignment,
   createSubmission,
   getSessionLearning,
+  readMediaDuration,
   uploadFile,
   writeFeedback,
   writeSessionNote,
@@ -560,8 +561,19 @@ function SubmissionUpload({
     onError(null);
 
     try {
+      /**
+       * مدت پیش از آپلود خوانده می‌شود، از روی خودِ فایل در مرورگر.
+       *
+       * تنها جای ممکن همین است: فایل مستقیم به باکت می‌رود و هرگز از
+       * سرور عبور نمی‌کند. عدد اختیاری است و شکست خواندنش `null` است،
+       * پس ارسال اجرا را متوقف نمی‌کند.
+       */
+      const durationSeconds = await readMediaDuration(file);
       const objectKey = await uploadFile(file, "SUBMISSION");
-      await createSubmission(assignmentId, { objectKey });
+      await createSubmission(assignmentId, {
+        objectKey,
+        ...(durationSeconds === null ? {} : { durationSeconds }),
+      });
       await onUploaded();
     } catch (caught) {
       onError(errorMessage(caught));

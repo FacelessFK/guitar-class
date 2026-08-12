@@ -49,6 +49,18 @@ export const MEDIA_PURPOSES = {
     maxBytes: 25 * 1024 * 1024,
     allowed: ["audio/", "image/", "application/pdf"],
   },
+  /**
+   * عکس پروفایل — فقط تصویر.
+   *
+   * سقفش تنگ است چون عکسی که مرورگر در ۴۸ پیکسل نشان می‌دهد، پنج
+   * مگابایت لازم ندارد؛ و برخلاف اجرای هنرجو، این فایل در هر بارگذاری
+   * صفحه دانلود می‌شود.
+   */
+  AVATAR: {
+    prefix: "avatars",
+    maxBytes: 5 * 1024 * 1024,
+    allowed: ["image/"],
+  },
 } as const;
 
 export type MediaPurpose = keyof typeof MEDIA_PURPOSES;
@@ -66,6 +78,18 @@ interface TicketRecord {
   userId: string;
   purpose: MediaPurpose;
   contentType: string;
+  /**
+   * حجمی که کلاینت هنگام گرفتن بلیت اعلام کرد.
+   *
+   * همین‌جا نگه داشته می‌شود تا اندپوینتِ ثبت، مجبور نباشد دوباره از
+   * کلاینت بپرسدش. پرسیدنِ دوباره یعنی دو عدد وجود داشته باشد که
+   * می‌توانند با هم نخوانند، و آن که در دیتابیس می‌نشیند همانی باشد که
+   * هیچ بررسی‌ای رویش انجام نشده — عملاً یک عدد دلخواه.
+   *
+   * ادعای کلاینت است و نه اندازه‌ی واقعی فایل. برای گزارش و سهمیه خوب
+   * است، برای اجرای سقف نه؛ سقف واقعی باید در سیاست باکت بنشیند.
+   */
+  sizeBytes: number;
 }
 
 const ticketKey = (objectKey: string): string => `media:ticket:${objectKey}`;
@@ -118,6 +142,7 @@ export async function issueUploadTicket(
     userId: input.userId,
     purpose: input.purpose,
     contentType: input.contentType,
+    sizeBytes: input.sizeBytes,
   };
 
   await redis.set(ticketKey(objectKey), JSON.stringify(record), "EX", TICKET_TTL_SECONDS);
@@ -140,7 +165,7 @@ export async function consumeUploadTicket(
   objectKey: string,
   userId: string,
   expected: MediaPurpose,
-): Promise<{ url: string; contentType: string }> {
+): Promise<{ url: string; contentType: string; sizeBytes: number }> {
   const raw = await redis.getdel(ticketKey(objectKey));
 
   if (!raw) throw new MediaTicketInvalidError();
@@ -156,6 +181,10 @@ export async function consumeUploadTicket(
   return {
     url: objectStorage().publicUrlFor(objectKey),
     contentType: record.contentType,
+    // بلیت‌های پیش از افزوده شدن این فیلد هنوز در ردیس زنده‌اند (مهلتشان
+    // نیم ساعت است) و `sizeBytes` ندارند. صفر یعنی «نمی‌دانم» و در ستون
+    // nullable می‌نشیند، نه یک عدد ساختگی
+    sizeBytes: record.sizeBytes ?? 0,
   };
 }
 

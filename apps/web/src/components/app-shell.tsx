@@ -71,7 +71,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-5 text-sm">
             <NotificationBell />
-            <span className="text-ink-muted">{user?.fullName}</span>
+
+            {/*
+              نام، لینکِ صفحه‌ی پروفایل است. تا پیش از این متن ساده بود و
+              هیچ راهی برای عوض کردن نام یا عکس وجود نداشت — کسی که در
+              عجله «علی» تایپ کرده بود تا ابد برای استادش «علی» می‌ماند.
+            */}
+            <Link
+              href="/profile"
+              className={
+                pathname.startsWith("/profile")
+                  ? "flex items-center gap-2 font-medium text-accent"
+                  : "flex items-center gap-2 text-ink-muted"
+              }
+            >
+              {user?.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- نشانی از باکت می‌آید و دامنه‌اش با محیط عوض می‌شود؛ next/image پیکربندی دامنه می‌خواهد
+                <img
+                  src={user.avatarUrl}
+                  alt=""
+                  className="size-7 rounded-full object-cover"
+                />
+              ) : null}
+              {user?.fullName}
+            </Link>
             <button
               type="button"
               onClick={() => void handleLogout()}
