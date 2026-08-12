@@ -3,7 +3,7 @@ import { normalizePhone, type NormalizedPhone } from "@music/shared";
 
 import { db } from "../db/client.js";
 import { users } from "../db/schema/index.js";
-import { OTP_CONFIG, requestOtp, verifyOtp } from "./otp.service.js";
+import { OTP_CONFIG, consumeOtp, requestOtp, verifyOtp } from "./otp.service.js";
 import { issueAccessToken, issueRefreshToken, rotateRefreshToken } from "./token.service.js";
 import type { SmsSender } from "../notification/sms.port.js";
 
@@ -96,7 +96,19 @@ export async function verifyLoginCode(input: VerifyCodeInput): Promise<LoginResu
     throw new AuthError("شماره‌ی موبایل معتبر نیست.", "INVALID_PHONE");
   }
 
-  const outcome = await verifyOtp(phone, input.code);
+  /**
+   * کد اینجا **مصرف نمی‌شود.**
+   *
+   * برای کاربر تازه، «نام لازم است» تازه بعد از این نقطه معلوم می‌شود
+   * و اگر کد همین‌جا سوزانده می‌شد، اولین تلاشِ هر کاربر جدید به یک
+   * بن‌بست شصت‌ثانیه‌ای می‌خورد: کد باطل، cooldown فعال، و پیامی که
+   * می‌گوید نامت را بده ولی راهی برای دادنش نیست.
+   *
+   * شمارنده‌ی تلاش همچنان بالا می‌رود، پس کد همچنان در برابر حدس زدن
+   * محافظت است؛ فقط سوزاندنش به لحظه‌ای موکول می‌شود که ورود واقعاً
+   * قطعی شده.
+   */
+  const outcome = await verifyOtp(phone, input.code, { consume: false });
 
   if (!outcome.ok) {
     if (outcome.reason === "NO_CODE") {
@@ -118,6 +130,10 @@ export async function verifyLoginCode(input: VerifyCodeInput): Promise<LoginResu
   }
 
   const { user, isNewUser } = await findOrCreateUser(phone, input.fullName);
+
+  // از اینجا حساب قطعاً وجود دارد و کد کارش را کرده؛ سوزاندنش تا
+  // اینجا عقب افتاده بود تا نبودِ نام، کد را هدر ندهد
+  await consumeOtp(phone);
 
   if (user.status === "SUSPENDED") {
     throw new AuthError("حساب شما مسدود شده است.", "ACCOUNT_SUSPENDED");

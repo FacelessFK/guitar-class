@@ -137,6 +137,47 @@ describe("بررسی کد و ورود", () => {
     expect(response.body.code).toBe("FULL_NAME_REQUIRED");
   });
 
+  /**
+   * این خطا نباید کد را بسوزاند.
+   *
+   * «نام لازم است» تازه بعد از بررسی کد معلوم می‌شود. اگر کد همان‌جا
+   * مصرف می‌شد، اولین تلاشِ هر کاربر تازه به بن‌بست می‌خورد: کد باطل،
+   * cooldown شصت‌ثانیه‌ای فعال، و پیامی که می‌گوید نامت را بده بدون
+   * اینکه راهی برای دادنش مانده باشد.
+   */
+  it("خطای «نام لازم است» کد را نمی‌سوزاند", async () => {
+    const code = await requestCode();
+
+    await request(server)
+      .post("/api/auth/otp/verify")
+      .send({ phone: PHONE, code })
+      .expect(400);
+
+    // همان کد، این بار با نام
+    const response = await request(server)
+      .post("/api/auth/otp/verify")
+      .send({ phone: PHONE, code, fullName: "فردین کاظمی" })
+      .expect(200);
+
+    expect(response.body.user.isNewUser).toBe(true);
+  });
+
+  it("کد پس از ورود موفق دیگر کار نمی‌کند", async () => {
+    const code = await requestCode();
+
+    await request(server)
+      .post("/api/auth/otp/verify")
+      .send({ phone: PHONE, code, fullName: "فردین کاظمی" })
+      .expect(200);
+
+    const response = await request(server)
+      .post("/api/auth/otp/verify")
+      .send({ phone: PHONE, code })
+      .expect(401);
+
+    expect(response.body.code).toBe("NO_ACTIVE_CODE");
+  });
+
   it("ورود دوم همان کاربر است، نه کاربر جدید", async () => {
     const first = await login();
     await resetRedis();

@@ -104,10 +104,18 @@ export type OtpVerifyOutcome =
  *
  * کد پس از یک بار استفاده‌ی موفق حذف می‌شود تا با شنود یا تکرار
  * درخواست، دوباره قابل استفاده نباشد.
+ *
+ * `consume: false` مصرف را به تعویق می‌اندازد و کار صدازننده می‌شود.
+ * لازم است چون ورود فقط بررسی کد نیست: کاربر تازه باید نامش را هم
+ * بدهد، و آن خطا **بعد** از بررسی کد معلوم می‌شود. اگر کد همان‌جا
+ * سوزانده می‌شد، هر کاربر تازه‌ای که اول بار نامش را نداده بود باید
+ * شصت ثانیه‌ی cooldown را صبر می‌کرد و کد دیگری می‌گرفت — یعنی
+ * اولین تجربه‌ی هر کاربر جدید، یک بن‌بست بود.
  */
 export async function verifyOtp(
   phone: NormalizedPhone,
   code: string,
+  options: { consume?: boolean } = {},
 ): Promise<OtpVerifyOutcome> {
   const stored = await redis.get(keys.code(phone));
 
@@ -131,8 +139,22 @@ export async function verifyOtp(
     };
   }
 
-  await redis.del(keys.code(phone), keys.attempts(phone));
+  if (options.consume ?? true) {
+    await consumeOtp(phone);
+  }
+
   return { ok: true };
+}
+
+/**
+ * کد را می‌سوزاند.
+ *
+ * شمارنده‌ی تلاش هم با آن می‌رود: کد دیگری وجود ندارد که تلاش‌هایش
+ * شمرده شود، و ماندنش یعنی کدِ بعدیِ همین شماره با شمارنده‌ی
+ * پرشده شروع شود.
+ */
+export async function consumeOtp(phone: NormalizedPhone): Promise<void> {
+  await redis.del(keys.code(phone), keys.attempts(phone));
 }
 
 /** فقط برای تست — همه‌ی حالت‌های یک شماره را پاک می‌کند. */
