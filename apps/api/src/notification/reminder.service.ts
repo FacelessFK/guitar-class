@@ -96,7 +96,12 @@ export async function scheduleDueReminders(now: Date = new Date()): Promise<numb
         AND b.scheduled_at > ${at}
         AND ${dueAt} <= ${at}
         AND ${dueAt} >= b.created_at
-      ON CONFLICT (booking_id, user_id, type) WHERE booking_id IS NOT NULL
+      -- شرط باید عیناً با شرط ایندکس جزئی notifications_once_per_booking
+      -- بخواند، وگرنه پستگرس ایندکس را تشخیص نمی‌دهد و خطای
+      -- "no unique or exclusion constraint matching the ON CONFLICT
+      -- specification" می‌دهد.
+      ON CONFLICT (booking_id, user_id, type)
+        WHERE booking_id IS NOT NULL AND type LIKE 'SESSION_REMINDER%'
       DO NOTHING
       RETURNING id
     `);

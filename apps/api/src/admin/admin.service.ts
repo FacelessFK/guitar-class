@@ -31,6 +31,7 @@ import {
   users,
 } from "../db/schema/index.js";
 import { teacherEarningsBreakdown } from "../payment/payment.service.js";
+import { IN_APP_TYPES, notifyInApp } from "../notification/in-app.service.js";
 import { TeacherSlugTakenError } from "../teacher/errors.js";
 import {
   AdminRecordNotFoundError,
@@ -205,14 +206,18 @@ export async function updateTeacher(
   input: UpdateTeacherInput,
 ): Promise<AdminTeacherDetail> {
   if (Object.keys(input).length > 0) {
-    let updated: { id: string }[];
+    let updated: { id: string; userId: string; status: TeacherStatus }[];
 
     try {
       updated = await db
         .update(teacherProfiles)
         .set(input)
         .where(eq(teacherProfiles.id, profileId))
-        .returning({ id: teacherProfiles.id });
+        .returning({
+          id: teacherProfiles.id,
+          userId: teacherProfiles.userId,
+          status: teacherProfiles.status,
+        });
     } catch (error) {
       if (uniqueViolationConstraint(error) === "teacher_profiles_slug_unique") {
         throw new TeacherSlugTakenError();
@@ -221,9 +226,31 @@ export async function updateTeacher(
     }
 
     if (updated.length === 0) throw new AdminRecordNotFoundError("استاد");
+
+    // تغییر وضعیت تنها چیزی است که استاد باید از آن خبردار شود؛ عوض
+    // شدن نشانی صفحه یا فاصله‌ی بین کلاس‌ها اعلان لازم ندارد
+    if (input.status) {
+      await notifyInApp({
+        userId: updated[0]!.userId,
+        type: IN_APP_TYPES.TEACHER_STATUS_CHANGED,
+        message: teacherStatusMessage(updated[0]!.status),
+        href: "/teacher",
+      });
+    }
   }
 
   return getTeacher(profileId);
+}
+
+function teacherStatusMessage(status: TeacherStatus): string {
+  switch (status) {
+    case "APPROVED":
+      return "پروفایل استادی شما تأیید شد. از این پس در فهرست عمومی دیده می‌شوید.";
+    case "SUSPENDED":
+      return "پروفایل استادی شما فعلاً از فهرست عمومی برداشته شد.";
+    case "PENDING":
+      return "پروفایل استادی شما دوباره در صف بررسی قرار گرفت.";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -705,7 +732,13 @@ export async function markPayoutPaid(
   payoutId: string,
   trackingCode: string | null,
 ): Promise<AdminPayoutRow> {
-  await db.transaction(async (tx) => {
+  /**
+   * اعلان **بیرون** از تراکنش فرستاده می‌شود.
+   *
+   * داخلش یعنی خطای درج اعلان، ثبت تسویه و سطر دفتر کل را رول‌بک کند —
+   * پولی که واقعاً منتقل شده، به‌خاطر یک اعلان ثبت‌نشده گم شود.
+   */
+  const settled = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select({ id: payouts.id })
       .from(payouts)
@@ -735,7 +768,24 @@ export async function markPayoutPaid(
       netAmount: -paid.amount,
       description: `تسویه ${paid.periodStart} تا ${paid.periodEnd}`,
     });
+
+    return paid;
   });
+
+  const [teacher] = await db
+    .select({ userId: teacherProfiles.userId })
+    .from(teacherProfiles)
+    .where(eq(teacherProfiles.id, settled.teacherId))
+    .limit(1);
+
+  if (teacher) {
+    await notifyInApp({
+      userId: teacher.userId,
+      type: IN_APP_TYPES.PAYOUT_PAID,
+      message: `تسویه‌ی دوره‌ی ${settled.periodStart} تا ${settled.periodEnd} پرداخت شد.`,
+      href: "/teacher/earnings",
+    });
+  }
 
   return requirePayout(payoutId);
 }

@@ -36,6 +36,7 @@ import {
 } from "../db/schema/index.js";
 import { BookingNotFoundError, NotBookingParticipantError } from "../booking/errors.js";
 import { consumeUploadTicket, mediaTypeOf } from "../media/media.service.js";
+import { IN_APP_TYPES, notifyInApp } from "../notification/in-app.service.js";
 import {
   AssignmentNotFoundError,
   SessionNotTeachableYetError,
@@ -299,7 +300,13 @@ export async function writeSessionNote(
   userId: string,
   content: string,
 ): Promise<{ content: string; updatedAt: string }> {
-  await requireTeacherOfSession(bookingId, userId);
+  const session = await requireTeacherOfSession(bookingId, userId);
+
+  const [existing] = await db
+    .select({ id: sessionNotes.id })
+    .from(sessionNotes)
+    .where(eq(sessionNotes.bookingId, bookingId))
+    .limit(1);
 
   const [row] = await db
     .insert(sessionNotes)
@@ -309,6 +316,19 @@ export async function writeSessionNote(
       set: { content, updatedAt: new Date() },
     })
     .returning({ content: sessionNotes.content, updatedAt: sessionNotes.updatedAt });
+
+  // فقط بار اول اعلان می‌رود. استاد معمولاً حین کلاس شروع می‌کند و بعد
+  // چند بار کاملش می‌کند؛ اعلان به ازای هر ذخیره یعنی هنرجو برای یک
+  // اتفاق پنج بار خبردار شود.
+  if (!existing) {
+    await notifyInApp({
+      userId: session.studentId,
+      type: IN_APP_TYPES.SESSION_NOTE_ADDED,
+      message: "استاد نکات جلسه‌ی شما را ثبت کرد.",
+      href: `/sessions/${bookingId}`,
+      bookingId,
+    });
+  }
 
   return { content: row!.content, updatedAt: row!.updatedAt.toISOString() };
 }
@@ -330,7 +350,7 @@ export async function createAssignment(
   userId: string,
   input: CreateAssignmentInput,
 ): Promise<AssignmentView> {
-  await requireTeacherOfSession(bookingId, userId);
+  const session = await requireTeacherOfSession(bookingId, userId);
 
   // نشانی هر پیوست از بلیت درمی‌آید، نه از بدنه‌ی درخواست
   const attachments: Array<{ url: string; name: string }> = [];
@@ -353,6 +373,14 @@ export async function createAssignment(
       attachments,
     })
     .returning();
+
+  await notifyInApp({
+    userId: session.studentId,
+    type: IN_APP_TYPES.ASSIGNMENT_CREATED,
+    message: `تمرین تازه: ${input.title}`,
+    href: `/sessions/${bookingId}`,
+    bookingId,
+  });
 
   return (await attachSubmissions([created!]))[0]!;
 }
@@ -415,7 +443,7 @@ export async function createSubmission(
   input: CreateSubmissionInput,
 ): Promise<SubmissionView> {
   const assignment = await requireAssignment(assignmentId);
-  const { role } = await loadSession(assignment.bookingId, userId);
+  const { session, role } = await loadSession(assignment.bookingId, userId);
 
   if (role !== "STUDENT") throw new StudentOnlyActionError();
 
@@ -443,6 +471,16 @@ export async function createSubmission(
       .where(eq(assignments.id, assignmentId));
 
     return inserted;
+  });
+
+  // اعلان اینجا **باید** تکرارپذیر باشد: هنرجویی که پس از بازخورد
+  // دوباره می‌فرستد، کار تازه‌ای روی میز استاد گذاشته است
+  await notifyInApp({
+    userId: session.teacherUserId,
+    type: IN_APP_TYPES.SUBMISSION_RECEIVED,
+    message: `اجرای تازه برای «${assignment.title}» رسید.`,
+    href: `/sessions/${assignment.bookingId}`,
+    bookingId: assignment.bookingId,
   });
 
   return {
@@ -484,7 +522,13 @@ export async function writeFeedback(
   input: CreateFeedbackInput,
 ): Promise<FeedbackView> {
   const [submission] = await db
-    .select({ id: submissions.id, bookingId: assignments.bookingId, assignmentId: assignments.id })
+    .select({
+      id: submissions.id,
+      bookingId: assignments.bookingId,
+      assignmentId: assignments.id,
+      title: assignments.title,
+      studentId: submissions.studentId,
+    })
     .from(submissions)
     .innerJoin(assignments, eq(submissions.assignmentId, assignments.id))
     .where(eq(submissions.id, submissionId))
@@ -514,6 +558,14 @@ export async function writeFeedback(
       .where(eq(assignments.id, submission.assignmentId));
 
     return upserted;
+  });
+
+  await notifyInApp({
+    userId: submission.studentId,
+    type: IN_APP_TYPES.FEEDBACK_RECEIVED,
+    message: `استاد روی «${submission.title}» بازخورد داد.`,
+    href: `/sessions/${submission.bookingId}`,
+    bookingId: submission.bookingId,
   });
 
   return {

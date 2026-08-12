@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+import { NotificationBell } from "@/components/notification-bell";
 import { useSession } from "@/lib/session";
 
 /**
@@ -68,7 +69,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </ul>
           </div>
 
-          <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-5 text-sm">
+            <NotificationBell />
             <span className="text-ink-muted">{user?.fullName}</span>
             <button
               type="button"

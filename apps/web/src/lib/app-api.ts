@@ -353,6 +353,38 @@ export const removeException = (exceptionId: string) =>
   });
 
 // ---------------------------------------------------------------------------
+// اعلان درون‌اپ
+// ---------------------------------------------------------------------------
+
+export interface AppNotification {
+  id: string;
+  type: string;
+  /** متن آماده‌ی نمایش — سرور می‌سازدش، نه فرانت */
+  message: string;
+  /** مسیر درون‌اپ برای رفتن به موضوع اعلان */
+  href: string | null;
+  bookingId: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+/**
+ * شمارنده‌ی نخوانده‌ها در همان پاسخ فهرست می‌آید.
+ *
+ * نشانِ زنگ به آن نیاز دارد و درخواست دوم فقط یک رفت‌وبرگشت اضافه روی
+ * اینترنتی است که کند است.
+ */
+export const getNotifications = () =>
+  apiFetch<{ notifications: AppNotification[]; unread: number }>("/notifications");
+
+/** `ids` ندهید یعنی «همه را خوانده کن». */
+export const markNotificationsRead = (ids?: string[]) =>
+  apiFetch<{ updated: number }>("/notifications/read", {
+    method: "POST",
+    body: ids?.length ? { ids } : {},
+  });
+
+// ---------------------------------------------------------------------------
 // حلقه‌ی یادگیری
 // ---------------------------------------------------------------------------
 
