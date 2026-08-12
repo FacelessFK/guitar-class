@@ -81,6 +81,8 @@ export const recordingStatus = pgEnum("recording_status", [
   "FAILED",
 ]);
 
+export const postStatus = pgEnum("post_status", ["DRAFT", "PUBLISHED"]);
+
 export const sessionReviewReason = pgEnum("session_review_reason", [
   "NO_SHOW_TEACHER",
   "NO_SHOW",

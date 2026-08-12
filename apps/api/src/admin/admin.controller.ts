@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -12,6 +13,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { z } from "zod";
+import type { PostStatus } from "@music/shared";
 
 import { AdminGuard } from "../auth/auth.guard.js";
 import { CurrentUserId } from "../common/current-user.decorator.js";
@@ -40,6 +42,15 @@ import {
   type AdminTeacherDetail,
   type AdminTeacherRow,
 } from "./admin.service.js";
+import {
+  createPost,
+  deletePost,
+  getPost,
+  listAllPosts,
+  updatePost,
+  type AdminPostRow,
+  type PostSummary,
+} from "../blog/blog.service.js";
 import type { Page } from "./pagination.js";
 import {
   listSessionReviews,
@@ -65,6 +76,11 @@ export class AdminProvider {
   readonly markPayoutPaid = markPayoutPaid;
   readonly listReviews = listSessionReviews;
   readonly resolveReview = resolveSessionReview;
+  readonly listPosts = listAllPosts;
+  readonly getPost = getPost;
+  readonly createPost = createPost;
+  readonly updatePost = updatePost;
+  readonly deletePost = deletePost;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +203,54 @@ const reviewStatusSchema = z.enum(["OPEN", "RESOLVED"], {
   message: "وضعیت پرونده نامعتبر است",
 });
 
+const postStatusSchema = z.enum(["DRAFT", "PUBLISHED"], {
+  message: "وضعیت نوشته نامعتبر است",
+});
+
+/**
+ * اسلاگ نوشته — فارسی مجاز است، برخلاف `slugSchema` مشترک.
+ *
+ * سند معماری اسلاگ فارسی در URL را صریحاً می‌خواهد. آنچه رد می‌شود
+ * کاراکترهای خطرناکِ مسیر است (`/`، `\`، `.`، فاصله)، نه حروف غیرلاتین.
+ *
+ * `%` هم رد می‌شود، و آن یکی دلیل ظریف‌تری دارد: فرانت اسلاگِ آمده از
+ * مسیر را پیش از فرستادن به API کدگشایی می‌کند (Next آن را کدشده
+ * می‌دهد). اسلاگی که خودش `%` داشته باشد، آن کدگشایی را مبهم — و گاهی
+ * پرتاب‌کننده‌ی خطا — می‌کند.
+ */
+const postSlugSchema = z
+  .string()
+  .trim()
+  .min(1, "نشانی نوشته لازم است")
+  .max(200)
+  .regex(/^[^/\\.\s%]+$/u, "نشانی نوشته نباید اسلش، نقطه، درصد یا فاصله داشته باشد");
+
+const createPostSchema = z.object({
+  slug: postSlugSchema,
+  title: z.string().trim().min(1, "عنوان لازم است").max(200),
+  excerpt: z.string().trim().min(1, "خلاصه لازم است").max(500),
+  content: z.string().trim().min(1, "متن نوشته لازم است").max(100_000),
+  instrumentId: uuidSchema.nullable().optional(),
+  /** کلید آبجکت، نه نشانی — قاعده‌ی ثابت هر اندپوینتی که فایل می‌گیرد */
+  coverObjectKey: z.string().trim().min(1).max(300).nullable().optional(),
+  status: postStatusSchema.optional(),
+});
+
+const updatePostSchema = z
+  .object({
+    slug: postSlugSchema.optional(),
+    title: z.string().trim().min(1).max(200).optional(),
+    excerpt: z.string().trim().min(1).max(500).optional(),
+    content: z.string().trim().min(1).max(100_000).optional(),
+    instrumentId: uuidSchema.nullable().optional(),
+    coverObjectKey: z.string().trim().min(1).max(300).nullable().optional(),
+    status: postStatusSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "چیزی برای تغییر فرستاده نشده است",
+  });
+
+
 const pageQuerySchema = z.object({
   limit: z
     .string()
@@ -227,6 +291,10 @@ const payoutFilterSchema = pageQuerySchema.extend({
 
 const reviewFilterSchema = pageQuerySchema.extend({
   status: reviewStatusSchema.optional(),
+});
+
+const postFilterSchema = pageQuerySchema.extend({
+  status: postStatusSchema.optional(),
 });
 
 const createPayoutSchema = z
@@ -449,6 +517,69 @@ export class AdminController {
       adminUserId,
       resolution: body.resolution?.length ? body.resolution : null,
     });
+  }
+
+  // --- بلاگ ---
+
+  /**
+   * فهرست نوشته‌ها — پیش‌نویس‌ها را هم می‌بیند.
+   *
+   * برخلاف `GET /posts` عمومی که فقط `PUBLISHED` می‌دهد. تفکیک در خودِ
+   * سرویس است (`listAllPosts` در برابر `listPublishedPosts`) نه در یک
+   * پارامتر، تا هیچ مسیر عمومی‌ای نتواند با یک کوئری پیش‌نویس ببیند.
+   */
+  @Get("posts")
+  async listPosts(
+    @Query(zodPipe(postFilterSchema)) query: z.infer<typeof postFilterSchema>,
+  ): Promise<Paged<PostSummary & { status: PostStatus }, "posts">> {
+    return paged("posts", await this.admin.listPosts(query));
+  }
+
+  @Get("posts/:postId")
+  async getPost(
+    @Param("postId", zodPipe(uuidSchema)) postId: string,
+  ): Promise<AdminPostRow> {
+    return this.admin.getPost(postId);
+  }
+
+  /**
+   * نوشته‌ی تازه.
+   *
+   * نویسنده از نشست خوانده می‌شود نه از بدنه — همان قاعده‌ی کل پنل، و
+   * اینجا مهم‌تر: نام نویسنده روی صفحه‌ی عمومی و در JSON-LD می‌نشیند.
+   */
+  @Post("posts")
+  @HttpCode(HttpStatus.CREATED)
+  async createPost(
+    @CurrentUserId() authorId: string,
+    @Body(zodPipe(createPostSchema)) body: z.infer<typeof createPostSchema>,
+  ): Promise<AdminPostRow> {
+    return this.admin.createPost(authorId, {
+      slug: body.slug,
+      title: body.title,
+      excerpt: body.excerpt,
+      content: body.content,
+      instrumentId: body.instrumentId ?? null,
+      coverObjectKey: body.coverObjectKey ?? null,
+      status: body.status ?? "DRAFT",
+    });
+  }
+
+  @Patch("posts/:postId")
+  async updatePost(
+    @CurrentUserId() actorId: string,
+    @Param("postId", zodPipe(uuidSchema)) postId: string,
+    @Body(zodPipe(updatePostSchema)) body: z.infer<typeof updatePostSchema>,
+  ): Promise<AdminPostRow> {
+    return this.admin.updatePost(postId, actorId, body);
+  }
+
+  @Delete("posts/:postId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deletePost(
+    @Param("postId", zodPipe(uuidSchema)) postId: string,
+  ): Promise<void> {
+    await this.admin.deletePost(postId);
   }
 
   // --- تسویه ---

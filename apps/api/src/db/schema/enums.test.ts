@@ -99,6 +99,10 @@ describe("همگامی شمارشی‌های دیتابیس و پکیج مشتر
     );
   });
 
+  it("PostStatus", () => {
+    expectSameValues("PostStatus", dbEnums.postStatus.enumValues, shared.PostStatus);
+  });
+
   it("SessionReviewReason", () => {
     expectSameValues(
       "SessionReviewReason",

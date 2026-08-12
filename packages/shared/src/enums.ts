@@ -138,6 +138,20 @@ export const SessionReviewStatus = {
 export type SessionReviewStatus =
   (typeof SessionReviewStatus)[keyof typeof SessionReviewStatus];
 
+/**
+ * وضعیت نوشته‌ی بلاگ.
+ *
+ * `PUBLISHED` تنها چیزی است که مسیر عمومی می‌بیند. پیش‌نویس عمداً حالت
+ * جدایی است و نه فقط `published_at IS NULL`: نوشته‌ای که منتشر شده و
+ * بعد باید موقتاً برداشته شود، با پاک کردن تاریخ انتشار، تاریخش را هم
+ * از دست می‌دهد.
+ */
+export const PostStatus = {
+  DRAFT: "DRAFT",
+  PUBLISHED: "PUBLISHED",
+} as const;
+export type PostStatus = (typeof PostStatus)[keyof typeof PostStatus];
+
 export const NotificationChannel = {
   SMS: "SMS",
   IN_APP: "IN_APP",

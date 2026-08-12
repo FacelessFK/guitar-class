@@ -12,6 +12,7 @@ import {
   AvailabilityController,
   AvailabilityProvider,
 } from "./availability/availability.controller.js";
+import { BlogController, BlogProvider } from "./blog/blog.controller.js";
 import { BookingController, BookingProvider } from "./booking/booking.controller.js";
 import { CatalogController, CatalogService } from "./catalog/catalog.controller.js";
 import {
@@ -98,6 +99,7 @@ export class HealthController {
     HealthController,
     AuthController,
     CatalogController,
+    BlogController,
     AvailabilityController,
     BookingController,
     ClassroomController,
@@ -115,6 +117,7 @@ export class HealthController {
     LearningProvider,
     NotificationProvider,
     CatalogService,
+    BlogProvider,
     AvailabilityProvider,
     BookingProvider,
     ClassroomProvider,

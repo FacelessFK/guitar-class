@@ -50,6 +50,13 @@
       "when": 1786566221612,
       "tag": "0006_wooden_black_tom",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786569694830,
+      "tag": "0007_flawless_magneto",
+      "breakpoints": true
     }
   ]
 }

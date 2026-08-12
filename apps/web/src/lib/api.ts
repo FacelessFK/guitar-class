@@ -89,3 +89,72 @@ export async function getTeachers(instrumentSlug?: string): Promise<Teacher[]> {
   const data = await fetchJson<{ teachers: Teacher[] }>(`/teachers${query}`);
   return data.teachers;
 }
+
+// ---------------------------------------------------------------------------
+// بلاگ
+// ---------------------------------------------------------------------------
+
+export interface PostSummary {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  coverUrl: string | null;
+  authorName: string;
+  instrumentSlug: string | null;
+  instrumentName: string | null;
+  publishedAt: string | null;
+}
+
+export interface PostDetail extends PostSummary {
+  /** مارک‌داون خام — رندر در زمان بیلد انجام می‌شود */
+  content: string;
+  updatedAt: string;
+}
+
+export async function getPosts(instrumentSlug?: string): Promise<PostSummary[]> {
+  const query = instrumentSlug
+    ? `?instrument=${encodeURIComponent(instrumentSlug)}`
+    : "";
+  const data = await fetchJson<{ posts: PostSummary[] }>(`/posts${query}`);
+  return data.posts;
+}
+
+/**
+ * ⚠️ **Next پارامتر مسیر را کدشده می‌دهد، نه کدگشوده.**
+ *
+ * برای `/blog/%D8%B4...`، مقدار `params.slug` همان رشته‌ی درصددار است.
+ * پس `encodeURIComponent` روی آن، دوباره کدش می‌کند (`%` می‌شود `%25`)
+ * و اسلاگی به API می‌رود که با هیچ نوشته‌ای نمی‌خواند — نتیجه‌اش ۴۰۴
+ * روی نوشته‌ای که وجود دارد، و فقط برای اسلاگ‌های فارسی. اسلاگ لاتین
+ * درست کار می‌کند و همین، پیدا کردنش را سخت می‌کند.
+ *
+ * کدگشایی پیش از کدگذاری، هر دو شکل را درست می‌کند: `generateStaticParams`
+ * مقدار خام می‌دهد و مسیر ورودی مقدار کدشده. کاراکتر `%` در اسلاگ مجاز
+ * نیست (اعتبارسنجی سمت API)، پس این کدگشایی ابهامی ندارد.
+ */
+function normalizeSlug(slug: string): string {
+  return encodeURIComponent(decodeURIComponent(slug));
+}
+
+/**
+ * یک نوشته با اسلاگ، به‌علاوه‌ی نوشته‌های مرتبط.
+ *
+ * نوشته‌ی منتشرنشده `null` برمی‌گرداند نه خطا — صفحه باید `notFound()`
+ * بزند، نه اینکه کل بیلد را بشکند.
+ */
+export async function getPost(
+  slug: string,
+): Promise<{ post: PostDetail | null; related: PostSummary[] }> {
+  return fetchJson(`/posts/${normalizeSlug(slug)}`);
+}
+
+/** فقط اسلاگ‌ها — برای `sitemap.xml` و `generateStaticParams`. */
+export async function getPostSlugs(): Promise<
+  Array<{ slug: string; updatedAt: string }>
+> {
+  const data = await fetchJson<{ slugs: Array<{ slug: string; updatedAt: string }> }>(
+    "/posts/slugs",
+  );
+  return data.slugs;
+}

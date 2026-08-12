@@ -414,7 +414,8 @@ export type MediaPurpose =
   | "SUBMISSION"
   | "FEEDBACK_VOICE"
   | "ASSIGNMENT_ATTACHMENT"
-  | "AVATAR";
+  | "AVATAR"
+  | "POST_COVER";
 
 export interface UploadTicket {
   objectKey: string;
@@ -889,6 +890,56 @@ export const markPayoutPaid = (payoutId: string, trackingCode?: string) =>
     method: "POST",
     body: { ...(trackingCode ? { trackingCode } : {}) },
   });
+
+export type PostStatus = "DRAFT" | "PUBLISHED";
+
+export interface AdminPostSummary {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  coverUrl: string | null;
+  authorName: string;
+  instrumentSlug: string | null;
+  instrumentName: string | null;
+  publishedAt: string | null;
+  status: PostStatus;
+}
+
+export interface AdminPostDetail extends AdminPostSummary {
+  content: string;
+  updatedAt: string;
+  instrumentId: string | null;
+}
+
+export const getAdminPosts = (query: { status?: PostStatus } & PageQuery = {}) =>
+  apiFetch<{ posts: AdminPostSummary[] } & Omit<AdminPage<never>, "rows">>(
+    "/admin/posts",
+    { query },
+  ).then(({ posts, ...page }) => ({ rows: posts, ...page }));
+
+export const getAdminPost = (postId: string) =>
+  apiFetch<AdminPostDetail>(`/admin/posts/${postId}`);
+
+export interface PostBody {
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  instrumentId?: string | null;
+  /** کلید آبجکت، نه نشانی — سرور نشانی را از روی کلید می‌سازد */
+  coverObjectKey?: string | null;
+  status?: PostStatus;
+}
+
+export const createPost = (body: PostBody) =>
+  apiFetch<AdminPostDetail>("/admin/posts", { method: "POST", body });
+
+export const updatePost = (postId: string, body: Partial<PostBody>) =>
+  apiFetch<AdminPostDetail>(`/admin/posts/${postId}`, { method: "PATCH", body });
+
+export const deletePost = (postId: string) =>
+  apiFetch<void>(`/admin/posts/${postId}`, { method: "DELETE" });
 
 export type SessionReviewReason = "NO_SHOW_TEACHER" | "NO_SHOW";
 export type SessionReviewStatus = "OPEN" | "RESOLVED";

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-import { getInstruments, getTeachers } from "@/lib/api";
+import { getInstruments, getPostSlugs, getTeachers } from "@/lib/api";
 
 const siteUrl = (): string =>
   process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -16,9 +16,10 @@ const siteUrl = (): string =>
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
 
-  const [instruments, teachers] = await Promise.all([
+  const [instruments, teachers, posts] = await Promise.all([
     getInstruments(),
     getTeachers(),
+    getPostSlugs(),
   ]);
 
   return [
@@ -31,6 +32,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${base}/teachers`,
       changeFrequency: "weekly",
       priority: 0.8,
+    },
+    {
+      url: `${base}/blog`,
+      changeFrequency: "weekly",
+      priority: 0.6,
     },
     {
       url: `${base}/rules`,
@@ -46,6 +52,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${base}/teachers/${teacher.slug}`,
       changeFrequency: "weekly" as const,
       priority: 0.7,
+    })),
+    /**
+     * نوشته‌ها `lastModified` واقعی دارند، برخلاف بقیه‌ی مسیرها.
+     *
+     * برای صفحه‌ای که محتوایش عوض می‌شود این مهم است: خزنده از روی همین
+     * تصمیم می‌گیرد صفحه را دوباره بخواند یا نه، و نوشته‌ی اصلاح‌شده‌ای
+     * که تاریخش عوض نشود می‌تواند ماه‌ها با نسخه‌ی قدیمی ایندکس بماند.
+     *
+     * اسلاگ فارسی است و باید کدگذاری شود؛ نقشه‌ی سایتِ خام با
+     * کاراکترهای غیر ASCII معتبر نیست.
+     */
+    ...posts.map((post) => ({
+      url: `${base}/blog/${encodeURIComponent(post.slug)}`,
+      lastModified: new Date(post.updatedAt),
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
     })),
   ];
 }

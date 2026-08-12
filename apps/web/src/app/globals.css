@@ -248,4 +248,86 @@
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
   }
+
+  /**
+   * متن نوشته‌ی بلاگ.
+   *
+   * تنها جایی در پروژه که HTML بدون کلاس رندر می‌شود: خروجی مارک‌داون
+   * `<h2>` و `<p>` و `<ul>` خام می‌دهد و نمی‌شود به هر کدام کلاس داد.
+   * پس استایل با انتخابگر فرزند اعمال می‌شود — کاری که همه‌جای دیگر
+   * عمداً انجام نمی‌شود.
+   *
+   * `overflow-wrap` لازم است چون نشانی‌های داخل متن در RTL از کادر
+   * بیرون می‌زنند و صفحه را افقی اسکرول می‌کنند.
+   */
+  .prose-fa {
+    line-height: 2;
+    overflow-wrap: break-word;
+  }
+
+  .prose-fa > * + * {
+    margin-top: 1.25rem;
+  }
+
+  .prose-fa h2 {
+    margin-top: 2.5rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  .prose-fa h3 {
+    margin-top: 2rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .prose-fa a {
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
+
+  .prose-fa ul,
+  .prose-fa ol {
+    padding-inline-start: 1.5rem;
+  }
+
+  .prose-fa ul {
+    list-style: disc;
+  }
+
+  .prose-fa ol {
+    list-style: decimal;
+  }
+
+  .prose-fa li + li {
+    margin-top: 0.5rem;
+  }
+
+  .prose-fa blockquote {
+    border-inline-start: 3px solid var(--color-accent);
+    padding-inline-start: 1rem;
+    color: var(--color-ink-muted);
+  }
+
+  .prose-fa img {
+    max-width: 100%;
+    border-radius: 0.5rem;
+  }
+
+  .prose-fa code {
+    border-radius: 0.25rem;
+    background-color: var(--color-surface-muted);
+    padding: 0.125rem 0.375rem;
+    font-size: 0.875em;
+  }
+
+  .prose-fa pre {
+    overflow-x: auto;
+    border-radius: 0.5rem;
+    background-color: var(--color-surface-muted);
+    padding: 1rem;
+    /* کد همیشه چپ‌چین است، حتی داخل صفحه‌ی راست‌چین */
+    direction: ltr;
+    text-align: left;
+  }
 }

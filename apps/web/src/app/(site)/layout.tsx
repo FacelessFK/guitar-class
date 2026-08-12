@@ -33,6 +33,9 @@ function SiteHeader() {
             <Link href="/teachers">استادها</Link>
           </li>
           <li>
+            <Link href="/blog">مقاله‌ها</Link>
+          </li>
+          <li>
             <Link href="/rules">قوانین</Link>
           </li>
           <li>

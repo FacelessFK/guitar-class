@@ -22,3 +22,4 @@ export * from "./booking.js";
 export * from "./finance.js";
 export * from "./learning.js";
 export * from "./review.js";
+export * from "./blog.js";

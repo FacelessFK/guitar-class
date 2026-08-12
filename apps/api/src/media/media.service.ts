@@ -61,6 +61,18 @@ export const MEDIA_PURPOSES = {
     maxBytes: 5 * 1024 * 1024,
     allowed: ["image/"],
   },
+  /**
+   * تصویر شاخص نوشته‌ی بلاگ.
+   *
+   * سقفش از آواتار بازتر است چون تصویر بالای صفحه است و باید در نمایشگر
+   * بزرگ هم مرتب باشد — ولی همچنان تنگ: صفحه‌ای که برای سئو ساخته شده،
+   * سرعت بارگذاری‌اش خودش یکی از سیگنال‌هاست.
+   */
+  POST_COVER: {
+    prefix: "posts",
+    maxBytes: 8 * 1024 * 1024,
+    allowed: ["image/"],
+  },
 } as const;
 
 export type MediaPurpose = keyof typeof MEDIA_PURPOSES;

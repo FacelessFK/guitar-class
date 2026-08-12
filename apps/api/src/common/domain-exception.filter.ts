@@ -65,6 +65,10 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   UNSUPPORTED_MEDIA: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
   MEDIA_TICKET_INVALID: HttpStatus.CONFLICT,
 
+  // بلاگ
+  POST_NOT_FOUND: HttpStatus.NOT_FOUND,
+  POST_SLUG_TAKEN: HttpStatus.CONFLICT,
+
   // پنل ادمین
   ADMIN_RECORD_NOT_FOUND: HttpStatus.NOT_FOUND,
   INSTRUMENT_SLUG_TAKEN: HttpStatus.CONFLICT,

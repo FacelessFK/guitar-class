@@ -7,6 +7,7 @@ const TABS = [
   { href: "/admin", label: "نمای کلی" },
   { href: "/admin/teachers", label: "استادها" },
   { href: "/admin/instruments", label: "سازها" },
+  { href: "/admin/posts", label: "بلاگ" },
   { href: "/admin/bookings", label: "رزروها" },
   { href: "/admin/reviews", label: "صف بررسی" },
   { href: "/admin/orders", label: "تراکنش‌ها" },

@@ -35,7 +35,7 @@ export async function resetDatabase(): Promise<void> {
     TRUNCATE TABLE
       bookings, enrollments, order_items, orders, ledger_entries, payouts,
       session_notes, session_reviews, assignments, submissions, feedbacks, recordings,
-      notifications, availability_rules, availability_exceptions,
+      notifications, posts, availability_rules, availability_exceptions,
       offerings, teacher_profiles, instruments, refresh_tokens, users
     RESTART IDENTITY CASCADE
   `);
