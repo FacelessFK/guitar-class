@@ -9,6 +9,14 @@ import {
   type MaintenanceResult,
 } from "./maintenance.job.js";
 import {
+  CLEANUP_MEDIA_JOB,
+  MONTHLY_PAYOUTS_JOB,
+  runCleanupMedia,
+  runPayoutRun,
+} from "./nightly.job.js";
+import type { RetentionResult } from "../media/retention.service.js";
+import type { PayoutRunResult } from "../payment/payout-run.service.js";
+import {
   SEND_REMINDERS_JOB,
   runReminders,
   type ReminderResult,
@@ -21,7 +29,12 @@ import {
 
 const logger = new Logger("Worker");
 
-export type JobResult = MaintenanceResult | SessionCloseResult | ReminderResult;
+export type JobResult =
+  | MaintenanceResult
+  | SessionCloseResult
+  | ReminderResult
+  | RetentionResult
+  | PayoutRunResult;
 
 /**
  * جاب را به هندلرش می‌رساند.
@@ -38,6 +51,10 @@ export async function processMaintenanceJob(job: Job): Promise<JobResult> {
       return runSessionClose();
     case SEND_REMINDERS_JOB:
       return runReminders();
+    case CLEANUP_MEDIA_JOB:
+      return runCleanupMedia();
+    case MONTHLY_PAYOUTS_JOB:
+      return runPayoutRun();
     default:
       throw new Error(`جاب ناشناخته در صف ${MAINTENANCE_QUEUE}: «${job.name}»`);
   }

@@ -341,7 +341,17 @@ function SubmissionRow({
           : ""}
       </p>
 
-      {submission.mediaType === "VIDEO" ? (
+      {/*
+        فایلِ پاک‌شده صریح گفته می‌شود، نه با پخش‌کننده‌ی خراب.
+        سطر اجرا برای همیشه می‌ماند ولی فایلش پس از مدت نگه‌داری می‌رود؛
+        بدون این پیام، کاربر یک پخش‌کننده‌ی بی‌صدا می‌بیند و آن را باگ
+        می‌خواند.
+      */}
+      {submission.mediaPurged ? (
+        <p className="mt-3 rounded-lg bg-surface p-3 text-sm text-ink-muted">
+          فایل این اجرا طبق سیاست نگه‌داری پاک شده است.
+        </p>
+      ) : submission.mediaType === "VIDEO" ? (
         <video src={submission.mediaUrl} controls preload="none" className="mt-3 w-full rounded-lg" />
       ) : (
         <audio src={submission.mediaUrl} controls preload="none" className="mt-3 w-full" />
@@ -355,7 +365,11 @@ function SubmissionRow({
               {submission.feedback.content}
             </p>
           ) : null}
-          {submission.feedback.voiceNoteUrl ? (
+          {submission.feedback.voicePurged ? (
+            <p className="mt-2 text-sm text-ink-muted">
+              بازخورد صوتی طبق سیاست نگه‌داری پاک شده است.
+            </p>
+          ) : submission.feedback.voiceNoteUrl ? (
             <audio
               src={submission.feedback.voiceNoteUrl}
               controls

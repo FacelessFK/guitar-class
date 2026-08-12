@@ -16,14 +16,20 @@ import {
   type Fixture,
 } from "../test/fixtures.js";
 import { createQueueConnection } from "./connection.js";
-import { readWorkerStatus } from "./heartbeat.js";
+import { SWEEPS, readWorkerStatus } from "./heartbeat.js";
+import {
+  CLEANUP_MEDIA_JOB,
+  MONTHLY_PAYOUTS_JOB,
+  NIGHTLY_CRON,
+  NIGHTLY_TIMEZONE,
+} from "./nightly.job.js";
 import {
   EXPIRE_HOLDS_INTERVAL_MS,
   EXPIRE_HOLDS_JOB,
   MAINTENANCE_QUEUE,
   runMaintenance,
 } from "./maintenance.job.js";
-import { registerSchedulers } from "./queues.js";
+import { registerSchedulers, runNightlySweepsNow } from "./queues.js";
 import { SEND_REMINDERS_JOB } from "./reminder.job.js";
 import { CLOSE_SESSIONS_JOB } from "./session-close.job.js";
 import { createMaintenanceWorker, processMaintenanceJob } from "./worker.js";
@@ -150,14 +156,16 @@ describe("وُرکر نگه‌داری", () => {
   });
 
   /**
-   * سلامت به هر سه جارو بند است، پس این تست هر سه را در صف می‌گذارد.
-   * اگر جاروی تازه‌ای اضافه شود و ضربانش را ثبت نکند، همین‌جا می‌ایستد.
+   * سلامت به **همه‌ی** جاروها بند است، پس این تست همه را در صف می‌گذارد
+   * — و فهرست را از `SWEEPS` می‌گیرد نه دستی. جاروی تازه‌ای که ضربانش
+   * را ثبت نکند، همین‌جا می‌ایستد؛ اگر فهرست دستی بود، جاروی تازه صرفاً
+   * از تست جا می‌ماند و بی‌صدا رد می‌شد.
    */
   it("ضربان را ثبت می‌کند تا اندپوینت سلامت بتواند وُرکر مرده را ببیند", async () => {
     expect((await readWorkerStatus()).status).toBe("never");
 
     worker = createMaintenanceWorker();
-    for (const name of [EXPIRE_HOLDS_JOB, CLOSE_SESSIONS_JOB, SEND_REMINDERS_JOB]) {
+    for (const name of Object.values(SWEEPS)) {
       await queue.add(name, {});
     }
 
@@ -166,6 +174,7 @@ describe("وُرکر نگه‌داری", () => {
     const status = await readWorkerStatus();
     expect(status.status).toBe("ok");
     expect(status.lastRunAt).not.toBeNull();
+    expect(status.sweeps.every((entry) => entry.status === "ok")).toBe(true);
   });
 
   /**
@@ -201,10 +210,47 @@ describe("زمان‌بند تکرارشونده", () => {
     const keys = schedulers.map((scheduler) => scheduler.key).sort();
 
     // یکی به ازای هر جارو، نه بیشتر — سه بار ثبت هم که شده باشد
-    expect(keys).toEqual([CLOSE_SESSIONS_JOB, EXPIRE_HOLDS_JOB, SEND_REMINDERS_JOB].sort());
+    expect(keys).toEqual([...Object.values(SWEEPS)].sort());
 
     const holds = schedulers.find((scheduler) => scheduler.key === EXPIRE_HOLDS_JOB);
     expect(Number(holds?.every)).toBe(EXPIRE_HOLDS_INTERVAL_MS);
+  });
+
+  /**
+   * جاروی شبانه با الگوی کرون ثبت می‌شود، نه با `every`.
+   *
+   * `every` از لحظه‌ی بالا آمدن وُرکر می‌شمارد، پس ساعت اجرا با هر
+   * ری‌استارت جابه‌جا می‌شود و پاک‌سازی می‌تواند وسط شلوغ‌ترین ساعت روز
+   * بیفتد. با کرون، ساعت ثابت می‌ماند.
+   */
+  it("جاروی شبانه با الگوی کرون و به وقت تهران ثبت می‌شود", async () => {
+    await registerSchedulers(queue);
+
+    const schedulers = await queue.getJobSchedulers();
+    const cleanup = schedulers.find(
+      (scheduler) => scheduler.key === CLEANUP_MEDIA_JOB,
+    );
+
+    expect(cleanup?.pattern).toBe(NIGHTLY_CRON);
+    expect(cleanup?.tz).toBe(NIGHTLY_TIMEZONE);
+    expect(cleanup?.every).toBeFalsy();
+  });
+
+  /**
+   * جاروی شبانه هنگام بالا آمدن وُرکر هم یک بار اجرا می‌شود.
+   *
+   * بدون آن، وُرکری که ساعت ۳ بامداد پایین بوده باید تا فردا شب صبر کند
+   * — و مهم‌تر، `GET /health` پس از هر استقرار تا ۳ بامداد `degraded`
+   * می‌ماند چون ضربانِ شبانه هنوز ثبت نشده. هشداری که بعد از هر استقرار
+   * یک روز روشن است، خیلی زود نادیده گرفته می‌شود.
+   */
+  it("جاروهای شبانه هنگام بالا آمدن یک بار در صف می‌روند", async () => {
+    await runNightlySweepsNow(queue);
+
+    const waiting = await queue.getJobs(["waiting", "active", "completed"]);
+    const names = waiting.map((job) => job.name).sort();
+
+    expect(names).toEqual([CLEANUP_MEDIA_JOB, MONTHLY_PAYOUTS_JOB].sort());
   });
 
   /**

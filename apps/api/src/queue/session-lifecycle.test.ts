@@ -16,8 +16,9 @@ import {
   seedFixture,
   type Fixture,
 } from "../test/fixtures.js";
-import { readWorkerStatus } from "./heartbeat.js";
+import { SWEEPS, readWorkerStatus, type SweepName } from "./heartbeat.js";
 import { runMaintenance } from "./maintenance.job.js";
+import { runCleanupMedia, runPayoutRun } from "./nightly.job.js";
 import { runReminders } from "./reminder.job.js";
 import { runSessionClose } from "./session-close.job.js";
 
@@ -267,23 +268,37 @@ describe("بستن خودکار جلسه", () => {
   });
 
   /**
-   * ضربان‌ها جدا هستند و سلامت به هر سه بند است. با یک ضربان مشترک،
-   * جاروی بستن جلسه می‌توانست هفته‌ها خوابیده باشد و سرویس همچنان
+   * ضربان‌ها جدا هستند و سلامت به **همه‌ی** جاروها بند است. با یک ضربان
+   * مشترک، جاروی بستن جلسه می‌توانست هفته‌ها خوابیده باشد و سرویس همچنان
    * «سالم» گزارش شود چون جاروی مهلت پرداخت کار می‌کرد.
+   *
+   * جاروها یکی‌یکی اجرا می‌شوند و تا آخرینشان، سلامت نباید `ok` شود.
+   * فهرست از خودِ `SWEEPS` می‌آید نه دستی، پس جاروی تازه‌ای که ضربانش
+   * را ثبت نکند همین‌جا می‌ایستد — همان چیزی که با `expireStaleHolds`
+   * از دست رفت.
    */
   it("ضربان جداگانه ثبت می‌کند و سلامت به همه‌ی جاروها بند است", async () => {
     const now = new Date();
 
+    const runners: Record<SweepName, () => Promise<unknown>> = {
+      [SWEEPS.CLOSE_SESSIONS]: () => runSessionClose(now),
+      [SWEEPS.EXPIRE_HOLDS]: () => runMaintenance(now),
+      [SWEEPS.SEND_REMINDERS]: () => runReminders(now),
+      [SWEEPS.CLEANUP_MEDIA]: () => runCleanupMedia(now),
+      [SWEEPS.MONTHLY_PAYOUTS]: () => runPayoutRun(now),
+    };
+
+    const sweeps = Object.values(SWEEPS);
     expect((await readWorkerStatus()).status).toBe("never");
 
-    await runSessionClose(now);
-    expect((await readWorkerStatus()).status).toBe("never");
+    for (const [index, sweep] of sweeps.entries()) {
+      await runners[sweep]();
 
-    await runMaintenance(now);
-    expect((await readWorkerStatus()).status).toBe("never");
+      const status = await readWorkerStatus();
+      const isLast = index === sweeps.length - 1;
 
-    await runReminders(now);
-    expect((await readWorkerStatus()).status).toBe("ok");
+      expect(status.status, `پس از اجرای ${sweep}`).toBe(isLast ? "ok" : "never");
+    }
   });
 });
 

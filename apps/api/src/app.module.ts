@@ -48,6 +48,7 @@ export class HealthController {
     redis: string;
     worker: string;
     workerLastRunAt: string | null;
+    sweeps: Record<string, string>;
   }> {
     const [database, redisStatus, worker] = await Promise.all([
       db
@@ -59,7 +60,7 @@ export class HealthController {
         .then(() => "ok")
         .catch(() => "unreachable"),
       readWorkerStatus().catch(
-        (): WorkerStatus => ({ status: "never", lastRunAt: null }),
+        (): WorkerStatus => ({ status: "never", lastRunAt: null, sweeps: [] }),
       ),
     ]);
 
@@ -71,6 +72,16 @@ export class HealthController {
       redis: redisStatus,
       worker: worker.status,
       workerLastRunAt: worker.lastRunAt,
+      /**
+       * به تفکیک جارو.
+       *
+       * با پنج جارو، «worker: stale» به‌تنهایی نمی‌گوید کدامشان خوابیده
+       * — و چون هر کدام آستانه‌ی متفاوتی دارند، از روی `workerLastRunAt`
+       * هم نمی‌شود فهمید.
+       */
+      sweeps: Object.fromEntries(
+        worker.sweeps.map((entry) => [entry.sweep, entry.status]),
+      ),
     };
   }
 }

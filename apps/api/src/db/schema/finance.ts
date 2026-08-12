@@ -156,6 +156,25 @@ export const payouts = pgTable(
   (table) => [
     index("payouts_teacher_status_idx").on(table.teacherId, table.status),
     check("payouts_period_ordered", sql`${table.periodEnd} >= ${table.periodStart}`),
+    /**
+     * یک تسویه به ازای هر استاد و هر دوره.
+     *
+     * جاروی ماهانه هر شب اجرا می‌شود و باید بتواند بگوید «دوره‌ی ماه
+     * پیش را قبلاً ساخته‌ام». تکیه به بررسیِ «قبلاً هست؟» در کد کافی
+     * نیست: دو اجرای هم‌زمان هر دو خالی بودن را می‌بینند و هر دو درج
+     * می‌کنند — و برخلاف یک اعلان تکراری، اینجا نتیجه‌اش **دو برابر
+     * پرداختن به استاد** است.
+     *
+     * قید کامل است و شرط جزئی ندارد، چون `payout_status` فقط `PENDING`
+     * و `PAID` دارد و هیچ‌کدام «باطل» نیست. اگر روزی حالت لغو اضافه شد،
+     * این ایندکس باید جزئی شود وگرنه یک تسویه‌ی لغوشده آن دوره را برای
+     * همیشه غیرقابل‌پرداخت می‌کند.
+     */
+    uniqueIndex("payouts_one_per_teacher_period").on(
+      table.teacherId,
+      table.periodStart,
+      table.periodEnd,
+    ),
   ],
 );
 

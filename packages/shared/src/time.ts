@@ -138,6 +138,72 @@ export function dateKeyRange(from: DateKey, to: DateKey): DateKey[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// ماه شمسی — برای دوره‌های مالی
+// ---------------------------------------------------------------------------
+
+/**
+ * تقویم شمسی از خود `Intl` گرفته می‌شود، نه از یک کتابخانه.
+ *
+ * همان تصمیمی که در `apps/web/src/lib/format.ts` گرفته شد: تقویم فارسی
+ * سال‌هاست در `Intl` هست و قواعد کبیسه‌اش را درست پیاده کرده. آوردن
+ * `date-fns-jalali` فقط برای گرفتن شماره‌ی ماه، یک وابستگی و یک منبع
+ * دوم حقیقت اضافه می‌کرد.
+ *
+ * ⚠️ برخلاف لایه‌ی نمایش، اینجا `en-US` است نه `fa-IR`: خروجی باید عدد
+ * لاتین باشد تا `Number()` بخواندش. با `fa-IR` ارقام فارسی برمی‌گردند و
+ * `Number("۱۴۰۵")` مقدار `NaN` می‌دهد.
+ */
+const PERSIAN_PARTS = new Intl.DateTimeFormat("en-US-u-ca-persian", {
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  timeZone: APP_TIMEZONE,
+});
+
+export interface PersianDate {
+  year: number;
+  month: number;
+  day: number;
+}
+
+/** تاریخ شمسی یک کلید تاریخ میلادی. */
+export function persianDateOf(dateKey: DateKey): PersianDate {
+  // ظهر گرفته می‌شود نه نیمه‌شب: با نیمه‌شب، هر خطای کوچکِ گردکردن یا
+  // آفست می‌تواند تاریخ را یک روز جابه‌جا کند
+  const parts = PERSIAN_PARTS.formatToParts(fromTehranWallClock(dateKey, 12 * 60));
+  const value = (type: string): number =>
+    Number(parts.find((part) => part.type === type)?.value);
+
+  return { year: value("year"), month: value("month"), day: value("day") };
+}
+
+export interface DateRange {
+  /** هر دو شامل‌اند */
+  start: DateKey;
+  end: DateKey;
+}
+
+/**
+ * بازه‌ی ماه شمسیِ **پیش از** ماهی که این تاریخ در آن است.
+ *
+ * دوره‌ی تسویه ماه شمسی است نه میلادی، چون عددی است که استاد می‌خواند:
+ * «تسویه‌ی مرداد» معنا دارد ولی بازه‌ای که از ۱۰ مرداد تا ۹ شهریور
+ * می‌رود، در پنلی که تاریخ‌ها را شمسی نشان می‌دهد شبیه باگ به نظر
+ * می‌رسد.
+ *
+ * حساب کردنش با شمردن روز به عقب انجام می‌شود نه با جدول طول ماه‌ها:
+ * ماه‌های شمسی ۲۹، ۳۰ یا ۳۱ روزند و سال کبیسه‌شان قاعده‌ی خودش را دارد.
+ * «برو عقب تا روزِ ماه یک شود» هر دو را بدون دانستنشان درست حساب می‌کند.
+ */
+export function previousPersianMonthRange(dateKey: DateKey): DateRange {
+  const firstOfThisMonth = addDaysToDateKey(dateKey, 1 - persianDateOf(dateKey).day);
+  const end = addDaysToDateKey(firstOfThisMonth, -1);
+  const start = addDaysToDateKey(end, 1 - persianDateOf(end).day);
+
+  return { start, end };
+}
+
 /** `۹۹۰` → `"16:30"` */
 export function formatMinutes(minutesOfDay: number): string {
   const h = Math.floor(minutesOfDay / 60);

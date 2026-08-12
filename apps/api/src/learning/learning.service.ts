@@ -36,6 +36,7 @@ import {
 } from "../db/schema/index.js";
 import { BookingNotFoundError, NotBookingParticipantError } from "../booking/errors.js";
 import { consumeUploadTicket, mediaTypeOf } from "../media/media.service.js";
+import { objectStorage } from "../media/storage.port.js";
 import { IN_APP_TYPES, notifyInApp } from "../notification/in-app.service.js";
 import {
   AssignmentNotFoundError,
@@ -120,6 +121,8 @@ async function requireTeacherOfSession(
 export interface FeedbackView {
   content: string | null;
   voiceNoteUrl: string | null;
+  /** صدا طبق سیاست نگه‌داری پاک شده — نشانی هست ولی فایل نیست */
+  voicePurged: boolean;
   createdAt: string;
 }
 
@@ -129,6 +132,15 @@ export interface SubmissionView {
   mediaType: "AUDIO" | "VIDEO";
   durationSeconds: number | null;
   sizeBytes: string | null;
+  /**
+   * فایل طبق سیاست نگه‌داری پاک شده.
+   *
+   * صریح برمی‌گردد و به «نشانی خالی» تکیه نمی‌کند: سطر می‌ماند و نشانی
+   * هم می‌ماند (خالی کردنش قید `feedbacks_has_content` را می‌شکست)، پس
+   * تنها راهِ فهمیدنِ اینکه پخش‌کننده کار نمی‌کند همین پرچم است. بدون
+   * آن، کاربر یک پخش‌کننده‌ی خراب می‌بیند و فکر می‌کند باگ است.
+   */
+  mediaPurged: boolean;
   createdAt: string;
   feedback: FeedbackView | null;
 }
@@ -239,11 +251,13 @@ async function attachSubmissions(
       mediaType: row.mediaType,
       durationSeconds: row.durationSeconds,
       sizeBytes: row.sizeBytes?.toString() ?? null,
+      mediaPurged: row.mediaPurgedAt !== null,
       createdAt: row.createdAt.toISOString(),
       feedback: feedback
         ? {
             content: feedback.content,
             voiceNoteUrl: feedback.voiceNoteUrl,
+            voicePurged: feedback.voicePurgedAt !== null,
             createdAt: feedback.createdAt.toISOString(),
           }
         : null,
@@ -460,6 +474,10 @@ export async function createSubmission(
         assignmentId,
         studentId: userId,
         mediaUrl: url,
+        // کلید کنار نشانی ذخیره می‌شود چون هویت فایل است و نشانی مشتقِ
+        // آن؛ جاروی پاک‌سازی به کلید نیاز دارد و نمی‌تواند از نشانی
+        // بسازدش — پایه‌ی نشانی عوض می‌شود، کلید نه.
+        objectKey: input.objectKey,
         mediaType: mediaTypeOf(contentType),
         durationSeconds: input.durationSeconds,
       })
@@ -489,6 +507,8 @@ export async function createSubmission(
     mediaType: created!.mediaType,
     durationSeconds: created!.durationSeconds,
     sizeBytes: created!.sizeBytes?.toString() ?? null,
+    // تازه آپلود شده؛ سیاست نگه‌داری ماه‌ها بعد به آن می‌رسد
+    mediaPurged: false,
     createdAt: created!.createdAt.toISOString(),
     feedback: null,
   };
@@ -542,13 +562,41 @@ export async function writeFeedback(
     ? (await consumeUploadTicket(input.voiceObjectKey, userId, "FEEDBACK_VOICE")).url
     : null;
 
+  /**
+   * صدای قبلی، پیش از بازنویسی.
+   *
+   * بازخورد upsert است، پس استادی که بازخورد صوتی‌اش را عوض می‌کند
+   * نشانی قبلی را از سطر پاک می‌کند — و بدون این، آن فایل تا ابد در
+   * باکت می‌ماند بی‌آنکه هیچ سطری به آن اشاره کند. جاروی پاک‌سازی هم
+   * پیدایش نمی‌کند چون از روی جدول کار می‌کند، نه از روی فهرستِ باکت.
+   */
+  const [previous] = await db
+    .select({ objectKey: feedbacks.voiceObjectKey })
+    .from(feedbacks)
+    .where(eq(feedbacks.submissionId, submissionId))
+    .limit(1);
+
   const [row] = await db.transaction(async (tx) => {
     const upserted = await tx
       .insert(feedbacks)
-      .values({ submissionId, content: input.content, voiceNoteUrl })
+      .values({
+        submissionId,
+        content: input.content,
+        voiceNoteUrl,
+        voiceObjectKey: input.voiceObjectKey,
+      })
       .onConflictDoUpdate({
         target: feedbacks.submissionId,
-        set: { content: input.content, voiceNoteUrl, updatedAt: new Date() },
+        set: {
+          content: input.content,
+          voiceNoteUrl,
+          voiceObjectKey: input.voiceObjectKey,
+          // بازخورد صوتیِ تازه روی سطری که قبلاً پاک‌سازی شده، دوباره
+          // فایل دارد — علامت پاک‌سازی باید برداشته شود وگرنه صفحه
+          // «طبق سیاست نگه‌داری پاک شد» را روی فایلِ موجود نشان می‌دهد
+          voicePurgedAt: null,
+          updatedAt: new Date(),
+        },
       })
       .returning();
 
@@ -559,6 +607,19 @@ export async function writeFeedback(
 
     return upserted;
   });
+
+  /**
+   * بیرون از تراکنش و با خطای بلعیده‌شده — مثل اعلان.
+   *
+   * حذف فایل قدیمی اثر جانبی است، نه بخشی از کاری که استاد خواسته. اگر
+   * سرویس در دسترس نباشد، بازخوردی که نوشته شده نباید رول‌بک شود؛
+   * بدترین نتیجه یک فایل یتیم است، در برابر از دست رفتن خودِ بازخورد.
+   */
+  if (previous?.objectKey && previous.objectKey !== input.voiceObjectKey) {
+    await objectStorage()
+      .deleteObject(previous.objectKey)
+      .catch(() => undefined);
+  }
 
   await notifyInApp({
     userId: submission.studentId,
@@ -571,6 +632,7 @@ export async function writeFeedback(
   return {
     content: row!.content,
     voiceNoteUrl: row!.voiceNoteUrl,
+    voicePurged: false,
     createdAt: row!.createdAt.toISOString(),
   };
 }

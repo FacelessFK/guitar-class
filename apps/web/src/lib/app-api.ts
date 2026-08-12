@@ -446,6 +446,8 @@ export async function uploadFile(
 export interface Feedback {
   content: string | null;
   voiceNoteUrl: string | null;
+  /** صدا طبق سیاست نگه‌داری پاک شده — نشانی هست ولی فایل نیست */
+  voicePurged: boolean;
   createdAt: string;
 }
 
@@ -455,6 +457,13 @@ export interface Submission {
   mediaType: "AUDIO" | "VIDEO";
   durationSeconds: number | null;
   sizeBytes: string | null;
+  /**
+   * فایل طبق سیاست نگه‌داری پاک شده.
+   *
+   * نشانی همچنان پر است، پس نبودِ فایل از روی آن معلوم نمی‌شود و باید
+   * صریح پرسیده شود — وگرنه کاربر پخش‌کننده‌ی خراب می‌بیند.
+   */
+  mediaPurged: boolean;
   createdAt: string;
   feedback: Feedback | null;
 }

@@ -89,13 +89,41 @@ export const submissions = pgTable(
       .references(() => users.id),
 
     mediaUrl: varchar("media_url", { length: 500 }).notNull(),
+    /**
+     * کلید آبجکت در باکت — هویت اصلی فایل، و `media_url` مشتقِ آن.
+     *
+     * جاروی پاک‌سازی به این نیاز دارد و نمی‌تواند از روی نشانی بسازدش:
+     * نشانی از `S3_PUBLIC_BASE_URL` ساخته می‌شود و آن مقدار عوض می‌شود
+     * (باکت پشت CDN می‌رود، دامنه فرق می‌کند، سبک میزبان از زیردامنه‌ای
+     * به مسیری می‌رود). آن وقت هر کلیدی که از URL درآورده شود اشتباه
+     * است و جارو یا هیچ‌چیز پاک نمی‌کند یا چیز اشتباهی.
+     */
+    objectKey: varchar("object_key", { length: 300 }).notNull(),
     mediaType: mediaType("media_type").notNull(),
     durationSeconds: integer("duration_seconds"),
     sizeBytes: bigint("size_bytes", { mode: "bigint" }),
 
+    /**
+     * لحظه‌ای که فایل طبق سیاست نگه‌داری پاک شد.
+     *
+     * **سطر می‌ماند و فقط فایل می‌رود.** حذف سطر یعنی تاریخچه‌ی یادگیری
+     * سوراخ شود: بازخورد استاد به اجرایی وصل است که دیگر وجود ندارد، و
+     * فهرست تمرین‌ها بی‌آنکه توضیحی بدهد کوتاه می‌شود. با ماندن سطر،
+     * صفحه می‌تواند بگوید «فایل طبق سیاست نگه‌داری پاک شد» به‌جای
+     * نمایش پخش‌کننده‌ی خرابی که مثل باگ به نظر می‌رسد.
+     */
+    mediaPurgedAt: tstz("media_purged_at"),
+
     createdAt: createdAt(),
   },
-  (table) => [index("submissions_assignment_idx").on(table.assignmentId)],
+  (table) => [
+    index("submissions_assignment_idx").on(table.assignmentId),
+    /**
+     * جاروی پاک‌سازی روی همین ایندکس کار می‌کند: «هرچه پاک نشده و از
+     * فلان تاریخ قدیمی‌تر است». بدون آن، هر شب کل جدول اسکن می‌شود.
+     */
+    index("submissions_retention_idx").on(table.mediaPurgedAt, table.createdAt),
+  ],
 );
 
 export const feedbacks = pgTable(
@@ -110,11 +138,22 @@ export const feedbacks = pgTable(
     content: text(),
     /** بازخورد صوتی — برای موسیقی طبیعی‌تر از متن است و حجمش ناچیز */
     voiceNoteUrl: varchar("voice_note_url", { length: 500 }),
+    /** کلید آبجکت بازخورد صوتی — به همان دلیلِ `submissions.object_key` */
+    voiceObjectKey: varchar("voice_object_key", { length: 300 }),
+    voicePurgedAt: tstz("voice_purged_at"),
 
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
+    /**
+     * قید اصلی دست نمی‌خورد: بازخورد باید متن یا صدا داشته باشد.
+     *
+     * ⚠️ پاک‌سازی **نشانی را پاک نمی‌کند**، فقط `voice_purged_at` را
+     * می‌گذارد. اگر نشانی `NULL` می‌شد، بازخوردی که فقط صوتی بوده این
+     * قید را می‌شکست و کل جارو با خطای قید می‌ایستاد — آن هم ماه‌ها بعد
+     * از نوشتنش، روی داده‌ای که آن موقع وجود نداشت.
+     */
     check(
       "feedbacks_has_content",
       sql`${table.content} IS NOT NULL OR ${table.voiceNoteUrl} IS NOT NULL`,
@@ -137,6 +176,8 @@ export const recordings = pgTable(
       .references(() => bookings.id, { onDelete: "cascade" }),
 
     url: varchar({ length: 500 }).notNull(),
+    /** مثل `submissions.object_key` — جاروی پاک‌سازی با این کار می‌کند */
+    objectKey: varchar("object_key", { length: 300 }).notNull(),
     type: mediaType().notNull(),
     sizeBytes: bigint("size_bytes", { mode: "bigint" }),
     durationSeconds: integer("duration_seconds"),

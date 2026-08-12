@@ -4,7 +4,11 @@ import { Logger } from "@nestjs/common";
 
 import { sqlClient } from "./db/client.js";
 import { closeRedis } from "./redis/client.js";
-import { closeQueues, registerSchedulers } from "./queue/queues.js";
+import {
+  closeQueues,
+  registerSchedulers,
+  runNightlySweepsNow,
+} from "./queue/queues.js";
 import { createMaintenanceWorker } from "./queue/worker.js";
 import { EXPIRE_HOLDS_INTERVAL_MS } from "./queue/maintenance.job.js";
 
@@ -20,6 +24,10 @@ async function bootstrap(): Promise<void> {
 
   await registerSchedulers();
   const worker = createMaintenanceWorker();
+
+  // جاروهای شبانه یک بار همین حالا هم اجرا می‌شوند — تا اجرای ازدست‌رفته
+  // جبران شود و سلامت پس از استقرار یک روز `degraded` نماند
+  await runNightlySweepsNow();
 
   logger.log(
     `وُرکر بالا آمد — جارو هر ${EXPIRE_HOLDS_INTERVAL_MS / 1000} ثانیه اجرا می‌شود.`,

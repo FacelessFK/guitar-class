@@ -7,6 +7,8 @@ import {
   formatMinutes,
   fromTehranWallClock,
   parseTimeToMinutes,
+  persianDateOf,
+  previousPersianMonthRange,
   tehranDateKey,
   tehranMinutesOfDay,
   tehranWeekday,
@@ -112,5 +114,85 @@ describe("قالب‌بندی ساعت", () => {
   it("ساعت نامعتبر را رد می‌کند", () => {
     expect(() => parseTimeToMinutes("25:00")).toThrow();
     expect(() => parseTimeToMinutes("چرند")).toThrow();
+  });
+});
+
+describe("تقویم شمسی", () => {
+  /**
+   * چند نقطه‌ی مرجع که مستقل قابل بررسی‌اند: اول فروردین همیشه حوالی
+   * ۲۰ یا ۲۱ مارس است، و اول مهر حوالی ۲۳ سپتامبر.
+   */
+  it("تاریخ میلادی را به شمسی برمی‌گرداند", () => {
+    expect(persianDateOf("2026-03-21")).toEqual({ year: 1405, month: 1, day: 1 });
+    expect(persianDateOf("2026-08-12")).toEqual({ year: 1405, month: 5, day: 21 });
+    expect(persianDateOf("2026-09-23")).toEqual({ year: 1405, month: 7, day: 1 });
+  });
+});
+
+describe("بازه‌ی ماه شمسیِ پیشین", () => {
+  /**
+   * ماه‌های اول سال ۳۱ روزه‌اند. از میانه‌ی مرداد، ماه پیش تیر است:
+   * ۱ تیر ۱۴۰۵ تا ۳۱ تیر ۱۴۰۵.
+   */
+  it("ماه ۳۱ روزه را کامل می‌گیرد", () => {
+    const range = previousPersianMonthRange("2026-08-12");
+
+    expect(persianDateOf(range.start)).toEqual({ year: 1405, month: 4, day: 1 });
+    expect(persianDateOf(range.end)).toEqual({ year: 1405, month: 4, day: 31 });
+  });
+
+  /** ماه‌های دوم سال ۳۰ روزه‌اند — آبان اینجا. */
+  it("ماه ۳۰ روزه را کامل می‌گیرد", () => {
+    const range = previousPersianMonthRange("2026-12-10");
+
+    expect(persianDateOf(range.start)).toEqual({ year: 1405, month: 8, day: 1 });
+    expect(persianDateOf(range.end)).toEqual({ year: 1405, month: 8, day: 30 });
+  });
+
+  /**
+   * اسفند: ۲۹ روز در سال عادی و ۳۰ روز در کبیسه. طول ماه از تقویم
+   * درمی‌آید نه از جدولی که ما نوشته باشیم، پس هر دو باید درست شوند.
+   */
+  it("اسفند را با طول درستش می‌گیرد و از مرز سال رد می‌شود", () => {
+    // فروردین ۱۴۰۵ → ماه پیش، اسفند ۱۴۰۴
+    const range = previousPersianMonthRange("2026-04-10");
+
+    expect(persianDateOf(range.start)).toEqual({ year: 1404, month: 12, day: 1 });
+
+    const end = persianDateOf(range.end);
+    expect(end.year).toBe(1404);
+    expect(end.month).toBe(12);
+    expect([29, 30]).toContain(end.day);
+  });
+
+  /** روز اولِ ماه هم باید همان ماه پیش را بدهد، نه ماه خودش. */
+  it("در روز اول ماه هم ماه پیش را می‌دهد", () => {
+    const firstOfMehr = "2026-09-23";
+    expect(persianDateOf(firstOfMehr).day).toBe(1);
+
+    const range = previousPersianMonthRange(firstOfMehr);
+    expect(persianDateOf(range.start)).toEqual({ year: 1405, month: 6, day: 1 });
+    expect(persianDateOf(range.end)).toEqual({ year: 1405, month: 6, day: 31 });
+  });
+
+  /**
+   * هر روزِ یک ماه باید **همان** بازه را بدهد.
+   *
+   * جارو هر شب اجرا می‌شود و اگر بازه در طول ماه جابه‌جا شود، ایندکس
+   * یکتای `payouts_one_per_teacher_period` جلویش را نمی‌گیرد و هر شب یک
+   * تسویه‌ی تازه ساخته می‌شود.
+   */
+  it("در تمام روزهای یک ماه، بازه‌ی یکسانی می‌دهد", () => {
+    const dates = dateKeyRange("2026-08-23", "2026-09-22");
+    const ranges = new Set(
+      dates.map((date) => {
+        const range = previousPersianMonthRange(date);
+        return `${range.start}..${range.end}`;
+      }),
+    );
+
+    expect(persianDateOf("2026-08-23").month).toBe(6);
+    expect(persianDateOf("2026-09-22").month).toBe(6);
+    expect(ranges.size).toBe(1);
   });
 });

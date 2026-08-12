@@ -80,13 +80,51 @@ describe("GET /api/health", () => {
   it("نبودن وُرکر را گزارش می‌کند", async () => {
     const response = await request(server).get("/api/health").expect(200);
 
-    expect(response.body).toEqual({
+    expect(response.body).toMatchObject({
       status: "degraded",
       database: "ok",
       redis: "ok",
       worker: "never",
       workerLastRunAt: null,
     });
+
+    // هر جارو جدا گزارش می‌شود؛ «degraded» به‌تنهایی نمی‌گوید کجا را نگاه کنی
+    expect(response.body.sweeps).toEqual(
+      Object.fromEntries(Object.values(SWEEPS).map((sweep) => [sweep, "never"])),
+    );
+  });
+
+  /**
+   * جاروی شبانه آستانه‌ی کهنگی خودش را دارد.
+   *
+   * با آستانه‌ی مشترکِ پنج دقیقه‌ای، جارویی که شبی یک بار اجرا می‌شود
+   * بیست‌وسه ساعت از هر شبانه‌روز را `degraded` گزارش می‌کرد — و هشداری
+   * که همیشه روشن است، بعد از دو روز دیده نمی‌شود.
+   */
+  it("جاروی شبانه را بعد از یک ساعت کهنه نمی‌شمارد", async () => {
+    const anHourAgo = new Date(Date.now() - 60 * 60_000);
+
+    await beatAll();
+    await recordHeartbeat(SWEEPS.CLEANUP_MEDIA, anHourAgo);
+    await recordHeartbeat(SWEEPS.MONTHLY_PAYOUTS, anHourAgo);
+
+    const response = await request(server).get("/api/health").expect(200);
+
+    expect(response.body.status).toBe("ok");
+    expect(response.body.sweeps[SWEEPS.CLEANUP_MEDIA]).toBe("ok");
+  });
+
+  /** ولی دو روز بی‌خبری از جاروی شبانه، واقعاً یعنی اجرا نشده. */
+  it("جاروی شبانه‌ی دو روز بی‌خبر را کهنه می‌شمارد", async () => {
+    await beatAll();
+    await recordHeartbeat(SWEEPS.CLEANUP_MEDIA, new Date(Date.now() - 48 * 60 * 60_000));
+
+    const response = await request(server).get("/api/health").expect(200);
+
+    expect(response.body.status).toBe("degraded");
+    expect(response.body.sweeps[SWEEPS.CLEANUP_MEDIA]).toBe("stale");
+    // بقیه سالم‌اند — گزارش باید همان یکی را نشان بدهد
+    expect(response.body.sweeps[SWEEPS.EXPIRE_HOLDS]).toBe("ok");
   });
 
   it("با ضربان تازه‌ی وُرکر سالم می‌شود", async () => {
