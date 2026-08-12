@@ -50,6 +50,18 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   ALREADY_A_TEACHER: HttpStatus.CONFLICT,
   TEACHER_SLUG_TAKEN: HttpStatus.CONFLICT,
 
+  // حلقه‌ی یادگیری
+  // «هستی ولی طرفِ دیگرش» — ۴۰۳ مثل بقیه‌ی خطاهای نقش
+  TEACHER_ONLY: HttpStatus.FORBIDDEN,
+  STUDENT_ONLY: HttpStatus.FORBIDDEN,
+  ASSIGNMENT_NOT_FOUND: HttpStatus.NOT_FOUND,
+  SUBMISSION_NOT_FOUND: HttpStatus.NOT_FOUND,
+  SESSION_NOT_TEACHABLE: HttpStatus.CONFLICT,
+
+  // رسانه
+  UNSUPPORTED_MEDIA: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+  MEDIA_TICKET_INVALID: HttpStatus.CONFLICT,
+
   // پنل ادمین
   ADMIN_RECORD_NOT_FOUND: HttpStatus.NOT_FOUND,
   INSTRUMENT_SLUG_TAKEN: HttpStatus.CONFLICT,

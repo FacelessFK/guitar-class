@@ -39,6 +39,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <NavLink href="/dashboard/book" active={pathname === "/dashboard/book"}>
                 رزرو کلاس
               </NavLink>
+              <NavLink href="/practice" active={pathname.startsWith("/practice")}>
+                تمرین‌ها
+              </NavLink>
               {user?.teacherProfileId ? (
                 <NavLink href="/teacher" active={pathname.startsWith("/teacher")}>
                   پنل استاد
@@ -94,7 +97,13 @@ function NavLink({
   active,
   children,
 }: {
-  href: "/dashboard" | "/dashboard/book" | "/teacher" | "/become-teacher" | "/admin";
+  href:
+    | "/dashboard"
+    | "/dashboard/book"
+    | "/practice"
+    | "/teacher"
+    | "/become-teacher"
+    | "/admin";
   active: boolean;
   children: React.ReactNode;
 }) {

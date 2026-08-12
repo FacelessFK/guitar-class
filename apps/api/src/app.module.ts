@@ -18,6 +18,8 @@ import {
   ClassroomController,
   ClassroomProvider,
 } from "./classroom/classroom.controller.js";
+import { LearningController, LearningProvider } from "./learning/learning.controller.js";
+import { MediaController, MediaProvider } from "./media/media.controller.js";
 import { PaymentController, PaymentProvider } from "./payment/payment.controller.js";
 import { TeacherController, TeacherProvider } from "./teacher/teacher.controller.js";
 import { readWorkerStatus, type WorkerStatus } from "./queue/heartbeat.js";
@@ -87,10 +89,14 @@ export class HealthController {
     PaymentController,
     TeacherController,
     AdminController,
+    MediaController,
+    LearningController,
   ],
   providers: [
     AuthProvider,
     AdminProvider,
+    MediaProvider,
+    LearningProvider,
     CatalogService,
     AvailabilityProvider,
     BookingProvider,

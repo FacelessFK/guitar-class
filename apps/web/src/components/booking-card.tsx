@@ -73,9 +73,40 @@ export function BookingCard({
       {LIVE_STATUSES.includes(booking.status) ? (
         <CancelPanel booking={booking} now={now} onChange={onChange} />
       ) : null}
+
+      {/*
+        پرونده‌ی جلسه — نکات، تمرین و بازخورد.
+
+        فقط روی جلسه‌های برگزارشده می‌آید چون حلقه‌ی یادگیری بعد از کلاس
+        شروع می‌شود و API ثبت روی جلسه‌ی برگزارنشده را رد می‌کند. لینک
+        دادن به صفحه‌ای که همیشه خالی است، همان اندازه گمراه‌کننده است
+        که نبودنش.
+      */}
+      {SESSION_FILE_STATUSES.includes(booking.status) ? (
+        <Link
+          href={`/sessions/${booking.id}`}
+          className="mt-4 inline-block text-sm text-accent underline"
+        >
+          نکات جلسه و تمرین‌ها
+        </Link>
+      ) : null}
     </li>
   );
 }
+
+/**
+ * وضعیت‌هایی که پرونده‌ی جلسه برایشان معنا دارد.
+ *
+ * با `TEACHABLE_STATUSES` سمت سرور یکی است. جلسه‌ی لغوشده اینجا نیست:
+ * کلاسی نداشت، پس نکته و تمرینی هم ندارد.
+ */
+const SESSION_FILE_STATUSES: readonly BookingDetail["status"][] = [
+  "IN_PROGRESS",
+  "COMPLETED",
+  "NO_SHOW_STUDENT",
+  "NO_SHOW_TEACHER",
+  "NO_SHOW",
+];
 
 /**
  * مهلت پرداخت.

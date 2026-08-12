@@ -9,7 +9,7 @@
  * را امن حمل نمی‌کند. تبدیل به تومان فقط در `lib/format.ts`.
  */
 
-import { apiFetch } from "./api-client";
+import { ApiError, apiFetch } from "./api-client";
 
 // ---------------------------------------------------------------------------
 // کاتالوگ (عمومی، ولی از مرورگر خوانده می‌شود)
@@ -351,6 +351,151 @@ export const removeException = (exceptionId: string) =>
   apiFetch<{ message: string }>(`/teacher/availability/exceptions/${exceptionId}`, {
     method: "DELETE",
   });
+
+// ---------------------------------------------------------------------------
+// حلقه‌ی یادگیری
+// ---------------------------------------------------------------------------
+
+export type MediaPurpose = "SUBMISSION" | "FEEDBACK_VOICE" | "ASSIGNMENT_ATTACHMENT";
+
+export interface UploadTicket {
+  objectKey: string;
+  uploadUrl: string;
+  headers: Record<string, string>;
+  expiresAt: string;
+}
+
+const requestUploadTicket = (body: {
+  purpose: MediaPurpose;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+}) => apiFetch<UploadTicket>("/media/upload-url", { method: "POST", body });
+
+/**
+ * فایل را مستقیم به آبجکت‌استوریج می‌فرستد و `objectKey` را برمی‌گرداند.
+ *
+ * ⚠️ `PUT` با `fetch` خام انجام می‌شود و نه با `apiFetch`: مقصد سرویس
+ * ذخیره‌سازی است نه API ما، و فرستادن هدر `Authorization` به آن هم
+ * بی‌فایده است و هم امضا را در بعضی سرویس‌ها خراب می‌کند.
+ *
+ * چیزی که به اندپوینت بعدی داده می‌شود **کلید** است نه نشانی. نشانی را
+ * سرور از روی کلید می‌سازد؛ اگر نشانی از اینجا می‌رفت، هر رشته‌ای
+ * می‌توانست به‌عنوان فایل ثبت شود.
+ */
+export async function uploadFile(
+  file: File,
+  purpose: MediaPurpose,
+): Promise<string> {
+  const ticket = await requestUploadTicket({
+    purpose,
+    fileName: file.name,
+    contentType: file.type || "application/octet-stream",
+    sizeBytes: file.size,
+  });
+
+  const response = await fetch(ticket.uploadUrl, {
+    method: "PUT",
+    headers: ticket.headers,
+    body: file,
+  });
+
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      "UPLOAD_FAILED",
+      "ارسال فایل ناموفق بود. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.",
+    );
+  }
+
+  return ticket.objectKey;
+}
+
+export interface Feedback {
+  content: string | null;
+  voiceNoteUrl: string | null;
+  createdAt: string;
+}
+
+export interface Submission {
+  id: string;
+  mediaUrl: string;
+  mediaType: "AUDIO" | "VIDEO";
+  durationSeconds: number | null;
+  sizeBytes: string | null;
+  createdAt: string;
+  feedback: Feedback | null;
+}
+
+export interface Assignment {
+  id: string;
+  title: string;
+  description: string | null;
+  attachments: Array<{ url: string; name: string }>;
+  dueDate: string | null;
+  status: "ASSIGNED" | "SUBMITTED" | "REVIEWED";
+  createdAt: string;
+  submissions: Submission[];
+}
+
+export interface SessionLearning {
+  bookingId: string;
+  role: "STUDENT" | "TEACHER";
+  /** جلسه به مرحله‌ی ثبت نکات رسیده یا هنوز برگزار نشده */
+  teachable: boolean;
+  note: { content: string; updatedAt: string } | null;
+  assignments: Assignment[];
+}
+
+export const getSessionLearning = (bookingId: string) =>
+  apiFetch<SessionLearning>(`/bookings/${bookingId}/learning`);
+
+export const writeSessionNote = (bookingId: string, content: string) =>
+  apiFetch<{ content: string; updatedAt: string }>(`/bookings/${bookingId}/notes`, {
+    method: "PUT",
+    body: { content },
+  });
+
+export const createAssignment = (
+  bookingId: string,
+  body: {
+    title: string;
+    description?: string;
+    dueDate?: string;
+    attachments?: Array<{ objectKey: string; name: string }>;
+  },
+) => apiFetch<Assignment>(`/bookings/${bookingId}/assignments`, {
+  method: "POST",
+  body,
+});
+
+export const createSubmission = (
+  assignmentId: string,
+  body: { objectKey: string; durationSeconds?: number },
+) => apiFetch<Submission>(`/assignments/${assignmentId}/submissions`, {
+  method: "POST",
+  body,
+});
+
+export const writeFeedback = (
+  submissionId: string,
+  body: { content?: string; voiceObjectKey?: string },
+) => apiFetch<Feedback>(`/submissions/${submissionId}/feedback`, {
+  method: "PUT",
+  body,
+});
+
+export interface PracticeItem extends Assignment {
+  bookingId: string;
+  scheduledAt: string;
+  instrumentName: string;
+  counterpartName: string;
+}
+
+export const getPractice = () =>
+  apiFetch<{ assignments: PracticeItem[] }>("/practice").then(
+    (data) => data.assignments,
+  );
 
 // ---------------------------------------------------------------------------
 // پنل ادمین
