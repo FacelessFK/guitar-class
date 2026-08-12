@@ -24,10 +24,10 @@ const ALGORITHM = "AWS4-HMAC-SHA256";
  * است. اندازه و نوع فایل جای دیگری کنترل می‌شوند (بلیت آپلود در ردیس)،
  * نه در امضا.
  */
-const UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD";
+export const UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD";
 
 export interface SignPresignedUrlInput {
-  method: "PUT" | "GET";
+  method: "PUT" | "GET" | "DELETE";
   /** میزبان درخواست، مثلاً `my-bucket.s3.ir-thr-at1.arvanstorage.ir` */
   host: string;
   /** مسیر آبجکت، **بدون** اسلش ابتدایی */
@@ -38,6 +38,16 @@ export interface SignPresignedUrlInput {
   expiresInSeconds: number;
   /** برای تست تزریق می‌شود؛ در عمل «الان» */
   now?: Date;
+  /**
+   * هش بدنه. پیش‌فرض `UNSIGNED-PAYLOAD` است و مسیر تولید همیشه همان را
+   * می‌خواهد، چون فایل را هرگز نمی‌بینیم.
+   *
+   * پارامتر شدنش فقط برای **تشخیص** است: اگر سرویسی آپلود را با
+   * `SignatureDoesNotMatch` رد کند، تنها راه فهمیدن اینکه امضایمان غلط
+   * است یا سرویس `UNSIGNED-PAYLOAD` را نمی‌پذیرد، فرستادن همان درخواست
+   * با هش واقعی است. `verify-storage.ts` دقیقاً همین کار را می‌کند.
+   */
+  payloadHash?: string;
 }
 
 /**
@@ -70,6 +80,7 @@ export function signedQueryParameters(
     // چون خودِ سرویس هم مرتب‌شده حساب می‌کند.
     canonicalQuery: sortedQueryString(query),
     host: input.host,
+    payloadHash: input.payloadHash,
   });
 
   const stringToSign = [
@@ -104,6 +115,7 @@ export function buildCanonicalRequest(input: {
   key: string;
   canonicalQuery: string;
   host: string;
+  payloadHash?: string;
 }): string {
   return [
     input.method,
@@ -111,7 +123,7 @@ export function buildCanonicalRequest(input: {
     input.canonicalQuery,
     `host:${input.host}\n`,
     "host",
-    UNSIGNED_PAYLOAD,
+    input.payloadHash ?? UNSIGNED_PAYLOAD,
   ].join("\n");
 }
 

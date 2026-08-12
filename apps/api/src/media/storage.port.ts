@@ -40,6 +40,15 @@ export interface ObjectStorage {
   readonly name: string;
   createUploadTicket(request: UploadRequest): UploadTicket;
   publicUrlFor(objectKey: string): string;
+  /**
+   * پاک کردن یک آبجکت — **ایدمپوتنت**.
+   *
+   * نبودنِ فایل خطا نیست. جاروی پاک‌سازی ممکن است دو بار روی یک کلید
+   * برسد (اجرای قبلی بعد از حذف و پیش از به‌روزرسانی سطر مرده باشد)، و
+   * اگر بار دوم خطا بدهد، همان سطر هر شب دوباره تلاش می‌شود و هیچ‌وقت
+   * تمام‌شده علامت نمی‌خورد.
+   */
+  deleteObject(objectKey: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,8 +56,25 @@ export interface ObjectStorage {
 // ---------------------------------------------------------------------------
 
 export interface S3Config {
-  /** میزبان باکت، بدون پروتکل — مثلاً `music.s3.ir-thr-at1.arvanstorage.ir` */
+  /**
+   * میزبان درخواست، بدون پروتکل.
+   *
+   * در سبک زیردامنه‌ای نام باکت را در خود دارد
+   * (`music.s3.ir-thr-at1.arvanstorage.ir`) و در سبک مسیری ندارد
+   * (`s3.ir-thr-at1.arvanstorage.ir`).
+   */
   host: string;
+  bucket: string;
+  /**
+   * باکت در **مسیر** بیاید نه در زیردامنه.
+   *
+   * آروان و لیارا هر دو زیردامنه‌ای‌اند، پس پیش‌فرض `false` است. ولی
+   * انتخاب اشتباه اینجا به `SignatureDoesNotMatch` تبدیل می‌شود نه به
+   * ۴۰۴ — چون میزبان جزئی از امضاست — و آدم را ساعت‌ها دنبال اشکالِ
+   * سالمِ امضا می‌فرستد. `verify-storage.ts` هر دو را می‌آزماید و
+   * می‌گوید کدام است.
+   */
+  pathStyle: boolean;
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
@@ -59,26 +85,38 @@ export interface S3Config {
 /**
  * آبجکت‌استوریج سازگار با S3 (آروان‌کلاد، لیارا).
  *
- * ⚠️ **در برابر یک باکت واقعی آزموده نشده است.** امضا در
- * `sigv4.test.ts` تا حد بردار مرجع AWS سنجیده شده، ولی چیزهایی که فقط
- * سرویس واقعی نشان می‌دهد — سیاست CORS باکت، پذیرش
- * `UNSIGNED-PAYLOAD`، شکل دقیق میزبان — هنوز باز است. اولین کاری که
- * پس از ساختن باکت باید انجام شود همین است.
+ * ✅ **در برابر یک سرویس واقعی S3 آزموده شده** — MinIO با TLS، از راه
+ * `verify-storage.ts`: امضا پذیرفته شد، `UNSIGNED-PAYLOAD` پذیرفته شد،
+ * و آپلود، خواندنِ ناشناس و حذف هر سه کار کردند. هر دو شکل میزبان هم
+ * آزموده شد.
  *
- * سیاست CORS باکت باید `PUT` را از `WEB_ORIGIN` بپذیرد، وگرنه مرورگر
- * درخواست را پیش از رسیدن به سرویس رد می‌کند و خطایش هیچ ربطی به امضا
- * ندارد.
+ * ⚠️ آنچه هنوز باز است، مخصوصِ **همان باکتی** است که در تولید ساخته
+ * می‌شود و نه کد: سیاست CORS، اجازه‌ی خواندن عمومی، و اینکه آروان کدام
+ * شکل میزبان و کدام `region` را می‌خواهد. همان اسکریپت را با کلیدهای
+ * واقعی اجرا کن؛ برای هر سه جواب می‌دهد.
  */
 export class S3ObjectStorage implements ObjectStorage {
   readonly name = "s3";
 
   constructor(private readonly config: S3Config) {}
 
+  /**
+   * مسیری که **امضا می‌شود**.
+   *
+   * در سبک مسیری، نام باکت جزئی از مسیر است و باید داخل امضا هم بیاید.
+   * جدا نگه داشتنش از `objectKey` عمدی است: هرچه بیرون این کلاس است —
+   * بلیت ردیس، ستون دیتابیس، جاروی پاک‌سازی — باید همان کلید خالص را
+   * ببیند، وگرنه عوض کردن سبک میزبان یعنی هر کلیدِ ذخیره‌شده غلط شود.
+   */
+  private signedPath(objectKey: string): string {
+    return this.config.pathStyle ? `${this.config.bucket}/${objectKey}` : objectKey;
+  }
+
   createUploadTicket(request: UploadRequest): UploadTicket {
     const uploadUrl = presignUrl({
       method: "PUT",
       host: this.config.host,
-      key: request.objectKey,
+      key: this.signedPath(request.objectKey),
       region: this.config.region,
       accessKeyId: this.config.accessKeyId,
       secretAccessKey: this.config.secretAccessKey,
@@ -102,6 +140,36 @@ export class S3ObjectStorage implements ObjectStorage {
 
   publicUrlFor(objectKey: string): string {
     return `${this.config.publicBaseUrl.replace(/\/$/, "")}/${objectKey}`;
+  }
+
+  /**
+   * حذف با آدرس امضاشده انجام می‌شود، نه با هدر `Authorization`.
+   *
+   * همان امضایی که برای آپلود کار می‌کند اینجا هم کار می‌کند، پس اگر
+   * آپلود درست باشد حذف هم درست است — یک جزء کمتر برای اشتباه کردن.
+   * مهلت کوتاه است چون درخواست همین‌جا و همین حالا فرستاده می‌شود.
+   */
+  async deleteObject(objectKey: string): Promise<void> {
+    const url = presignUrl({
+      method: "DELETE",
+      host: this.config.host,
+      key: this.signedPath(objectKey),
+      region: this.config.region,
+      accessKeyId: this.config.accessKeyId,
+      secretAccessKey: this.config.secretAccessKey,
+      expiresInSeconds: 60,
+    });
+
+    const response = await fetch(url, { method: "DELETE" });
+
+    // S3 برای کلیدی که وجود ندارد هم ۲۰۴ می‌دهد؛ ۴۰۴ فقط از بعضی
+    // پیاده‌سازی‌ها می‌آید. هر دو یعنی «دیگر نیست» و همان چیزی است که
+    // خواسته‌ایم.
+    if (!response.ok && response.status !== 404) {
+      throw new Error(
+        `حذف ${objectKey} از ${this.config.host} با کد ${response.status} شکست خورد: ${await response.text()}`,
+      );
+    }
   }
 }
 
@@ -154,6 +222,10 @@ export class InMemoryObjectStorage implements ObjectStorage {
   get(objectKey: string): { body: Buffer; contentType: string } | null {
     return this.objects.get(objectKey) ?? null;
   }
+
+  async deleteObject(objectKey: string): Promise<void> {
+    this.objects.delete(objectKey);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -169,21 +241,11 @@ export class InMemoryObjectStorage implements ObjectStorage {
  * هفته‌ها بعد و به شکل «فایل باز نمی‌شود» دیده می‌شود.
  */
 export function createObjectStorage(): ObjectStorage {
-  const host = process.env.S3_ENDPOINT;
-  const bucket = process.env.S3_BUCKET;
-  const accessKeyId = process.env.S3_ACCESS_KEY;
-  const secretAccessKey = process.env.S3_SECRET_KEY;
+  const config = s3ConfigFromEnv();
   const isProduction = process.env.NODE_ENV === "production";
 
-  if (host && bucket && accessKeyId && secretAccessKey) {
-    return new S3ObjectStorage({
-      host: bucketHost(host, bucket),
-      region: process.env.S3_REGION ?? "ir-thr-at1",
-      accessKeyId,
-      secretAccessKey,
-      publicBaseUrl:
-        process.env.S3_PUBLIC_BASE_URL ?? `https://${bucketHost(host, bucket)}`,
-    });
+  if (config) {
+    return new S3ObjectStorage(config);
   }
 
   if (isProduction) {
@@ -198,6 +260,44 @@ export function createObjectStorage(): ObjectStorage {
 }
 
 /**
+ * تنظیمات باکت از روی محیط — یا `null` اگر ناقص باشد.
+ *
+ * جدا شده تا `verify-storage.ts` بتواند **عیناً** همان تنظیماتی را
+ * بیازماید که برنامه استفاده می‌کند. اگر اسکریپت راستی‌آزمایی محیط را
+ * خودش می‌خواند، می‌شد چیزی را سبز گزارش کند که مسیر تولید اصلاً
+ * نمی‌فرستدش.
+ */
+export function s3ConfigFromEnv(): S3Config | null {
+  const endpoint = process.env.S3_ENDPOINT;
+  const bucket = process.env.S3_BUCKET;
+  const accessKeyId = process.env.S3_ACCESS_KEY;
+  const secretAccessKey = process.env.S3_SECRET_KEY;
+
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return null;
+
+  const pathStyle = process.env.S3_PATH_STYLE === "true";
+  const host = pathStyle ? endpointHost(endpoint) : bucketHost(endpoint, bucket);
+  const defaultPublicBase = pathStyle
+    ? `https://${host}/${bucket}`
+    : `https://${host}`;
+
+  return {
+    host,
+    bucket,
+    pathStyle,
+    region: process.env.S3_REGION ?? "ir-thr-at1",
+    accessKeyId,
+    secretAccessKey,
+    publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? defaultPublicBase,
+  };
+}
+
+/** میزبان سرویس بدون نام باکت — برای آزمودن سبک مسیری. */
+export function endpointHost(endpoint: string): string {
+  return endpoint.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
+
+/**
  * میزبان به سبک «باکت در زیردامنه».
  *
  * سبک مسیری (`endpoint/bucket/key`) هم وجود دارد ولی آروان و لیارا هر
@@ -205,8 +305,8 @@ export function createObjectStorage(): ObjectStorage {
  * اشتباه اینجا به خطای امضا تبدیل می‌شود نه به ۴۰۴ — یعنی سراغ جای
  * اشتباهی می‌فرستدت.
  */
-function bucketHost(endpoint: string, bucket: string): string {
-  const host = endpoint.replace(/^https?:\/\//, "").replace(/\/$/, "");
+export function bucketHost(endpoint: string, bucket: string): string {
+  const host = endpointHost(endpoint);
   return host.startsWith(`${bucket}.`) ? host : `${bucket}.${host}`;
 }
 

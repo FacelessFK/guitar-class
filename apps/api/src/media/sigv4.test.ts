@@ -7,6 +7,7 @@ import {
   signedQueryParameters,
   signingKey,
   toAmzDate,
+  UNSIGNED_PAYLOAD,
 } from "./sigv4.js";
 
 /**
@@ -121,6 +122,24 @@ describe("buildCanonicalRequest", () => {
       ].join("\n"),
     );
   });
+
+  /**
+   * هش بدنه پارامتر است ولی پیش‌فرضش باید همان `UNSIGNED-PAYLOAD` بماند:
+   * مسیر تولید هرگز آن را نمی‌دهد و اگر پیش‌فرض عوض شود، هر آپلود
+   * واقعی با خطای امضا رد می‌شود بی‌آنکه هیچ تستی قرمز شود.
+   */
+  it("هش بدنه‌ی داده‌شده جای UNSIGNED-PAYLOAD می‌نشیند", () => {
+    const canonical = buildCanonicalRequest({
+      method: "PUT",
+      key: "k",
+      canonicalQuery: "",
+      host: "h",
+      payloadHash: "abc123",
+    });
+
+    expect(canonical.endsWith("\nabc123")).toBe(true);
+    expect(canonical).not.toContain(UNSIGNED_PAYLOAD);
+  });
 });
 
 describe("signedQueryParameters", () => {
@@ -167,6 +186,22 @@ describe("signedQueryParameters", () => {
         "X-Amz-Signature",
       ),
     ).not.toBe(base);
+    expect(
+      signedQueryParameters({ ...input, payloadHash: "deadbeef" }).get("X-Amz-Signature"),
+    ).not.toBe(base);
+  });
+
+  /**
+   * ندادن هش باید دقیقاً معادل دادنِ `UNSIGNED-PAYLOAD` باشد. اگر این
+   * دو از هم جدا بیفتند، اسکریپت راستی‌آزمایی چیزی را می‌آزماید که
+   * آداپتور واقعی نمی‌فرستد و نتیجه‌اش گمراه‌کننده می‌شود.
+   */
+  it("پیش‌فرضِ نبودن هش، همان UNSIGNED-PAYLOAD است", () => {
+    expect(
+      signedQueryParameters({ ...input, payloadHash: UNSIGNED_PAYLOAD }).get(
+        "X-Amz-Signature",
+      ),
+    ).toBe(signedQueryParameters(input).get("X-Amz-Signature"));
   });
 });
 

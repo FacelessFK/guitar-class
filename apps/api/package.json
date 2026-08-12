@@ -14,6 +14,7 @@
     "db:push": "dotenv -e ../../.env -- drizzle-kit push",
     "db:studio": "dotenv -e ../../.env -- drizzle-kit studio",
     "db:check": "drizzle-kit check",
+    "verify:storage": "node --env-file-if-exists=../../.env --import @swc-node/register/esm-register src/media/verify-storage.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "build": "tsc -p tsconfig.build.json"
