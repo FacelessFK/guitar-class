@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   BUSINESS_RULES,
   addDaysToDateKey,
@@ -75,11 +75,29 @@ function BookingFlow() {
   const [pending, setPending] = useState(false);
 
   const offering = findOffering(teacher, instrument);
+
+  /**
+   * ورود از صفحه‌ی عمومی استاد.
+   *
+   * لینک «رزرو» کنار هر سرویس، هم ساز و هم استاد را همراه می‌آورد، پس
+   * کاربری که از سئو آمده و روی استاد مشخصی تصمیم گرفته، دو مرحله‌ی
+   * اول را دوباره طی نمی‌کند. اگر پارامترها به چیزی نخورند بی‌صدا
+   * نادیده گرفته می‌شوند و جریان از اول شروع می‌شود.
+   */
   const preselectedTeacher = searchParams.get("teacher");
+  const preselectedInstrument = searchParams.get("instrument");
+  const preselectionApplied = useRef(false);
 
   useEffect(() => {
-    getInstruments().then(setInstruments).catch(() => setInstruments([]));
-  }, []);
+    getInstruments()
+      .then((result) => {
+        setInstruments(result);
+
+        const match = result.find((item) => item.slug === preselectedInstrument);
+        if (match) setInstrument(match);
+      })
+      .catch(() => setInstruments([]));
+  }, [preselectedInstrument]);
 
   // فهرست استادها با هر بار عوض شدن ساز دوباره خوانده می‌شود؛ فیلتر
   // سمت سرور است تا استادی که این ساز را تدریس نمی‌کند اصلاً نیاید
@@ -95,8 +113,16 @@ function BookingFlow() {
         if (cancelled) return;
         setTeachers(result);
 
-        // ورود از صفحه‌ی عمومی استاد: اگر همان استاد این ساز را
-        // تدریس می‌کند، مرحله‌ی انتخاب استاد پریده می‌شود
+        /**
+         * پیش‌انتخاب فقط **یک بار** اعمال می‌شود.
+         *
+         * بدون این نگهبان، هر بار که کاربر ساز را عوض کند و استادِ
+         * لینک هم آن ساز را تدریس کند، انتخابش دوباره برمی‌گردد —
+         * یعنی صفحه انتخاب کاربر را پس می‌زند.
+         */
+        if (preselectionApplied.current) return;
+        preselectionApplied.current = true;
+
         const match = result.find((item) => item.slug === preselectedTeacher);
         if (match) setTeacher(match);
       })

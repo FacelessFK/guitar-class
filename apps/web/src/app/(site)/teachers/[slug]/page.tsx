@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
@@ -100,15 +101,32 @@ export default async function TeacherPage({ params }: PageProps) {
           ) : (
             <ul className="mt-6 grid gap-4 sm:grid-cols-2">
               {teacher.offerings.map((offering) => (
-                <li
-                  key={offering.id}
-                  className="card"
-                >
+                <li key={offering.id} className="card">
                   <h3 className="font-bold">{offering.instrumentName}</h3>
                   <p className="mt-2 text-sm text-ink-muted">
                     {formatDuration(offering.durationMinutes)}
                   </p>
                   <p className="mt-1">{formatToman(offering.price)} تومان</p>
+
+                  {/*
+                    ساز و استاد هر دو در آدرس می‌روند تا کسی که از
+                    جست‌وجو به این صفحه رسیده و تصمیمش را گرفته، دو
+                    مرحله‌ی اول جریان رزرو را دوباره طی نکند. اگر
+                    واردنشده باشد، گاردِ `/dashboard` او را به ورود
+                    می‌فرستد و بعد به همین‌جا برمی‌گرداند.
+                  */}
+                  <Link
+                    href={{
+                      pathname: "/dashboard/book",
+                      query: {
+                        instrument: offering.instrumentSlug,
+                        teacher: teacher.slug,
+                      },
+                    }}
+                    className="btn-primary mt-4"
+                  >
+                    رزرو این کلاس
+                  </Link>
                 </li>
               ))}
             </ul>
