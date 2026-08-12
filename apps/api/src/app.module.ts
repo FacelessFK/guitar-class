@@ -13,6 +13,10 @@ import {
 } from "./availability/availability.controller.js";
 import { BookingController, BookingProvider } from "./booking/booking.controller.js";
 import { CatalogController, CatalogService } from "./catalog/catalog.controller.js";
+import {
+  ClassroomController,
+  ClassroomProvider,
+} from "./classroom/classroom.controller.js";
 import { PaymentController, PaymentProvider } from "./payment/payment.controller.js";
 import { readWorkerStatus, type WorkerStatus } from "./queue/heartbeat.js";
 
@@ -77,6 +81,7 @@ export class HealthController {
     CatalogController,
     AvailabilityController,
     BookingController,
+    ClassroomController,
     PaymentController,
   ],
   providers: [
@@ -84,6 +89,7 @@ export class HealthController {
     CatalogService,
     AvailabilityProvider,
     BookingProvider,
+    ClassroomProvider,
     PaymentProvider,
     {
       /**

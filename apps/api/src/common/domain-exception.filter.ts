@@ -7,6 +7,7 @@ import {
 import type { Response } from "express";
 
 import { PackageConflictError } from "../booking/errors.js";
+import { RoomNotOpenYetError } from "../classroom/errors.js";
 import { DomainError } from "./domain-error.js";
 
 /**
@@ -32,6 +33,13 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   BOOKING_NOT_FOUND: HttpStatus.NOT_FOUND,
   NOT_PARTICIPANT: HttpStatus.FORBIDDEN,
 
+  // کلاس
+  // «هنوز باز نشده» و «بسته شده» تعارض با وضعیت فعلی‌اند نه خطای ورودی،
+  // پس ۴۰۹ می‌گیرند مثل بقیه‌ی تعارض‌های این سیستم.
+  ROOM_NOT_OPEN: HttpStatus.CONFLICT,
+  ROOM_CLOSED: HttpStatus.CONFLICT,
+  NOT_JOINABLE: HttpStatus.CONFLICT,
+
   // پرداخت
   ORDER_NOT_FOUND: HttpStatus.NOT_FOUND,
   NOT_PAYABLE: HttpStatus.CONFLICT,
@@ -51,6 +59,12 @@ export class DomainExceptionFilter implements ExceptionFilter<DomainError> {
       code: exception.code,
       message: exception.message,
     };
+
+    // «اتاق هنوز باز نشده» باید بگوید کِی باز می‌شود، تا فرانت شمارش
+    // معکوس نشان دهد به‌جای اینکه کاربر دکمه را بی‌هدف تکرار کند
+    if (exception instanceof RoomNotOpenYetError) {
+      body.opensAt = exception.opensAt.toISOString();
+    }
 
     // تداخل پکیج باید بگوید دقیقاً کدام هفته‌ها مشکل دارند، تا هنرجو
     // بتواند ساعت دیگری انتخاب کند به‌جای دیدن یک پیام کلی
