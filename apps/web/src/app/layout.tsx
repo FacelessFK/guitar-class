@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Vazirmatn } from "next/font/google";
-import Link from "next/link";
 
 import "./globals.css";
 
@@ -48,53 +47,22 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+/**
+ * لایوت ریشه فقط پوسته‌ی سند است: زبان، جهت، فونت، و رنگ پس‌زمینه.
+ *
+ * سربرگ و پابرگ اینجا نیستند چون سه دنیای متفاوت وجود دارد و هر کدام
+ * لایوت خودش را دارد: صفحات عمومی (`(site)`) با ناوبری سئو، اپِ پشت
+ * لاگین (`(app)`) با ناوبری کاربر، و اتاق کلاس (`/room`) که تمام‌صفحه
+ * است و هیچ چیز اضافه‌ای نباید داشته باشد. لایوت در App Router قابل
+ * حذف نیست، فقط قابل افزودن — پس هرچه اینجا بیاید در اتاق کلاس هم
+ * می‌ماند.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fa" dir="rtl" className={vazirmatn.variable}>
-      <body className="flex min-h-screen flex-col font-sans">
-        <SiteHeader />
-        <main className="flex-1">{children}</main>
-        <SiteFooter />
-      </body>
+      <body className="min-h-screen font-sans">{children}</body>
     </html>
-  );
-}
-
-function SiteHeader() {
-  return (
-    <header className="border-b border-border">
-      <nav className="mx-auto flex max-w-5xl items-center justify-between gap-6 px-5 py-4">
-        <Link href="/" className="font-bold">
-          کلاس آنلاین موسیقی
-        </Link>
-
-        <ul className="flex items-center gap-6 text-sm">
-          <li>
-            <Link href="/teachers">استادها</Link>
-          </li>
-          <li>
-            <Link href="/rules">قوانین</Link>
-          </li>
-        </ul>
-      </nav>
-    </header>
-  );
-}
-
-function SiteFooter() {
-  return (
-    <footer className="border-t border-border text-sm text-ink-muted">
-      <div className="mx-auto max-w-5xl px-5 py-8">
-        <p>
-          کلاس خصوصی آنلاین موسیقی، یک‌به‌یک و زنده. پیش از رزرو،{" "}
-          <Link href="/rules" className="underline">
-            قوانین و سیاست لغو
-          </Link>{" "}
-          را بخوانید.
-        </p>
-      </div>
-    </footer>
   );
 }

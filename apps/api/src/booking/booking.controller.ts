@@ -122,6 +122,16 @@ interface BookingDetailView extends BookingView {
   /** اسلاگ پروفایل عمومی استاد — فقط برای لینک، ممکن است نباشد */
   teacherSlug: string | null;
   instrumentName: string;
+  /**
+   * اگر پر باشد، این جلسه بخشی از یک پکیج است.
+   *
+   * فرانت بدون آن نمی‌تواند درست رفتار کند: جلسه‌ی پکیج **جداگانه
+   * پرداخت نمی‌شود** و چهار جلسه‌ی یک پکیج نباید چهار دکمه‌ی پرداخت
+   * نشان دهند که سه‌تایشان با خطا برمی‌گردند.
+   */
+  enrollmentId: string | null;
+  /** جلسه‌ی چندم از پکیج (۱ تا ۴)؛ برای جلسه‌ی مستقل تهی است */
+  sessionIndex: number | null;
 }
 
 function toBookingView(booking: {
@@ -314,6 +324,8 @@ function detailQuery() {
       durationMinutes: bookings.durationMinutes,
       holdExpiresAt: bookings.holdExpiresAt,
       priceSnapshot: bookings.priceSnapshot,
+      enrollmentId: bookings.enrollmentId,
+      sessionIndex: bookings.sessionIndex,
       studentId: bookings.studentId,
       studentName: studentUser.fullName,
       teacherName: teacherUser.fullName,
@@ -339,5 +351,7 @@ function toBookingDetailView(row: DetailRow, userId: string): BookingDetailView 
     counterpartName: isStudent ? row.teacherName : row.studentName,
     teacherSlug: row.teacherSlug,
     instrumentName: row.instrumentName,
+    enrollmentId: row.enrollmentId,
+    sessionIndex: row.sessionIndex,
   };
 }

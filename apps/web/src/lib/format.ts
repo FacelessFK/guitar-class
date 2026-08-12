@@ -6,6 +6,13 @@
  * محاسبه استفاده شوند.
  */
 
+import {
+  fromTehranWallClock,
+  weekdayNameFa,
+  weekdayOfDateKey,
+  type DateKey,
+} from "@music/shared";
+
 /**
  * ریال به تومان.
  *
@@ -44,4 +51,108 @@ export function lowestPrice(prices: readonly string[]): string | null {
     .map((price) => BigInt(price))
     .reduce((min, price) => (price < min ? price : min))
     .toString();
+}
+
+// ---------------------------------------------------------------------------
+// تاریخ و ساعت
+// ---------------------------------------------------------------------------
+
+/**
+ * تاریخ شمسی با `Intl` ساخته می‌شود، نه با کتابخانه‌ی جداگانه.
+ *
+ * سند معماری `date-fns-jalali` را پیشنهاد کرده بود، ولی تقویم فارسی از
+ * سال‌ها پیش در خود `Intl` هست (`fa-IR-u-ca-persian`) و همان قواعد
+ * CLDR را می‌خواند. یک وابستگی کمتر در باندلی که کاربر ایرانی روی
+ * اینترنت کند دانلود می‌کند، و یک منبع کمتر برای اختلاف نام ماه‌ها.
+ *
+ * منطقه‌ی زمانی در همه‌ی این توابع صریح داده می‌شود. بدون آن، مرورگر
+ * منطقه‌ی سیستم را می‌گیرد و کاربری که لپ‌تاپش روی UTC مانده، ساعت کلاس
+ * را سه‌ونیم ساعت غلط می‌بیند.
+ */
+const TEHRAN = "Asia/Tehran";
+const JALALI_LOCALE = "fa-IR-u-ca-persian";
+
+/** ارقام لاتین داخل یک رشته را فارسی می‌کند: `"17:00"` → `«۱۷:۰۰»` */
+export function faDigits(text: string): string {
+  return text.replace(/\d/g, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]!);
+}
+
+/**
+ * یک کلید تاریخ میلادی (`YYYY-MM-DD` به وقت تهران) را به لحظه‌ای در
+ * همان روز تبدیل می‌کند.
+ *
+ * ظهر انتخاب شده نه نیمه‌شب: هر خطای یک‌ساعته‌ای در آینده — تغییر قانون
+ * ساعت تابستانی — نیمه‌شب را به روز قبل می‌برد ولی ظهر را نه.
+ */
+function instantForDateKey(dateKey: DateKey): Date {
+  return fromTehranWallClock(dateKey, 12 * 60);
+}
+
+/** «۲۴ مرداد ۱۴۰۵» */
+export function formatJalaliDate(dateKey: DateKey): string {
+  return new Intl.DateTimeFormat(JALALI_LOCALE, {
+    timeZone: TEHRAN,
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(instantForDateKey(dateKey));
+}
+
+/**
+ * «شنبه ۲۴ مرداد» — برای سرستون تقویم که سال در آن تکراری است.
+ *
+ * نام روز از `WEEKDAY_NAMES_FA` پکیج مشترک می‌آید، نه از `Intl`.
+ * دو منبع دو املا دارند: `Intl` «پنجشنبه» و «یکشنبه» می‌نویسد و جدول
+ * ما «پنج‌شنبه» و «یک‌شنبه» با نیم‌فاصله. هر دو درست‌اند، ولی وقتی
+ * فهرست قوانین هفتگی از یکی بخواند و انتخابگر تاریخ از دیگری، هر دو
+ * املا در یک صفحه کنار هم دیده می‌شوند. جدول مشترک برنده است چون
+ * جاهایی که فقط شماره‌ی روز هفته دارند (قوانین دسترس‌پذیری) راهی جز
+ * آن ندارند.
+ */
+export function formatJalaliDayMonth(dateKey: DateKey): string {
+  return `${weekdayNameFa(weekdayOfDateKey(dateKey))} ${formatJalaliShort(dateKey)}`;
+}
+
+/** «۲۴ مرداد» */
+export function formatJalaliShort(dateKey: DateKey): string {
+  return new Intl.DateTimeFormat(JALALI_LOCALE, {
+    timeZone: TEHRAN,
+    day: "numeric",
+    month: "long",
+  }).format(instantForDateKey(dateKey));
+}
+
+/** ساعت دیواری تهران از یک لحظه‌ی مطلق: «۱۷:۳۰» */
+export function formatTehranTime(instant: Date | string): string {
+  const date = typeof instant === "string" ? new Date(instant) : instant;
+
+  return new Intl.DateTimeFormat(JALALI_LOCALE, {
+    timeZone: TEHRAN,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+/**
+ * شمارش معکوس: «۱۲:۳۴» یا «۲ ساعت و ۵ دقیقه».
+ *
+ * زیر یک ساعت به صورت دقیقه و ثانیه نشان داده می‌شود چون کاربر واقعاً
+ * ثانیه‌ها را می‌شمارد (مهلت پرداخت، باز شدن اتاق)، و بالای آن ثانیه
+ * فقط نویز است.
+ */
+export function formatCountdown(milliseconds: number): string {
+  const total = Math.max(0, Math.floor(milliseconds / 1000));
+
+  if (total >= 3600) {
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    return minutes === 0
+      ? `${faNumber(hours)} ساعت`
+      : `${faNumber(hours)} ساعت و ${faNumber(minutes)} دقیقه`;
+  }
+
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return faDigits(`${minutes}:${String(seconds).padStart(2, "0")}`);
 }

@@ -28,6 +28,25 @@
   /** حالت hover و فشرده‌شدن دکمه‌ی اصلی */
   --color-accent-strong: #1d4ed8;
   --color-accent-ink: #ffffff;
+
+  /**
+   * رنگ‌های وضعیت.
+   *
+   * جهت بصری «سفید و یک اکسنت» است، پس این سه فقط جایی می‌آیند که
+   * معنا رنگ لازم دارد: کلاس تأییدشده، مهلت رو به پایان، جلسه‌ی لغو
+   * شده. هر کدام یک سطح روشن برای پس‌زمینه دارد تا متن روی آن خوانا
+   * بماند — بدون آن، متن قرمز روی سفید تنها ابزار موجود می‌شد و کل
+   * صفحه را هشدارآمیز نشان می‌داد.
+   */
+  --color-success: #15803d;
+  --color-success-surface: #f0fdf4;
+
+  --color-warning: #b45309;
+  --color-warning-surface: #fffbeb;
+
+  --color-danger: #b91c1c;
+  --color-danger-surface: #fef2f2;
+  --color-danger-border: #fecaca;
 }
 
 @layer base {
@@ -113,5 +132,120 @@
 
   .btn-secondary:hover {
     border-color: var(--color-ink-muted);
+  }
+
+  /**
+   * دکمه‌ی غیرفعال — روی هر سه نوع.
+   *
+   * `pointer-events` عمداً برداشته نمی‌شود تا `cursor` دیده شود؛ خودِ
+   * `disabled` در HTML جلوی کلیک را می‌گیرد.
+   */
+  .btn-primary:disabled,
+  .btn-secondary:disabled,
+  .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /** لغو و حذف — کمرنگ‌تر از اکسنت تا با کنش اصلی رقابت نکند */
+  .btn-danger {
+    display: inline-block;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-danger-border);
+    padding: 0.75rem 1.25rem;
+    font-weight: 500;
+    color: var(--color-danger);
+    transition: background-color 150ms ease;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background-color: var(--color-danger-surface);
+  }
+
+  /**
+   * ورودی فرم.
+   *
+   * شماره‌ی موبایل و کد ورود با ارقام لاتین تایپ می‌شوند ولی کاربر
+   * ایرانی صفحه‌کلید فارسی دارد. تبدیل ارقام کار `normalizePhone` در
+   * پکیج مشترک است، نه کار CSS — اینجا فقط ظاهر است.
+   */
+  .input {
+    display: block;
+    width: 100%;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    padding: 0.75rem 0.875rem;
+    transition: border-color 150ms ease;
+  }
+
+  .input:focus {
+    border-color: var(--color-accent);
+  }
+
+  .input:disabled {
+    background-color: var(--color-surface-muted);
+    color: var(--color-ink-muted);
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  /**
+   * برچسب وضعیت — «تأییدشده»، «در انتظار پرداخت»، «لغو شده».
+   *
+   * رنگ با کلاس جدا داده می‌شود (`.badge-ok` و مانند آن) تا هیچ رنگ
+   * خامی در کامپوننت‌ها نوشته نشود.
+   */
+  .badge {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.8;
+    white-space: nowrap;
+  }
+
+  .badge-neutral {
+    background-color: var(--color-surface-muted);
+    color: var(--color-ink-muted);
+  }
+
+  .badge-ok {
+    background-color: var(--color-success-surface);
+    color: var(--color-success);
+  }
+
+  .badge-wait {
+    background-color: var(--color-warning-surface);
+    color: var(--color-warning);
+  }
+
+  .badge-off {
+    background-color: var(--color-danger-surface);
+    color: var(--color-danger);
+  }
+
+  /** پیام خطای فرم و کادر هشدار */
+  .alert-error {
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-danger-border);
+    background-color: var(--color-danger-surface);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    color: var(--color-danger);
+  }
+
+  .alert-info {
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface-muted);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
   }
 }
