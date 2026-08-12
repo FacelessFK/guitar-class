@@ -8,6 +8,7 @@ import {
   jsonb,
   pgTable,
   text,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -162,6 +163,20 @@ export const notifications = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * اعلانی که درباره‌ی یک جلسه است به همان جلسه وصل می‌شود.
+     *
+     * فقط ارجاع نیست، کلید ایدمپوتنسی است: جاروی یادآوری هر دقیقه اجرا
+     * می‌شود و باید بتواند بگوید «این یادآوری قبلاً ساخته شده». بدون
+     * ستون، تنها راه، شرط روی محتوای `payload` بود که ایندکس یکتای
+     * قابل اتکا نمی‌دهد.
+     *
+     * `NULL` مجاز است چون همه‌ی اعلان‌ها درباره‌ی جلسه نیستند (خوش‌آمد،
+     * اطلاعیه، تسویه).
+     */
+    bookingId: uuid("booking_id").references(() => bookings.id, {
+      onDelete: "cascade",
+    }),
     type: varchar({ length: 60 }).notNull(),
     channel: notificationChannel().notNull(),
     payload: jsonb().notNull().default(emptyJsonObject),
@@ -176,6 +191,17 @@ export const notifications = pgTable(
   (table) => [
     index("notifications_dispatch_idx").on(table.status, table.scheduledFor),
     index("notifications_user_idx").on(table.userId),
+    /**
+     * یک یادآوری از هر نوع، برای هر کاربر، برای هر جلسه — و بس.
+     *
+     * جارو چند بار در دقیقه هم که اجرا شود، `ON CONFLICT DO NOTHING`
+     * روی همین ایندکس یعنی سطر دوم ساخته نمی‌شود. تکیه کردن به بررسی
+     * «قبلاً هست؟» در کد کافی نیست: دو اجرای هم‌زمان هر دو خالی بودن را
+     * می‌بینند و هر دو درج می‌کنند، و کاربر دو پیامک می‌گیرد.
+     */
+    uniqueIndex("notifications_once_per_booking")
+      .on(table.bookingId, table.userId, table.type)
+      .where(sql`${table.bookingId} IS NOT NULL`),
   ],
 );
 

@@ -8,8 +8,20 @@ import {
   runMaintenance,
   type MaintenanceResult,
 } from "./maintenance.job.js";
+import {
+  SEND_REMINDERS_JOB,
+  runReminders,
+  type ReminderResult,
+} from "./reminder.job.js";
+import {
+  CLOSE_SESSIONS_JOB,
+  runSessionClose,
+  type SessionCloseResult,
+} from "./session-close.job.js";
 
 const logger = new Logger("Worker");
+
+export type JobResult = MaintenanceResult | SessionCloseResult | ReminderResult;
 
 /**
  * جاب را به هندلرش می‌رساند.
@@ -18,10 +30,14 @@ const logger = new Logger("Worker");
  * شود و یک طرف به‌روز نشود، باید همان‌جا سر و صدا کند نه اینکه کارها
  * بی‌صدا انجام نشوند.
  */
-export async function processMaintenanceJob(job: Job): Promise<MaintenanceResult> {
+export async function processMaintenanceJob(job: Job): Promise<JobResult> {
   switch (job.name) {
     case EXPIRE_HOLDS_JOB:
       return runMaintenance();
+    case CLOSE_SESSIONS_JOB:
+      return runSessionClose();
+    case SEND_REMINDERS_JOB:
+      return runReminders();
     default:
       throw new Error(`جاب ناشناخته در صف ${MAINTENANCE_QUEUE}: «${job.name}»`);
   }

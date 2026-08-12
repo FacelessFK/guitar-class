@@ -24,6 +24,8 @@ import {
   runMaintenance,
 } from "./maintenance.job.js";
 import { registerSchedulers } from "./queues.js";
+import { SEND_REMINDERS_JOB } from "./reminder.job.js";
+import { CLOSE_SESSIONS_JOB } from "./session-close.job.js";
 import { createMaintenanceWorker, processMaintenanceJob } from "./worker.js";
 
 /**
@@ -147,11 +149,17 @@ describe("وُرکر نگه‌داری", () => {
     });
   });
 
+  /**
+   * سلامت به هر سه جارو بند است، پس این تست هر سه را در صف می‌گذارد.
+   * اگر جاروی تازه‌ای اضافه شود و ضربانش را ثبت نکند، همین‌جا می‌ایستد.
+   */
   it("ضربان را ثبت می‌کند تا اندپوینت سلامت بتواند وُرکر مرده را ببیند", async () => {
     expect((await readWorkerStatus()).status).toBe("never");
 
     worker = createMaintenanceWorker();
-    await queue.add(EXPIRE_HOLDS_JOB, {});
+    for (const name of [EXPIRE_HOLDS_JOB, CLOSE_SESSIONS_JOB, SEND_REMINDERS_JOB]) {
+      await queue.add(name, {});
+    }
 
     await waitFor(async () => (await readWorkerStatus()).status === "ok");
 
@@ -190,9 +198,29 @@ describe("زمان‌بند تکرارشونده", () => {
     await registerSchedulers(queue);
 
     const schedulers = await queue.getJobSchedulers();
+    const keys = schedulers.map((scheduler) => scheduler.key).sort();
 
-    expect(schedulers).toHaveLength(1);
-    expect(schedulers[0]?.key).toBe(EXPIRE_HOLDS_JOB);
-    expect(Number(schedulers[0]?.every)).toBe(EXPIRE_HOLDS_INTERVAL_MS);
+    // یکی به ازای هر جارو، نه بیشتر — سه بار ثبت هم که شده باشد
+    expect(keys).toEqual([CLOSE_SESSIONS_JOB, EXPIRE_HOLDS_JOB, SEND_REMINDERS_JOB].sort());
+
+    const holds = schedulers.find((scheduler) => scheduler.key === EXPIRE_HOLDS_JOB);
+    expect(Number(holds?.every)).toBe(EXPIRE_HOLDS_INTERVAL_MS);
+  });
+
+  /**
+   * هر جارو باید هندلر داشته باشد.
+   *
+   * زمان‌بندی که هندلر ندارد، هر دقیقه یک جاب شکست‌خورده تولید می‌کند و
+   * کاری که قرار بوده انجام شود هرگز انجام نمی‌شود.
+   */
+  it("هر جاب زمان‌بندی‌شده هندلر دارد", async () => {
+    await registerSchedulers(queue);
+    const schedulers = await queue.getJobSchedulers();
+
+    for (const scheduler of schedulers) {
+      await expect(
+        processMaintenanceJob({ name: scheduler.key } as never),
+      ).resolves.toBeDefined();
+    }
   });
 });

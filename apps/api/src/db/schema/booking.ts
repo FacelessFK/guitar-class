@@ -113,6 +113,24 @@ export const bookings = pgTable(
     actualStartedAt: tstz("actual_started_at"),
     actualEndedAt: tstz("actual_ended_at"),
 
+    /**
+     * اولین ورودِ هر طرف، جدا از هم.
+     *
+     * `actual_started_at` می‌گوید «کسی وارد شد» ولی نمی‌گوید کدامشان، و
+     * سه حالت از چهار حالت جدول عدم حضور (بخش ۵ سند معماری) دقیقاً به
+     * همین تفکیک بند است: عدم حضور استاد جلسه را برمی‌گرداند و پول را
+     * پس می‌دهد، عدم حضور هنرجو جلسه را می‌سوزاند. اشتباه گرفتنشان یعنی
+     * پول اشتباه جابه‌جا می‌شود.
+     *
+     * مثل `actual_started_at` با `COALESCE` نوشته می‌شوند: ورود دوباره‌ی
+     * همان نفر (قطع و وصل شبکه) اولین لحظه را جابه‌جا نمی‌کند.
+     *
+     * همان بدهی اینجا هم برقرار است — گزارش از کلاینت می‌آید و کسی که
+     * وارد اتاق نشده هم می‌تواند خودش را حاضر ثبت کند.
+     */
+    teacherJoinedAt: tstz("teacher_joined_at"),
+    studentJoinedAt: tstz("student_joined_at"),
+
     cancelledAt: tstz("cancelled_at"),
     cancelledById: uuid("cancelled_by_id").references(() => users.id),
     cancellationReason: text("cancellation_reason"),
@@ -125,6 +143,13 @@ export const bookings = pgTable(
     index("bookings_student_scheduled_idx").on(table.studentId, table.scheduledAt),
     /** برای جابی که رزروهای پرداخت‌نشده را منقضی می‌کند */
     index("bookings_hold_expiry_idx").on(table.status, table.holdExpiresAt),
+    /**
+     * برای جاروی بستن خودکار جلسه: «کدام جلسه‌ی باز، پایانش گذشته؟»
+     * بدون این، هر دقیقه کل جدول رزروها اسکن می‌شود.
+     */
+    index("bookings_session_close_idx").on(table.status, table.endsAt),
+    /** برای جاروی یادآوری: «کدام جلسه‌ی قطعی‌شده نزدیک است؟» */
+    index("bookings_reminder_idx").on(table.status, table.scheduledAt),
     index("bookings_enrollment_idx").on(table.enrollmentId),
     check("bookings_duration_positive", sql`${table.durationMinutes} > 0`),
     check("bookings_price_non_negative", sql`${table.priceSnapshot} >= 0`),

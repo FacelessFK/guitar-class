@@ -356,6 +356,99 @@ export async function expireStaleHolds(now: Date = new Date()): Promise<number> 
   return expired.length;
 }
 
+// ---------------------------------------------------------------------------
+// بستن جلسه‌ی تمام‌شده
+// ---------------------------------------------------------------------------
+
+/** وضعیت‌هایی که جلسه از آن‌ها بسته می‌شود — یعنی هنوز باز است. */
+const OPEN_SESSION_STATUSES = ["CONFIRMED", "IN_PROGRESS"] as const;
+
+export type ClosedSessionStatus =
+  | "COMPLETED"
+  | "NO_SHOW_STUDENT"
+  | "NO_SHOW_TEACHER"
+  | "NO_SHOW";
+
+export interface ClosedSession {
+  id: string;
+  status: ClosedSessionStatus;
+  /** برای پیام لاگ و گزارش ادمین */
+  teacherId: string;
+  studentId: string;
+}
+
+/**
+ * جلسه‌هایی که وقتشان گذشته را می‌بندد و نتیجه‌ی حضور را ثبت می‌کند.
+ *
+ * چهار حالت جدول بخش ۵ سند معماری، از روی دو ستونی که ماژول اتاق کلاس
+ * پر می‌کند:
+ *
+ *   • هر دو آمدند    → `COMPLETED`
+ *   • فقط استاد آمد  → `NO_SHOW_STUDENT` (جلسه می‌سوزد)
+ *   • فقط هنرجو آمد  → `NO_SHOW_TEACHER` (جلسه برمی‌گردد + بررسی ادمین)
+ *   • هیچ‌کس نیامد   → `NO_SHOW`
+ *
+ * **اثر مالی اینجا نیست.** این تابع فقط تصمیم می‌گیرد، مثل
+ * `cancelBooking`. ثبت سطر منفی در دفتر کل کار ماژول پرداخت است و جاب
+ * پس‌زمینه دو را به هم وصل می‌کند — دامنه‌ی رزرو نباید از وجود دفتر کل
+ * خبر داشته باشد.
+ *
+ * یک `UPDATE` است، نه خواندن و بعد نوشتن: شرط `status IN (...)` در
+ * `WHERE` یعنی هر جلسه دقیقاً یک بار بسته می‌شود. اجرای دوم آرایه‌ی خالی
+ * برمی‌گرداند، پس بازپرداختِ دوباره هم اتفاق نمی‌افتد. اگر اول می‌خواندیم
+ * و بعد می‌نوشتیم، دو اجرای هم‌زمان هر دو همان سطر را «باز» می‌دیدند.
+ */
+export async function closeFinishedSessions(
+  now: Date = new Date(),
+): Promise<ClosedSession[]> {
+  const cutoff = new Date(
+    now.getTime() - BUSINESS_RULES.NO_SHOW_GRACE_MINUTES * MINUTE_MS,
+  );
+
+  const teacherCame = sql`${bookings.teacherJoinedAt} IS NOT NULL`;
+  const studentCame = sql`${bookings.studentJoinedAt} IS NOT NULL`;
+
+  const closed = await db
+    .update(bookings)
+    .set({
+      // کستِ صریح لازم است: پستگرس رشته‌های داخل `CASE` را `text` حساب
+      // می‌کند و انتساب `text` به ستون شمارشی را رد می‌کند.
+      status: sql`(CASE
+        WHEN ${teacherCame} AND ${studentCame} THEN 'COMPLETED'
+        WHEN ${teacherCame} THEN 'NO_SHOW_STUDENT'
+        WHEN ${studentCame} THEN 'NO_SHOW_TEACHER'
+        ELSE 'NO_SHOW'
+      END)::booking_status`,
+      /**
+       * پایانِ ثبت‌نشده از روی برنامه پر می‌شود — همان شکافی که سند
+       * معماری (بخش ۶.۵) به همین جاب سپرده: کسی که تا لحظه‌ی آخر مانده
+       * و جیتسی بیرونش کرده، رویداد خروجش بعد از بسته شدن پنجره می‌رسد
+       * و رد می‌شود.
+       *
+       * فقط وقتی که جلسه‌ای واقعاً شروع شده باشد. برای جلسه‌ای که
+       * هیچ‌کس نیامده، «پایان» معنایی ندارد و نوشتنش یعنی داده‌ی ساختگی.
+       */
+      actualEndedAt: sql`CASE
+        WHEN ${bookings.actualStartedAt} IS NULL THEN NULL
+        ELSE COALESCE(${bookings.actualEndedAt}, ${bookings.endsAt})
+      END`,
+    })
+    .where(
+      and(
+        inArray(bookings.status, OPEN_SESSION_STATUSES),
+        lt(bookings.endsAt, cutoff),
+      ),
+    )
+    .returning({
+      id: bookings.id,
+      status: bookings.status,
+      teacherId: bookings.teacherId,
+      studentId: bookings.studentId,
+    });
+
+  return closed as ClosedSession[];
+}
+
 /**
  * پس از پرداخت موفق، رزرو را قطعی می‌کند.
  *

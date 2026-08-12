@@ -10,6 +10,14 @@ import { maskPhone, toLocalPhone, type NormalizedPhone } from "@music/shared";
  */
 export interface SmsSender {
   sendOtp(phone: NormalizedPhone, code: string): Promise<void>;
+  /**
+   * پیام آزاد — یادآوری جلسه، اطلاع لغو.
+   *
+   * از `sendOtp` جداست چون در ایران کد ورود از الگوی تأییدشده‌ی «لوکاپ»
+   * می‌رود و پیام آزاد از خط خدماتی. یک متد برای هر دو، در آداپتور
+   * واقعی به یک شرط روی محتوای پیام تبدیل می‌شد.
+   */
+  sendText(phone: NormalizedPhone, text: string): Promise<void>;
 }
 
 /**
@@ -25,6 +33,12 @@ export class ConsoleSmsSender implements SmsSender {
   async sendOtp(phone: NormalizedPhone, code: string): Promise<void> {
     this.logger.warn(
       `\n${"═".repeat(46)}\n  کد ورود برای ${toLocalPhone(phone)}\n  ${code}\n${"═".repeat(46)}`,
+    );
+  }
+
+  async sendText(phone: NormalizedPhone, text: string): Promise<void> {
+    this.logger.warn(
+      `\n${"─".repeat(46)}\n  پیامک به ${toLocalPhone(phone)}\n  ${text}\n${"─".repeat(46)}`,
     );
   }
 }
@@ -48,6 +62,11 @@ export class KavenegarSmsSender implements SmsSender {
     throw new Error(
       `ارسال پیامک به ${maskPhone(phone)} با الگوی «${this.template}» هنوز پیاده نشده است.`,
     );
+  }
+
+  async sendText(phone: NormalizedPhone, text: string): Promise<void> {
+    void text;
+    throw new Error(`ارسال پیامک آزاد به ${maskPhone(phone)} هنوز پیاده نشده است.`);
   }
 }
 
@@ -74,4 +93,23 @@ export function createSmsSender(): SmsSender {
   }
 
   return new ConsoleSmsSender();
+}
+
+let sender: SmsSender | undefined;
+
+/**
+ * فرستنده‌ی مشترک پروسه.
+ *
+ * کنترلر احراز هویت فرستنده‌اش را از تزریق وابستگی نست می‌گیرد، ولی
+ * وُرکر پروسه‌ی جدایی است و نستی ندارد. این تابع همان نقش را برای
+ * جاب‌های پس‌زمینه بازی می‌کند — دقیقاً مثل `paymentGateway()`.
+ */
+export function smsSender(): SmsSender {
+  sender ??= createSmsSender();
+  return sender;
+}
+
+/** فقط برای تست: فرستنده را عوض می‌کند. */
+export function setSmsSender(replacement: SmsSender): void {
+  sender = replacement;
 }

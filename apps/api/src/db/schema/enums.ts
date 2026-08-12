@@ -39,6 +39,7 @@ export const bookingStatus = pgEnum("booking_status", [
   "CANCELLED_BY_TEACHER",
   "NO_SHOW_STUDENT",
   "NO_SHOW_TEACHER",
+  "NO_SHOW",
   "EXPIRED",
 ]);
 

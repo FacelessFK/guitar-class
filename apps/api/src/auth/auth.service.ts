@@ -5,7 +5,7 @@ import { db } from "../db/client.js";
 import { users } from "../db/schema/index.js";
 import { OTP_CONFIG, requestOtp, verifyOtp } from "./otp.service.js";
 import { issueAccessToken, issueRefreshToken, rotateRefreshToken } from "./token.service.js";
-import type { SmsSender } from "./sms.port.js";
+import type { SmsSender } from "../notification/sms.port.js";
 
 export class AuthError extends Error {
   constructor(

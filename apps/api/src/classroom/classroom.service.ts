@@ -225,20 +225,30 @@ export async function recordAttendance(
 ): Promise<AttendanceResult> {
   const now = input.now ?? new Date();
   const booking = await loadBooking(input.bookingId);
-  assertMayEnterRoom(booking, input.userId, now);
+  const { isTeacher } = assertMayEnterRoom(booking, input.userId, now);
 
   if (input.event === "JOINED") {
+    // داخل `sql` نگاشتِ ستون اعمال نمی‌شود، پس `Date` خام به درایور
+    // می‌رسد و رد می‌شود؛ رشته‌ی ISO با کست صریح فرستاده می‌شود.
+    const at = sql`${now.toISOString()}::timestamptz`;
+    const side = isTeacher
+      ? { teacherJoinedAt: sql`COALESCE(${bookings.teacherJoinedAt}, ${at})` }
+      : { studentJoinedAt: sql`COALESCE(${bookings.studentJoinedAt}, ${at})` };
+
     /**
      * `COALESCE` یعنی نفر دوم شروع را جابه‌جا نمی‌کند: «کِی جلسه شروع
      * شد» یعنی لحظه‌ی ورود اولین نفر. اتمی است تا ورود هم‌زمان استاد و
      * هنرجو دو مقدار متفاوت ننویسد.
+     *
+     * ستون همان طرف هم کنارش پر می‌شود. جاروی عدم حضور باید بداند کدام
+     * یک نیامده، و `actual_started_at` فقط می‌گوید یک نفر آمد. اینجا
+     * تنها جایی است که هویت گزارش‌دهنده در دست است.
      */
     const [updated] = await db
       .update(bookings)
       .set({
-        // داخل `sql` نگاشتِ ستون اعمال نمی‌شود، پس `Date` خام به درایور
-        // می‌رسد و رد می‌شود؛ رشته‌ی ISO با کست صریح فرستاده می‌شود.
-        actualStartedAt: sql`COALESCE(${bookings.actualStartedAt}, ${now.toISOString()}::timestamptz)`,
+        actualStartedAt: sql`COALESCE(${bookings.actualStartedAt}, ${at})`,
+        ...side,
         status: "IN_PROGRESS",
       })
       .where(

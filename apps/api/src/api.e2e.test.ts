@@ -8,7 +8,7 @@ import { AppModule } from "./app.module.js";
 import { DomainExceptionFilter } from "./common/domain-exception.filter.js";
 import { AuthExceptionFilter } from "./common/auth-exception.filter.js";
 import { BigIntSerializationInterceptor } from "./common/serialization.interceptor.js";
-import { recordHeartbeat } from "./queue/heartbeat.js";
+import { SWEEPS, recordHeartbeat, type SweepName } from "./queue/heartbeat.js";
 import {
   accessTokenFor,
   closeDatabase,
@@ -27,6 +27,12 @@ import {
  */
 
 const SATURDAY = "2026-08-15";
+
+/** ضربان همه‌ی جاروها — یعنی «وُرکر کامل کار می‌کند». */
+async function beatAll(at: Date = new Date()): Promise<void> {
+  const sweeps: SweepName[] = Object.values(SWEEPS);
+  await Promise.all(sweeps.map((sweep) => recordHeartbeat(sweep, at)));
+}
 
 let app: INestApplication;
 let server: App;
@@ -84,7 +90,7 @@ describe("GET /api/health", () => {
   });
 
   it("با ضربان تازه‌ی وُرکر سالم می‌شود", async () => {
-    await recordHeartbeat();
+    await beatAll();
 
     const response = await request(server).get("/api/health").expect(200);
 
@@ -94,7 +100,23 @@ describe("GET /api/health", () => {
   });
 
   it("ضربان کهنه را «کهنه» گزارش می‌کند، نه سالم", async () => {
-    await recordHeartbeat(new Date(Date.now() - 60 * 60_000));
+    await beatAll(new Date(Date.now() - 60 * 60_000));
+
+    const response = await request(server).get("/api/health").expect(200);
+
+    expect(response.body.status).toBe("degraded");
+    expect(response.body.worker).toBe("stale");
+  });
+
+  /**
+   * هر جارو ضربان خودش را دارد و سلامت، بدترینشان است.
+   *
+   * با یک ضربان مشترک، جاروی بستن جلسه می‌توانست هفته‌ها خوابیده باشد و
+   * سرویس همچنان «سالم» گزارش شود، چون جاروی مهلت پرداخت کار می‌کرد.
+   */
+  it("خوابیدن یکی از جاروها را هم می‌بیند", async () => {
+    await beatAll();
+    await recordHeartbeat(SWEEPS.CLOSE_SESSIONS, new Date(Date.now() - 60 * 60_000));
 
     const response = await request(server).get("/api/health").expect(200);
 

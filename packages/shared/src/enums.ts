@@ -26,6 +26,8 @@ export const BookingStatus = {
   CANCELLED_BY_TEACHER: "CANCELLED_BY_TEACHER",
   NO_SHOW_STUDENT: "NO_SHOW_STUDENT",
   NO_SHOW_TEACHER: "NO_SHOW_TEACHER",
+  /** هیچ‌کدام وارد اتاق نشدند — نه استاد، نه هنرجو */
+  NO_SHOW: "NO_SHOW",
   /** مهلت پرداخت تمام شد و اسلات آزاد شد */
   EXPIRED: "EXPIRED",
 } as const;

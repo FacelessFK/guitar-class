@@ -114,6 +114,19 @@ export const ledgerEntries = pgTable(
     uniqueIndex("ledger_one_earning_per_booking")
       .on(table.bookingId)
       .where(sql`${table.type} = 'EARNING'`),
+    /**
+     * و به همان دلیل، حداکثر یک سطر بازپرداخت.
+     *
+     * از وقتی جاروی عدم حضور هم می‌تواند بازپرداخت بزند، دو مسیر مستقل
+     * (لغو دستی و عدم حضور استاد) به یک رزرو می‌رسند.
+     * `recordCancellationRefund` قبل از درج بررسی می‌کند سطری هست یا نه،
+     * ولی بررسی‌کردن-سپس-درج‌کردن در برابر دو اجرای هم‌زمان مصون نیست.
+     * درج دوم اینجا به خطا می‌خورد، جاب دوباره تلاش می‌کند و این بار
+     * سطر موجود را می‌بیند — به جای اینکه پول دو بار برگردد.
+     */
+    uniqueIndex("ledger_one_refund_per_booking")
+      .on(table.bookingId)
+      .where(sql`${table.type} = 'REFUND'`),
     check(
       "ledger_amounts_balance",
       sql`${table.grossAmount} = ${table.commission} + ${table.netAmount}`,

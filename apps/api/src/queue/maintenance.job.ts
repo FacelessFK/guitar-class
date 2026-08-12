@@ -2,7 +2,7 @@ import { Logger } from "@nestjs/common";
 
 import { expireStaleHolds } from "../booking/booking.service.js";
 import { expireStalePendingOrders } from "../payment/payment.service.js";
-import { recordHeartbeat } from "./heartbeat.js";
+import { SWEEPS, recordHeartbeat } from "./heartbeat.js";
 
 /**
  * جاب نگه‌داری: آزاد کردن اسلات‌هایی که مهلت پرداختشان تمام شده.
@@ -13,8 +13,15 @@ import { recordHeartbeat } from "./heartbeat.js";
  * نشود اسلات به کسی نمی‌رسد.
  */
 
+/**
+ * یک صف برای همه‌ی کارهای پس‌زمینه.
+ *
+ * جاب‌ها جدا هستند ولی صف یکی است: وُرکر یک پروسه است و
+ * `concurrency: 1` دارد، پس صف دوم فقط یک اتصال ردیس بیشتر می‌گرفت
+ * بی‌آنکه چیزی موازی‌تر شود.
+ */
 export const MAINTENANCE_QUEUE = "maintenance";
-export const EXPIRE_HOLDS_JOB = "expire-holds";
+export const EXPIRE_HOLDS_JOB = SWEEPS.EXPIRE_HOLDS;
 
 /**
  * هر دقیقه یک بار.
@@ -57,7 +64,7 @@ export async function runMaintenance(now: Date = new Date()): Promise<Maintenanc
 
   // بعد از کار ثبت می‌شود نه قبلش: ضربان باید بگوید جارو واقعاً تمام
   // شده، نه اینکه شروع شده و وسطش گیر کرده
-  await recordHeartbeat(now);
+  await recordHeartbeat(SWEEPS.EXPIRE_HOLDS, now);
 
   // فقط وقتی کاری انجام شده لاگ می‌شود؛ وگرنه هر دقیقه یک خط بی‌محتوا
   // در لاگ می‌نشیند و چیزهای مهم را دفن می‌کند.

@@ -6,6 +6,18 @@ import {
   EXPIRE_HOLDS_JOB,
   MAINTENANCE_QUEUE,
 } from "./maintenance.job.js";
+import { SEND_REMINDERS_INTERVAL_MS, SEND_REMINDERS_JOB } from "./reminder.job.js";
+import {
+  CLOSE_SESSIONS_INTERVAL_MS,
+  CLOSE_SESSIONS_JOB,
+} from "./session-close.job.js";
+
+/** جاروهای تکرارشونده — هر کدام زمان‌بند مستقل خودش را دارد. */
+const SCHEDULES: readonly { name: string; everyMs: number }[] = [
+  { name: EXPIRE_HOLDS_JOB, everyMs: EXPIRE_HOLDS_INTERVAL_MS },
+  { name: CLOSE_SESSIONS_JOB, everyMs: CLOSE_SESSIONS_INTERVAL_MS },
+  { name: SEND_REMINDERS_JOB, everyMs: SEND_REMINDERS_INTERVAL_MS },
+];
 
 /**
  * صف‌ها.
@@ -38,7 +50,7 @@ export function maintenanceQueue(): Queue {
 }
 
 /**
- * زمان‌بندِ جاب تکرارشونده را ثبت می‌کند.
+ * زمان‌بندِ جاب‌های تکرارشونده را ثبت می‌کند.
  *
  * `upsertJobScheduler` با شناسه‌ی ثابت صدا زده می‌شود، پس هر بار بالا
  * آمدن وُرکر همان زمان‌بند را به‌روز می‌کند و زمان‌بندهای موازی روی هم
@@ -46,11 +58,13 @@ export function maintenanceQueue(): Queue {
  * زمان‌بندِ دیگر اضافه می‌کرد و جارو چند بار در دقیقه اجرا می‌شد.
  */
 export async function registerSchedulers(queue: Queue = maintenanceQueue()): Promise<void> {
-  await queue.upsertJobScheduler(
-    EXPIRE_HOLDS_JOB,
-    { every: EXPIRE_HOLDS_INTERVAL_MS },
-    { name: EXPIRE_HOLDS_JOB },
-  );
+  for (const schedule of SCHEDULES) {
+    await queue.upsertJobScheduler(
+      schedule.name,
+      { every: schedule.everyMs },
+      { name: schedule.name },
+    );
+  }
 }
 
 export async function closeQueues(): Promise<void> {

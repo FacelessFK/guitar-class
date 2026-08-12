@@ -140,6 +140,8 @@ const readBooking = async (bookingId: string) => {
       status: bookings.status,
       actualStartedAt: bookings.actualStartedAt,
       actualEndedAt: bookings.actualEndedAt,
+      teacherJoinedAt: bookings.teacherJoinedAt,
+      studentJoinedAt: bookings.studentJoinedAt,
     })
     .from(bookings)
     .where(eq(bookings.id, bookingId));
@@ -386,6 +388,43 @@ describe("POST /api/bookings/:id/attendance", () => {
     const second = await reportAttendance(booking.id, studentToken, "JOINED").expect(200);
 
     expect(second.body.actualStartedAt).toBe(first.body.actualStartedAt);
+  });
+
+  /**
+   * تفکیک طرف‌ها، چیزی که جاروی عدم حضور رویش بنا شده.
+   *
+   * `actual_started_at` فقط می‌گوید «کسی آمد». اگر ستون طرفِ اشتباه پر
+   * شود، جارو عدم حضور استاد را با عدم حضور هنرجو عوضی می‌گیرد و پول
+   * در جهت اشتباه جابه‌جا می‌شود.
+   */
+  it("ورود هر طرف را جدا ثبت می‌کند", async () => {
+    const booking = await seedBooking();
+
+    await reportAttendance(booking.id, teacherToken, "JOINED").expect(200);
+
+    const afterTeacher = await readBooking(booking.id);
+    expect(afterTeacher.teacherJoinedAt).not.toBeNull();
+    expect(afterTeacher.studentJoinedAt).toBeNull();
+
+    await reportAttendance(booking.id, studentToken, "JOINED").expect(200);
+
+    const afterStudent = await readBooking(booking.id);
+    expect(afterStudent.studentJoinedAt).not.toBeNull();
+    // ورود هنرجو نباید لحظه‌ی ورود استاد را جابه‌جا کند
+    expect(afterStudent.teacherJoinedAt).toEqual(afterTeacher.teacherJoinedAt);
+  });
+
+  /** قطع و وصل شدن شبکه‌ی استاد نباید ورود اولش را عقب بیندازد. */
+  it("ورود دوباره‌ی همان نفر لحظه‌ی ورودش را جابه‌جا نمی‌کند", async () => {
+    const booking = await seedBooking();
+
+    await reportAttendance(booking.id, teacherToken, "JOINED").expect(200);
+    const first = await readBooking(booking.id);
+
+    await reportAttendance(booking.id, teacherToken, "JOINED").expect(200);
+    const second = await readBooking(booking.id);
+
+    expect(second.teacherJoinedAt).toEqual(first.teacherJoinedAt);
   });
 
   it("خروج پس از ورود، پایان واقعی را ثبت می‌کند", async () => {

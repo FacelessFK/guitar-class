@@ -19,7 +19,7 @@ import { CurrentUser } from "../common/current-user.decorator.js";
 import { Public, type AuthenticatedRequest } from "./auth.guard.js";
 import { requestLoginCode, refreshSession, verifyLoginCode } from "./auth.service.js";
 import { revokeAllUserTokens, revokeRefreshToken, type AccessTokenPayload } from "./token.service.js";
-import { createSmsSender, type SmsSender } from "./sms.port.js";
+import { createSmsSender, type SmsSender } from "../notification/sms.port.js";
 
 @Injectable()
 export class AuthProvider {
