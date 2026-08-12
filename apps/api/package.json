@@ -10,6 +10,7 @@
     "start:worker": "node --env-file-if-exists=../../.env --import @swc-node/register/esm-register src/worker.ts",
     "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
     "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate",
+    "db:seed": "node --env-file-if-exists=../../.env --import @swc-node/register/esm-register src/db/seed.ts",
     "db:push": "dotenv -e ../../.env -- drizzle-kit push",
     "db:studio": "dotenv -e ../../.env -- drizzle-kit studio",
     "db:check": "drizzle-kit check",

@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/**
+ * ⚠️ این فایل عمداً **جهت هنری ندارد**.
+ *
+ * رنگ‌ها، تایپوگرافی و لحن بصری هنوز انتخاب نشده‌اند و تصمیمشان با
+ * صاحب محصول است. تا آن موقع اینجا فقط توکن‌های خنثی می‌نشینند تا
+ * ساختار صفحه‌ها قابل دیدن و تست باشد. وقتی جهت انتخاب شد، همین
+ * توکن‌ها عوض می‌شوند و صفحه‌ها دست نمی‌خورند — به همین دلیل هیچ رنگ
+ * خامی در کامپوننت‌ها نوشته نشده.
+ */
+@theme {
+  --font-sans: var(--font-vazirmatn), system-ui, sans-serif;
+
+  /* خنثی — جای‌گیرِ پالت واقعی */
+  --color-surface: oklch(100% 0 0);
+  --color-surface-muted: oklch(97% 0 0);
+  --color-border: oklch(90% 0 0);
+  --color-ink: oklch(25% 0 0);
+  --color-ink-muted: oklch(50% 0 0);
+  --color-accent: oklch(45% 0 0);
+  --color-accent-ink: oklch(100% 0 0);
+}
+
+@layer base {
+  html {
+    /* عدد فارسی در کل صفحات عمومی */
+    font-variant-numeric: normal;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /**
+   * فارسی در وزن‌های خیلی سنگین بد رندر می‌شود و در RTL فاصله‌ی حروف
+   * باید کمی بازتر باشد؛ این دو تنظیم مستقل از جهت هنری‌اند.
+   */
+  h1,
+  h2,
+  h3 {
+    line-height: 1.7;
+    text-wrap: balance;
+  }
+
+  p,
+  li {
+    line-height: 2;
+  }
+}

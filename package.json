@@ -12,6 +12,8 @@
     "dev:infra:reset": "docker compose down -v && docker compose up -d",
     "dev:worker": "pnpm --filter @music/api dev:worker",
     "db:migrate": "pnpm --filter @music/api db:migrate",
+    "db:seed": "pnpm --filter @music/api db:seed",
+    "dev:web": "pnpm --filter @music/web dev",
     "db:studio": "pnpm --filter @music/api db:studio",
     "db:generate": "pnpm --filter @music/api db:generate",
     "test": "pnpm -r test",
