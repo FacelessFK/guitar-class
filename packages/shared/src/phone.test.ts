@@ -5,7 +5,7 @@ import {
   normalizePhone,
   toLatinDigits,
   toLocalPhone,
-} from "./phone.js";
+} from "./phone";
 
 const CANONICAL = "+989121234567";
 

@@ -9,8 +9,8 @@
  * روشن می‌کند، نه اینکه در اتاق را باز کند.
  */
 
-import { BUSINESS_RULES } from "./enums.js";
-import type { Interval } from "./interval.js";
+import { BUSINESS_RULES } from "./enums";
+import type { Interval } from "./interval";
 
 const MINUTE_MS = 60_000;
 

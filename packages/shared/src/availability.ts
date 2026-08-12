@@ -21,7 +21,7 @@ import {
   weekdayOfDateKey,
   type DateKey,
   type Weekday,
-} from "./time.js";
+} from "./time";
 import {
   clampTo,
   normalize,
@@ -29,7 +29,7 @@ import {
   sliceIntoSlots,
   subtract,
   type Interval,
-} from "./interval.js";
+} from "./interval";
 
 /** یک پنجره‌ی هفتگی تکرارشونده در برنامه‌ی استاد. ساعت‌ها به وقت تهران. */
 export interface AvailabilityRule {

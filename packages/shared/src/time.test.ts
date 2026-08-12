@@ -11,7 +11,7 @@ import {
   tehranMinutesOfDay,
   tehranWeekday,
   weekdayOfDateKey,
-} from "./time.js";
+} from "./time";
 
 describe("آفست ثابت تهران", () => {
   /**

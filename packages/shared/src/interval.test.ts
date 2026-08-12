@@ -6,7 +6,7 @@ import {
   sliceIntoSlots,
   subtract,
   type Interval,
-} from "./interval.js";
+} from "./interval";
 
 /** کمک‌کننده‌ی خوانایی: ساعت‌های ساده به‌جای میلی‌ثانیه‌ی یونیکس. */
 const h = (hour: number): number => hour * 3_600_000;

@@ -6,9 +6,9 @@ import {
   type AvailabilityException,
   type AvailabilityRule,
   type ComputeAvailabilityInput,
-} from "./availability.js";
-import { Weekday, formatMinutes, fromTehranWallClock, tehranMinutesOfDay } from "./time.js";
-import type { Interval } from "./interval.js";
+} from "./availability";
+import { Weekday, formatMinutes, fromTehranWallClock, tehranMinutesOfDay } from "./time";
+import type { Interval } from "./interval";
 
 /**
  * ۱۵ اوت ۲۰۲۶ شنبه است — اولین روز هفته در تقویم ایرانی.

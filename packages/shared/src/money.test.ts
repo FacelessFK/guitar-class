@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { negateSplit, parsePercent, splitCommission, sumRial } from "./money.js";
+import { negateSplit, parsePercent, splitCommission, sumRial } from "./money";
 
 describe("خواندن درصد", () => {
   it("عدد صحیح را می‌خواند", () => {

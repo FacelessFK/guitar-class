@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BUSINESS_RULES } from "./enums.js";
-import { roomState, roomWindow } from "./classroom.js";
+import { BUSINESS_RULES } from "./enums";
+import { roomState, roomWindow } from "./classroom";
 
 const MINUTE = 60_000;
 
