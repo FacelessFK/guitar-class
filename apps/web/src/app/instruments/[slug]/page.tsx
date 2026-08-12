@@ -151,7 +151,7 @@ function TeacherCard({
   return (
     <Link
       href={`/teachers/${teacher.slug}`}
-      className="block h-full rounded-xl border border-border p-5"
+      className="card"
     >
       <h3 className="font-bold">{teacher.fullName}</h3>
       <p className="mt-1 text-sm text-ink-muted">{teacher.headline}</p>

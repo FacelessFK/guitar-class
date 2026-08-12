@@ -30,13 +30,13 @@ export default async function HomePage() {
         <div className="mt-8 flex flex-wrap gap-4">
           <Link
             href="/teachers"
-            className="rounded-lg bg-accent px-5 py-3 text-accent-ink"
+            className="btn-primary"
           >
             دیدن استادها
           </Link>
           <Link
             href="/rules"
-            className="rounded-lg border border-border px-5 py-3"
+            className="btn-secondary"
           >
             قوانین و سیاست لغو
           </Link>
@@ -56,7 +56,7 @@ export default async function HomePage() {
               <li key={instrument.id}>
                 <Link
                   href={`/instruments/${instrument.slug}`}
-                  className="block h-full rounded-xl border border-border p-5"
+                  className="card"
                 >
                   <h3 className="font-bold">{instrument.nameFa}</h3>
                   {instrument.descriptionFa ? (

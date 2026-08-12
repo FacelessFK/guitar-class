@@ -102,7 +102,7 @@ export default async function TeacherPage({ params }: PageProps) {
               {teacher.offerings.map((offering) => (
                 <li
                   key={offering.id}
-                  className="rounded-xl border border-border p-5"
+                  className="card"
                 >
                   <h3 className="font-bold">{offering.instrumentName}</h3>
                   <p className="mt-2 text-sm text-ink-muted">

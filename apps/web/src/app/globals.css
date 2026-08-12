@@ -1,33 +1,36 @@
 @import "tailwindcss";
 
 /**
- * ⚠️ این فایل عمداً **جهت هنری ندارد**.
+ * جهت بصری: مینیمال و مدرن.
  *
- * رنگ‌ها، تایپوگرافی و لحن بصری هنوز انتخاب نشده‌اند و تصمیمشان با
- * صاحب محصول است. تا آن موقع اینجا فقط توکن‌های خنثی می‌نشینند تا
- * ساختار صفحه‌ها قابل دیدن و تست باشد. وقتی جهت انتخاب شد، همین
- * توکن‌ها عوض می‌شوند و صفحه‌ها دست نمی‌خورند — به همین دلیل هیچ رنگ
- * خامی در کامپوننت‌ها نوشته نشده.
+ * سفید، کنتراست بالا، یک اکسنت آبی سرد. انتخاب‌شده در ۱۲ اوت ۲۰۲۶.
+ *
+ * همه‌ی رنگ‌ها فقط اینجا تعریف می‌شوند و هیچ رنگ خامی در کامپوننت‌ها
+ * نوشته نمی‌شود؛ عوض کردن جهت بصری یعنی عوض کردن همین چند خط.
+ *
+ * ⚠️ از نام‌های تولیدشده‌ی `@theme` استفاده کنید (`text-ink-muted`،
+ * `bg-accent`، `border-border`)، نه از نحو براکتی. تیلویند ۴ کلاسی مثل
+ * `text-[--color-ink-muted]` را به `color:--color-ink-muted` تبدیل
+ * می‌کند که CSS نامعتبر است و مرورگر بی‌صدا دورش می‌اندازد — رنگ
+ * ناپدید می‌شود بدون اینکه چیزی خطا بدهد.
  */
 @theme {
   --font-sans: var(--font-vazirmatn), system-ui, sans-serif;
 
-  /* خنثی — جای‌گیرِ پالت واقعی */
-  --color-surface: oklch(100% 0 0);
-  --color-surface-muted: oklch(97% 0 0);
-  --color-border: oklch(90% 0 0);
-  --color-ink: oklch(25% 0 0);
-  --color-ink-muted: oklch(50% 0 0);
-  --color-accent: oklch(45% 0 0);
-  --color-accent-ink: oklch(100% 0 0);
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-border: #e2e8f0;
+
+  --color-ink: #0f172a;
+  --color-ink-muted: #64748b;
+
+  --color-accent: #2563eb;
+  /** حالت hover و فشرده‌شدن دکمه‌ی اصلی */
+  --color-accent-strong: #1d4ed8;
+  --color-accent-ink: #ffffff;
 }
 
 @layer base {
-  html {
-    /* عدد فارسی در کل صفحات عمومی */
-    font-variant-numeric: normal;
-  }
-
   body {
     background-color: var(--color-surface);
     color: var(--color-ink);
@@ -35,8 +38,9 @@
   }
 
   /**
-   * فارسی در وزن‌های خیلی سنگین بد رندر می‌شود و در RTL فاصله‌ی حروف
-   * باید کمی بازتر باشد؛ این دو تنظیم مستقل از جهت هنری‌اند.
+   * فارسی به فضای عمودی بیشتری از لاتین نیاز دارد — کشیدگی حروف و
+   * زیر و زبر باعث می‌شود سطرهای فشرده به هم بچسبند. این دو تنظیم
+   * مستقل از جهت بصری‌اند و با عوض شدن پالت نباید حذف شوند.
    */
   h1,
   h2,
@@ -48,5 +52,66 @@
   p,
   li {
     line-height: 2;
+  }
+
+  /* حلقه‌ی فوکوس باید در کل سایت یکسان و دیده‌شدنی باشد */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /**
+   * کارت — در فهرست ساز، استاد و سرویس تکرار می‌شود.
+   *
+   * به‌جای تکرار همین پنج کلاس در چهار فایل، یک کلاس معنایی: تغییر
+   * بعدی در ظاهر کارت‌ها یک جا انجام می‌شود.
+   */
+  .card {
+    display: block;
+    height: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-surface);
+    padding: 1.25rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    transition:
+      box-shadow 150ms ease,
+      border-color 150ms ease;
+  }
+
+  a.card:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 4px 12px rgb(15 23 42 / 0.08);
+  }
+
+  /** دکمه‌ی اصلی — «رزرو» و «دیدن استادها» */
+  .btn-primary {
+    display: inline-block;
+    border-radius: 0.5rem;
+    background-color: var(--color-accent);
+    padding: 0.75rem 1.25rem;
+    font-weight: 600;
+    color: var(--color-accent-ink);
+    transition: background-color 150ms ease;
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-accent-strong);
+  }
+
+  /** دکمه‌ی ثانویه — کنار دکمه‌ی اصلی، بدون رقابت با آن */
+  .btn-secondary {
+    display: inline-block;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-border);
+    padding: 0.75rem 1.25rem;
+    font-weight: 500;
+    transition: border-color 150ms ease;
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--color-ink-muted);
   }
 }

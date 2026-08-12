@@ -52,7 +52,7 @@ export default async function TeachersPage() {
               <li key={teacher.profileId}>
                 <Link
                   href={`/teachers/${teacher.slug}`}
-                  className="block h-full rounded-xl border border-border p-5"
+                  className="card"
                 >
                   <h2 className="font-bold">{teacher.fullName}</h2>
                   <p className="mt-1 text-sm text-ink-muted">
