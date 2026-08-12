@@ -26,6 +26,11 @@ export default defineConfig({
     }),
   ],
   test: {
+    /**
+     * ساخت دیتابیس تست و اجرای مایگریشن‌ها — یک بار پیش از کل اجرا.
+     * جداسازی محیط تست از توسعه در `src/test/env.ts` توضیح داده شده.
+     */
+    globalSetup: ["./src/test/global-setup.ts"],
     setupFiles: ["./src/test/setup.ts"],
     /**
      * تست‌های یکپارچگی روی یک دیتابیس مشترک کار می‌کنند و بین تست‌ها

@@ -1,20 +1,28 @@
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  assertTestDatabase,
+  loadRootEnv,
+  testDatabaseUrl,
+  testRedisUrl,
+} from "./env.js";
 
 /**
- * متغیرهای محیطی را از `.env` ریشه‌ی مونوریپو بار می‌کند.
+ * محیط هر فایل تست.
  *
- * از `process.loadEnvFile` نود استفاده می‌شود تا وابستگی اضافه‌ای لازم
- * نباشد. تست‌ها از `apps/api` اجرا می‌شوند.
+ * ترتیب اینجا حیاتی است: `DATABASE_URL` و `REDIS_URL` باید **پیش از**
+ * اولین import از `db/client.ts` یا `redis/client.ts` جایگزین شوند، چون
+ * آن دو ماژول اتصال را در زمان بارگذاری و از روی همین متغیرها می‌سازند.
+ * ویتست `setupFiles` را پیش از ماژول تست بار می‌کند، پس این تنها جای
+ * درست برای این کار است — نه `globalSetup` که در پروسه‌ی دیگری اجرا
+ * می‌شود و متغیرهایش به اینجا نمی‌رسند.
  */
-const envPath = resolve(process.cwd(), "../../.env");
 
-if (existsSync(envPath)) {
-  process.loadEnvFile(envPath);
-}
+loadRootEnv();
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL تعریف نشده است. `cp .env.example .env` و `pnpm dev:infra` را اجرا کنید.",
-  );
-}
+const databaseUrl = testDatabaseUrl();
+
+// حتی با وجود بررسی در `globalSetup`، اینجا هم بررسی می‌شود: این پروسه
+// همان جایی است که واقعاً `TRUNCATE` را اجرا می‌کند.
+assertTestDatabase(databaseUrl);
+
+process.env.DATABASE_URL = databaseUrl;
+process.env.REDIS_URL = testRedisUrl();

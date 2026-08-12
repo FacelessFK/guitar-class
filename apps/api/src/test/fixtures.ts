@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import { db, sqlClient } from "../db/client.js";
 import { closeRedis, redis } from "../redis/client.js";
+import { assertTestDatabase } from "./env.js";
 import {
   availabilityRules,
   instruments,
@@ -19,8 +20,17 @@ import {
  * اثبات نیست.
  */
 
-/** همه‌ی جدول‌ها را خالی می‌کند. بین تست‌ها صدا زده می‌شود. */
+/**
+ * همه‌ی جدول‌ها را خالی می‌کند. بین تست‌ها صدا زده می‌شود.
+ *
+ * بررسی نام دیتابیس دقیقاً پیش از `TRUNCATE` تکرار می‌شود. `setup.ts`
+ * هم همین را بررسی می‌کند، ولی این تابع `export` شده است و مخربترین کار
+ * کل مخزن را انجام می‌دهد؛ تکیه کردنش به اینکه «یک جای دیگر بررسی شده»
+ * یعنی اولین import اشتباه، دیتابیس توسعه را پاک می‌کند.
+ */
 export async function resetDatabase(): Promise<void> {
+  assertTestDatabase(process.env.DATABASE_URL ?? "");
+
   await db.execute(sql`
     TRUNCATE TABLE
       bookings, enrollments, order_items, orders, ledger_entries, payouts,
