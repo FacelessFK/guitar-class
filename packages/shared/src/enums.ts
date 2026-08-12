@@ -114,6 +114,30 @@ export const RecordingStatus = {
 } as const;
 export type RecordingStatus = (typeof RecordingStatus)[keyof typeof RecordingStatus];
 
+/**
+ * چرا یک جلسه به میز ادمین رسیده است.
+ *
+ * مقادیرش عمداً با `BookingStatus` هم‌نام‌اند ولی همان نیستند: وضعیت
+ * رزرو می‌گوید جلسه چطور تمام شد، این می‌گوید چه چیزی باید بررسی شود.
+ * جدا بودنشان یعنی فردا «اختلاف مالی» یا «شکایت هنرجو» بدون دست زدن
+ * به چرخه‌ی حیات رزرو به این فهرست اضافه شود.
+ */
+export const SessionReviewReason = {
+  /** هنرجو آمد، استاد نه — پول برگشته و باید با استاد تسویه‌ی حساب شود */
+  NO_SHOW_TEACHER: "NO_SHOW_TEACHER",
+  /** هیچ‌کدام نیامدند — تکلیف جلسه روشن نیست */
+  NO_SHOW: "NO_SHOW",
+} as const;
+export type SessionReviewReason =
+  (typeof SessionReviewReason)[keyof typeof SessionReviewReason];
+
+export const SessionReviewStatus = {
+  OPEN: "OPEN",
+  RESOLVED: "RESOLVED",
+} as const;
+export type SessionReviewStatus =
+  (typeof SessionReviewStatus)[keyof typeof SessionReviewStatus];
+
 export const NotificationChannel = {
   SMS: "SMS",
   IN_APP: "IN_APP",

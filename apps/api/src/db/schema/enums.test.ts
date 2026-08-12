@@ -99,6 +99,22 @@ describe("همگامی شمارشی‌های دیتابیس و پکیج مشتر
     );
   });
 
+  it("SessionReviewReason", () => {
+    expectSameValues(
+      "SessionReviewReason",
+      dbEnums.sessionReviewReason.enumValues,
+      shared.SessionReviewReason,
+    );
+  });
+
+  it("SessionReviewStatus", () => {
+    expectSameValues(
+      "SessionReviewStatus",
+      dbEnums.sessionReviewStatus.enumValues,
+      shared.SessionReviewStatus,
+    );
+  });
+
   it("ExceptionType", () => {
     expect(new Set(dbEnums.exceptionType.enumValues)).toEqual(new Set(["BLOCK", "EXTRA"]));
   });

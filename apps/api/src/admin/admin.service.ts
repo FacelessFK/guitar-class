@@ -31,6 +31,7 @@ import {
   users,
 } from "../db/schema/index.js";
 import { teacherEarningsBreakdown } from "../payment/payment.service.js";
+import { countOpenReviews, openReviewsForBookings } from "./review.service.js";
 import { IN_APP_TYPES, notifyInApp } from "../notification/in-app.service.js";
 import { TeacherSlugTakenError } from "../teacher/errors.js";
 import {
@@ -472,6 +473,14 @@ export interface AdminBookingRow {
   sessionIndex: number | null;
   teacherJoinedAt: string | null;
   studentJoinedAt: string | null;
+  /**
+   * پرونده‌ی بررسیِ بازِ این جلسه، اگر داشته باشد.
+   *
+   * فهرست رزروها جای رسیدگی نیست — صف بررسی جای خودش را دارد — ولی
+   * ادمینی که اینجا روی «عدم حضور استاد» فیلتر کرده باید بتواند از
+   * همین‌جا برود سراغ پرونده، نه اینکه در فهرستی دیگر دنبالش بگردد.
+   */
+  openReviewId: string | null;
 }
 
 /**
@@ -544,6 +553,8 @@ export async function listBookings(
     .orderBy(desc(bookings.scheduledAt))
     .limit(LIST_LIMIT);
 
+  const openReviews = await openReviewsForBookings(rows.map((row) => row.id));
+
   return rows.map((row) => ({
     ...row,
     scheduledAt: row.scheduledAt.toISOString(),
@@ -551,6 +562,7 @@ export async function listBookings(
     price: row.price.toString(),
     teacherJoinedAt: row.teacherJoinedAt?.toISOString() ?? null,
     studentJoinedAt: row.studentJoinedAt?.toISOString() ?? null,
+    openReviewId: openReviews.get(row.id) ?? null,
   }));
 }
 
@@ -809,6 +821,8 @@ export interface AdminOverview {
   activeInstruments: number;
   upcomingBookings: number;
   pendingPayouts: number;
+  /** جلسه‌های برگزارنشده‌ای که هنوز رسیدگی نشده‌اند */
+  openReviews: number;
   /** جمع بدهی پرداخت‌نشده به همه‌ی استادها، ریال */
   outstandingTotal: string;
 }
@@ -821,7 +835,15 @@ export interface AdminOverview {
  * `db:studio` بود.
  */
 export async function overview(now: Date = new Date()): Promise<AdminOverview> {
-  const [pendingTeachers, approvedTeachers, activeInstruments, upcoming, pendingPayoutRows, outstanding] =
+  const [
+    pendingTeachers,
+    approvedTeachers,
+    activeInstruments,
+    upcoming,
+    pendingPayoutRows,
+    openReviews,
+    outstanding,
+  ] =
     await Promise.all([
       countRows(db.select({ value: count() }).from(teacherProfiles).where(eq(teacherProfiles.status, "PENDING"))),
       countRows(db.select({ value: count() }).from(teacherProfiles).where(eq(teacherProfiles.status, "APPROVED"))),
@@ -833,6 +855,7 @@ export async function overview(now: Date = new Date()): Promise<AdminOverview> {
           .where(and(eq(bookings.status, "CONFIRMED"), gte(bookings.scheduledAt, now))),
       ),
       countRows(db.select({ value: count() }).from(payouts).where(eq(payouts.status, "PENDING"))),
+      countOpenReviews(),
       db
         .select({ total: sql<string>`COALESCE(SUM(${ledgerEntries.netAmount}), 0)::text` })
         .from(ledgerEntries),
@@ -844,6 +867,7 @@ export async function overview(now: Date = new Date()): Promise<AdminOverview> {
     activeInstruments,
     upcomingBookings: upcoming,
     pendingPayouts: pendingPayoutRows,
+    openReviews,
     outstandingTotal: outstanding[0]?.total ?? "0",
   };
 }

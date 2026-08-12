@@ -39,12 +39,27 @@ export default function AdminHomePage() {
             </Link>
           ) : null}
 
+          {/*
+            هشدار است نه اطلاع: هر پرونده‌ی باز یعنی جلسه‌ای برگزار نشده
+            و پولی جابه‌جا شده که کسی هنوز تکلیفش را روشن نکرده.
+          */}
+          {overview.openReviews > 0 ? (
+            <Link href="/admin/reviews" className="alert-error mt-4 block">
+              {faNumber(overview.openReviews)} جلسه‌ی برگزارنشده در انتظار رسیدگی است.
+            </Link>
+          ) : null}
+
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Stat label="استاد در انتظار" value={faNumber(overview.pendingTeachers)} />
             <Stat label="استاد تأییدشده" value={faNumber(overview.approvedTeachers)} />
             <Stat label="ساز فعال" value={faNumber(overview.activeInstruments)} />
             <Stat label="کلاس پیشِ رو" value={faNumber(overview.upcomingBookings)} />
             <Stat label="تسویه‌ی در انتظار" value={faNumber(overview.pendingPayouts)} />
+            <Stat
+              label="پرونده‌ی بررسی باز"
+              value={faNumber(overview.openReviews)}
+              hint="جلسه‌هایی که برگزار نشدند و هنوز رسیدگی نشده‌اند"
+            />
             <Stat
               label="بدهی به استادها"
               value={`${formatToman(overview.outstandingTotal)} تومان`}

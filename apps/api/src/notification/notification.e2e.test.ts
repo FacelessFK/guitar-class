@@ -3,7 +3,7 @@ import { Test } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import type { App } from "supertest/types.js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { AppModule } from "../app.module.js";
 import { AuthExceptionFilter } from "../common/auth-exception.filter.js";
@@ -12,6 +12,7 @@ import { BigIntSerializationInterceptor } from "../common/serialization.intercep
 import { db } from "../db/client.js";
 import { bookings, notifications, users } from "../db/schema/index.js";
 import { InMemoryObjectStorage, setObjectStorage } from "../media/storage.port.js";
+import { IN_APP_TYPES } from "./in-app.service.js";
 import { REMINDER_KINDS, scheduleDueReminders } from "./reminder.service.js";
 import {
   accessTokenFor,
@@ -290,6 +291,30 @@ describe("یادآوری‌ها هنوز ایدمپوتنت‌اند", () => {
     for (const kind of REMINDER_KINDS) {
       expect(kind.type.startsWith("SESSION_REMINDER")).toBe(true);
     }
+  });
+
+  /**
+   * سمت دیگر همان ایندکس، و با **خودِ پستگرس** سنجیده می‌شود نه با
+   * `startsWith`.
+   *
+   * شرط ایندکس `LIKE 'SESSION_REMINDER%'` است و در `LIKE`، کاراکتر `_`
+   * یک وایلدکارتِ تک‌کاراکتری است. پس نامی که با چشم «شبیه» پیشوند
+   * نیست هم می‌تواند داخل ایندکس بیفتد و بی‌صدا تکرارناپذیر شود:
+   * اعلان دومِ همان نوع برای همان جلسه، به‌جای ساخته شدن، در
+   * `ON CONFLICT DO NOTHING` بی‌صدا دور ریخته می‌شود — و برای اعلان
+   * رویدادی این یعنی استاد هرگز نفهمد کار تازه‌ای رسیده.
+   *
+   * `startsWith` جاوااسکریپت این را نمی‌گیرد چون معنای `_` را نمی‌داند.
+   */
+  it("هیچ نوع درون‌اپی در دام ایندکس یادآوری نمی‌افتد", async () => {
+    const types = Object.values(IN_APP_TYPES);
+
+    const rows = await db.execute<{ type: string; caught: boolean }>(sql`
+      SELECT t AS type, t LIKE 'SESSION_REMINDER%' AS caught
+      FROM unnest(${sql.param(types)}::text[]) AS t
+    `);
+
+    expect(rows.filter((row) => row.caught)).toEqual([]);
   });
 
   it("یادآوری پیامکی در فهرست درون‌اپ نمی‌آید", async () => {

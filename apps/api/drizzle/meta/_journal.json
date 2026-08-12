@@ -43,6 +43,13 @@
       "when": 1786553807387,
       "tag": "0005_media_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786566221612,
+      "tag": "0006_wooden_black_tom",
+      "breakpoints": true
     }
   ]
 }

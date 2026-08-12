@@ -24,6 +24,13 @@ import { notifications } from "../db/schema/index.js";
  * ایندکس یکتای `notifications_once_per_booking` فقط همان پیشوند را
  * می‌گیرد. اعلان رویدادی باید بتواند تکرار شود — هنرجویی که دوباره
  * تمرینش را می‌فرستد باید اعلان تازه بسازد.
+ *
+ * ⚠️ «شروع نمی‌شود» را با چشم نسنج: شرط ایندکس
+ * `LIKE 'SESSION_REMINDER%'` است و در `LIKE`، خودِ `_` یک وایلدکارتِ
+ * تک‌کاراکتری است. پس نامی مثل `SESSION.REMINDER_X` هم می‌افتد داخل
+ * ایندکس و بی‌صدا تکرارناپذیر می‌شود. تست
+ * «هیچ نوع درون‌اپی در دام ایندکس یادآوری نمی‌افتد» همین را با خودِ
+ * پستگرس می‌سنجد، نه با `startsWith` جاوااسکریپت.
  */
 export const IN_APP_TYPES = {
   /** استاد تمرین تازه‌ای تعیین کرد → هنرجو */
@@ -38,6 +45,12 @@ export const IN_APP_TYPES = {
   TEACHER_STATUS_CHANGED: "TEACHER_STATUS_CHANGED",
   /** تسویه پرداخت شد → استاد */
   PAYOUT_PAID: "PAYOUT_PAID",
+  /** پرداخت موفق بود و جلسه قطعی شد → هر دو طرف */
+  BOOKING_CONFIRMED: "BOOKING_CONFIRMED",
+  /** طرف مقابل جلسه را لغو کرد → آن یکی طرف */
+  BOOKING_CANCELLED: "BOOKING_CANCELLED",
+  /** جلسه برگزار نشد و پرونده‌اش روی میز ادمین رفت → هنرجو */
+  SESSION_UNDER_REVIEW: "SESSION_UNDER_REVIEW",
 } as const;
 
 export type InAppType = (typeof IN_APP_TYPES)[keyof typeof IN_APP_TYPES];

@@ -8,6 +8,7 @@ const TABS = [
   { href: "/admin/teachers", label: "استادها" },
   { href: "/admin/instruments", label: "سازها" },
   { href: "/admin/bookings", label: "رزروها" },
+  { href: "/admin/reviews", label: "صف بررسی" },
   { href: "/admin/orders", label: "تراکنش‌ها" },
   { href: "/admin/payouts", label: "تسویه" },
 ] as const;

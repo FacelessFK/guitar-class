@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { errorMessage } from "@/lib/api-client";
@@ -105,6 +106,17 @@ export default function AdminBookingsPage() {
                   {booking.studentJoinedAt ? "✓" : "—"}
                 </span>
               </div>
+
+              {/*
+                رسیدگی اینجا انجام نمی‌شود، فقط اشاره است. جای کار، صف
+                بررسی است — وگرنه همان فهرستی می‌شود که هیچ‌وقت کوتاه
+                نمی‌شود.
+              */}
+              {booking.openReviewId ? (
+                <Link href="/admin/reviews" className="alert-error mt-3 block text-sm">
+                  این جلسه پرونده‌ی بررسیِ باز دارد.
+                </Link>
+              ) : null}
             </li>
           ))}
         </ul>

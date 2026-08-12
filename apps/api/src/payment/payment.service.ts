@@ -19,6 +19,7 @@
  */
 
 import { and, eq, inArray, lt, sql, sum } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   BUSINESS_RULES,
   negateSplit,
@@ -40,6 +41,8 @@ import {
 } from "../db/schema/index.js";
 import { confirmBookings } from "../booking/booking.service.js";
 import { BookingNotFoundError } from "../booking/errors.js";
+import { IN_APP_TYPES, notifyInApp } from "../notification/in-app.service.js";
+import { sessionDateTimeFa } from "../notification/templates.js";
 import {
   GatewayUnreachableError,
   NotPayableError,
@@ -51,6 +54,10 @@ import { paymentGateway, type PaymentGateway } from "./gateway.port.js";
 const MINUTE_MS = 60_000;
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/** دو بار `users` در یک کوئری: یک بار هنرجو، یک بار استاد. */
+const paymentStudent = alias(users, "payment_student");
+const paymentTeacher = alias(users, "payment_teacher");
 
 /**
  * وضعیت‌هایی که سفارش از آن‌ها می‌تواند به `PAID` برود.
@@ -448,7 +455,76 @@ export async function settleOrder(input: SettleInput): Promise<SettlementResult>
     };
   }
 
-  return applySuccessfulPayment(order.id, verification.refId, now);
+  const settlement = await applySuccessfulPayment(order.id, verification.refId, now);
+
+  /**
+   * اعلان **بعد** از برگشتن تراکنش می‌رود، نه داخلش.
+   *
+   * `applySuccessfulPayment` سفارش، ثبت‌نام، رزروها و سطرهای دفتر کل را
+   * در یک تراکنش می‌نویسد. `notifyInApp` خطا پرتاب نمی‌کند، ولی درجِ
+   * اعلان داخل همان تراکنش راه دیگری هم برای خراب کردن دارد: خطای
+   * پستگرس تراکنش را «abort» می‌کند و از آن لحظه به بعد هر دستور دیگری
+   * هم رد می‌شود. یعنی یک اعلانِ ناموفق می‌تواند سطر درآمد استاد را با
+   * خودش ببرد.
+   */
+  if (settlement.status === "PAID") {
+    await notifyConfirmedBookings(settlement.confirmedBookingIds);
+  }
+
+  return settlement;
+}
+
+/**
+ * «پرداخت انجام شد و جلسه‌ات قطعی است» — به هر دو طرف.
+ *
+ * به هر دو می‌رود چون رویداد برای هر دو تازه است: هنرجو از درگاه
+ * برگشته و ممکن است صفحه‌ی نتیجه را نبیند (اینترنت قطع، مرورگر بسته)،
+ * و استاد اصلاً در جریان این پرداخت نبوده — تا پیش از این، تنها راه
+ * فهمیدنش باز کردن فهرست کلاس‌ها بود.
+ *
+ * پکیج چهار جلسه دارد و چهار اعلان می‌سازد، نه یکی. عمدی است: هر جلسه
+ * سطر خودش را در «کلاس‌های پیش رو» دارد و اعلان به همان جلسه لینک
+ * می‌شود؛ یک اعلانِ خلاصه یعنی کلیک روی آن معلوم نباشد کجا باید برود.
+ */
+async function notifyConfirmedBookings(bookingIds: string[]): Promise<void> {
+  if (bookingIds.length === 0) return;
+
+  const rows = await db
+    .select({
+      id: bookings.id,
+      studentId: bookings.studentId,
+      teacherId: bookings.teacherId,
+      scheduledAt: bookings.scheduledAt,
+      studentName: paymentStudent.fullName,
+      teacherName: paymentTeacher.fullName,
+      instrumentName: instruments.nameFa,
+    })
+    .from(bookings)
+    .innerJoin(paymentStudent, eq(paymentStudent.id, bookings.studentId))
+    .innerJoin(paymentTeacher, eq(paymentTeacher.id, bookings.teacherId))
+    .innerJoin(offerings, eq(offerings.id, bookings.offeringId))
+    .innerJoin(instruments, eq(instruments.id, offerings.instrumentId))
+    .where(inArray(bookings.id, bookingIds));
+
+  for (const row of rows) {
+    const when = sessionDateTimeFa(row.scheduledAt);
+
+    await notifyInApp({
+      userId: row.studentId,
+      type: IN_APP_TYPES.BOOKING_CONFIRMED,
+      message: `پرداخت انجام شد. جلسه‌ی ${row.instrumentName} با ${row.teacherName}، ${when}.`,
+      href: `/sessions/${row.id}`,
+      bookingId: row.id,
+    });
+
+    await notifyInApp({
+      userId: row.teacherId,
+      type: IN_APP_TYPES.BOOKING_CONFIRMED,
+      message: `جلسه‌ی تازه با ${row.studentName} قطعی شد: ${row.instrumentName}، ${when}.`,
+      href: `/sessions/${row.id}`,
+      bookingId: row.id,
+    });
+  }
 }
 
 /** همه‌ی رزروهای یک سفارش — چه مستقیم و چه از راه پکیج. */

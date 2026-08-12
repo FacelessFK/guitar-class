@@ -557,6 +557,7 @@ export interface AdminOverview {
   activeInstruments: number;
   upcomingBookings: number;
   pendingPayouts: number;
+  openReviews: number;
   outstandingTotal: string;
 }
 
@@ -702,6 +703,8 @@ export interface AdminBooking {
   sessionIndex: number | null;
   teacherJoinedAt: string | null;
   studentJoinedAt: string | null;
+  /** پرونده‌ی بررسیِ باز، اگر این جلسه داشته باشد */
+  openReviewId: string | null;
 }
 
 export const getAdminBookings = (filter: {
@@ -764,6 +767,42 @@ export const markPayoutPaid = (payoutId: string, trackingCode?: string) =>
   apiFetch<AdminPayout>(`/admin/payouts/${payoutId}/paid`, {
     method: "POST",
     body: { ...(trackingCode ? { trackingCode } : {}) },
+  });
+
+export type SessionReviewReason = "NO_SHOW_TEACHER" | "NO_SHOW";
+export type SessionReviewStatus = "OPEN" | "RESOLVED";
+
+export interface AdminReview {
+  id: string;
+  bookingId: string;
+  reason: SessionReviewReason;
+  status: SessionReviewStatus;
+  resolution: string | null;
+  resolvedByName: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  bookingStatus: BookingStatus;
+  scheduledAt: string;
+  durationMinutes: number;
+  price: string;
+  studentName: string;
+  studentPhone: string;
+  teacherName: string;
+  teacherPhone: string;
+  teacherProfileId: string | null;
+  instrumentName: string;
+}
+
+/** پیش‌فرض سمت سرور `OPEN` است — صف، فهرست کارِ مانده است. */
+export const getAdminReviews = (status?: SessionReviewStatus) =>
+  apiFetch<{ reviews: AdminReview[] }>("/admin/reviews", { query: { status } }).then(
+    (data) => data.reviews,
+  );
+
+export const resolveReview = (reviewId: string, resolution?: string) =>
+  apiFetch<AdminReview>(`/admin/reviews/${reviewId}/resolve`, {
+    method: "POST",
+    body: { ...(resolution ? { resolution } : {}) },
   });
 
 // ---------------------------------------------------------------------------

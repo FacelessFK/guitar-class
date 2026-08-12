@@ -10,7 +10,7 @@ import { AuthExceptionFilter } from "../common/auth-exception.filter.js";
 import { DomainExceptionFilter } from "../common/domain-exception.filter.js";
 import { BigIntSerializationInterceptor } from "../common/serialization.interceptor.js";
 import { db } from "../db/client.js";
-import { ledgerEntries, users } from "../db/schema/index.js";
+import { bookings, ledgerEntries, sessionReviews, users } from "../db/schema/index.js";
 import {
   accessTokenFor,
   closeDatabase,
@@ -86,6 +86,7 @@ describe("AdminGuard", () => {
       "/api/admin/bookings",
       "/api/admin/orders",
       "/api/admin/payouts",
+      "/api/admin/reviews",
     ];
 
     for (const path of paths) {
@@ -585,6 +586,188 @@ describe("گزارش‌ها", () => {
       .expect(200);
 
     expect(other.body.bookings).toHaveLength(0);
+  });
+});
+
+describe("صف بررسی", () => {
+  /**
+   * جلسه‌ای که برگزار نشده، مستقیم در دیتابیس ساخته می‌شود.
+   *
+   * مسیر واقعی‌اش — رزرو، پرداخت، نیامدن، جاروی بستن جلسه — در
+   * `queue/session-lifecycle.test.ts` سنجیده می‌شود. اینجا موضوع
+   * رسیدگیِ ادمین است، نه رسیدن به آن حالت.
+   */
+  async function pastNoShow(reason: "NO_SHOW_TEACHER" | "NO_SHOW" = "NO_SHOW_TEACHER") {
+    const scheduledAt = new Date(Date.now() - 3 * 86_400_000);
+
+    const [booking] = await db
+      .insert(bookings)
+      .values({
+        studentId: fixture.studentId,
+        teacherId: fixture.teacherUserId,
+        offeringId: fixture.offeringId,
+        type: "SINGLE",
+        scheduledAt,
+        endsAt: new Date(scheduledAt.getTime() + 3_600_000),
+        durationMinutes: 60,
+        status: reason,
+        priceSnapshot: 3_000_000n,
+        commissionSnapshot: "20",
+      })
+      .returning({ id: bookings.id });
+
+    await db
+      .insert(sessionReviews)
+      .values({ bookingId: booking!.id, reason })
+      .returning({ id: sessionReviews.id });
+
+    const [review] = await db
+      .select({ id: sessionReviews.id })
+      .from(sessionReviews)
+      .where(eq(sessionReviews.bookingId, booking!.id));
+
+    return { bookingId: booking!.id, reviewId: review!.id };
+  }
+
+  const listReviews = (status?: string) =>
+    request(server)
+      .get("/api/admin/reviews")
+      .query(status ? { status } : {})
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+  it("پرونده‌ی باز با جزئیات جلسه برمی‌گردد", async () => {
+    const { bookingId } = await pastNoShow();
+
+    const response = await listReviews();
+
+    expect(response.body.reviews).toHaveLength(1);
+    expect(response.body.reviews[0]).toMatchObject({
+      bookingId,
+      reason: "NO_SHOW_TEACHER",
+      status: "OPEN",
+      resolution: null,
+      resolvedByName: null,
+      instrumentName: "گیتار کلاسیک",
+      teacherName: "استاد رضایی",
+      studentName: "هنرجوی الف",
+    });
+  });
+
+  /**
+   * تفاوت صف و فیلتر، در یک تست: پس از رسیدگی، پرونده از فهرست کارِ
+   * مانده بیرون می‌رود. با فیلترِ وضعیت رزرو این ممکن نبود — جلسه تا
+   * ابد `NO_SHOW_TEACHER` می‌ماند.
+   */
+  it("رسیدگی، پرونده را از فهرست باز بیرون می‌برد", async () => {
+    const { reviewId } = await pastNoShow();
+
+    const resolved = await request(server)
+      .post(`/api/admin/reviews/${reviewId}/resolve`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ resolution: "با استاد تماس گرفتم، جلسه‌ی جبرانی گذاشته شد." })
+      .expect(200);
+
+    expect(resolved.body).toMatchObject({
+      status: "RESOLVED",
+      resolvedByName: "مدیر",
+      resolution: "با استاد تماس گرفتم، جلسه‌ی جبرانی گذاشته شد.",
+    });
+    expect(resolved.body.resolvedAt).not.toBeNull();
+
+    expect((await listReviews()).body.reviews).toEqual([]);
+    expect((await listReviews("RESOLVED")).body.reviews).toHaveLength(1);
+  });
+
+  /**
+   * دو ادمین که هم‌زمان روی یک پرونده کار می‌کنند نباید یادداشت هم را
+   * بازنویسی کنند. شرط `status = 'OPEN'` روی خودِ `UPDATE` است، پس
+   * دومی بی‌اثر است — ولی خطا هم نمی‌دهد، چون همان نتیجه‌ای که خواسته
+   * بود (پرونده بسته باشد) برقرار است.
+   */
+  it("رسیدگی دوباره، تصمیم نفر اول را بازنویسی نمی‌کند", async () => {
+    const { reviewId } = await pastNoShow();
+
+    await request(server)
+      .post(`/api/admin/reviews/${reviewId}/resolve`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ resolution: "اول" })
+      .expect(200);
+
+    const second = await request(server)
+      .post(`/api/admin/reviews/${reviewId}/resolve`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ resolution: "دوم" })
+      .expect(200);
+
+    expect(second.body.resolution).toBe("اول");
+  });
+
+  it("نمای کلی پرونده‌های باز را می‌شمارد و رسیدگی‌شده‌ها را نه", async () => {
+    const first = await pastNoShow("NO_SHOW_TEACHER");
+
+    const before = await request(server)
+      .get("/api/admin/overview")
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(before.body.openReviews).toBe(1);
+
+    await request(server)
+      .post(`/api/admin/reviews/${first.reviewId}/resolve`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({})
+      .expect(200);
+
+    const after = await request(server)
+      .get("/api/admin/overview")
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(after.body.openReviews).toBe(0);
+  });
+
+  /** فهرست رزروها باید بگوید کدام سطرش پرونده‌ی باز دارد. */
+  it("فهرست رزروها به پرونده‌ی باز اشاره می‌کند", async () => {
+    const { bookingId, reviewId } = await pastNoShow();
+
+    const response = await request(server)
+      .get("/api/admin/bookings")
+      .query({ status: "NO_SHOW_TEACHER" })
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(response.body.bookings).toHaveLength(1);
+    expect(response.body.bookings[0]).toMatchObject({ id: bookingId, openReviewId: reviewId });
+
+    await request(server)
+      .post(`/api/admin/reviews/${reviewId}/resolve`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({})
+      .expect(200);
+
+    const after = await request(server)
+      .get("/api/admin/bookings")
+      .query({ status: "NO_SHOW_TEACHER" })
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(after.body.bookings[0].openReviewId).toBeNull();
+  });
+
+  it("کاربر عادی به صف بررسی راه ندارد", async () => {
+    const { reviewId } = await pastNoShow();
+
+    await request(server)
+      .get("/api/admin/reviews")
+      .set("authorization", `Bearer ${studentToken}`)
+      .expect(403);
+
+    await request(server)
+      .post(`/api/admin/reviews/${reviewId}/resolve`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ resolution: "خودم حلش کردم" })
+      .expect(403);
   });
 });
 

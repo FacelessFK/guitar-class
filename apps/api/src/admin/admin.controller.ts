@@ -14,6 +14,7 @@ import {
 import { z } from "zod";
 
 import { AdminGuard } from "../auth/auth.guard.js";
+import { CurrentUserId } from "../common/current-user.decorator.js";
 import { dateKeySchema, slugSchema, uuidSchema } from "../common/schemas.js";
 import { zodPipe } from "../common/validation.pipe.js";
 import {
@@ -39,6 +40,11 @@ import {
   type AdminTeacherDetail,
   type AdminTeacherRow,
 } from "./admin.service.js";
+import {
+  listSessionReviews,
+  resolveSessionReview,
+  type AdminReviewRow,
+} from "./review.service.js";
 
 @Injectable()
 export class AdminProvider {
@@ -56,6 +62,8 @@ export class AdminProvider {
   readonly listPayouts = listPayouts;
   readonly createPayout = createPayout;
   readonly markPayoutPaid = markPayoutPaid;
+  readonly listReviews = listSessionReviews;
+  readonly resolveReview = resolveSessionReview;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +209,21 @@ const markPaidSchema = z.object({
   trackingCode: z.string().trim().max(120).optional(),
 });
 
+const reviewStatusSchema = z.enum(["OPEN", "RESOLVED"], {
+  message: "وضعیت پرونده نامعتبر است",
+});
+
+/**
+ * یادداشت رسیدگی.
+ *
+ * اجباری نیست چون بیشتر پرونده‌ها با یک تماس تلفنی بسته می‌شوند و
+ * اجباری کردنش فقط «ok» تولید می‌کند. اختیاری بودنش یعنی وقتی چیزی
+ * نوشته شده، واقعاً حرفی برای گفتن بوده.
+ */
+const resolveReviewSchema = z.object({
+  resolution: z.string().trim().max(2000).optional(),
+});
+
 // ---------------------------------------------------------------------------
 // کنترلر
 // ---------------------------------------------------------------------------
@@ -321,6 +344,44 @@ export class AdminController {
     status?: string,
   ): Promise<{ orders: AdminOrderRow[] }> {
     return { orders: await this.admin.listOrders(status) };
+  }
+
+  // --- صف بررسی ---
+
+  /**
+   * جلسه‌هایی که برگزار نشدند و تکلیفشان روشن نیست.
+   *
+   * پیش‌فرضش پرونده‌های باز است، نه همه: صف را باز می‌کنی که ببینی چه
+   * کاری مانده، و فهرستی که رسیدگی‌شده‌ها را هم دارد بعد از چند ماه
+   * همان فهرست بی‌فایده‌ای می‌شود که این ماژول برای جایگزینی‌اش ساخته شد.
+   */
+  @Get("reviews")
+  async listReviews(
+    @Query("status", zodPipe(reviewStatusSchema.optional()))
+    status?: "OPEN" | "RESOLVED",
+  ): Promise<{ reviews: AdminReviewRow[] }> {
+    return { reviews: await this.admin.listReviews({ status: status ?? "OPEN" }) };
+  }
+
+  /**
+   * «رسیدگی شد».
+   *
+   * شناسه‌ی ادمین از نشست خوانده می‌شود نه از بدنه — همان قاعده‌ی کل
+   * پنل. کسی که پرونده را بسته باید قابل ردیابی باشد و اگر از کلاینت
+   * می‌آمد، هر ادمینی می‌توانست کارش را به اسم دیگری ثبت کند.
+   */
+  @Post("reviews/:reviewId/resolve")
+  @HttpCode(HttpStatus.OK)
+  async resolveReview(
+    @CurrentUserId() adminUserId: string,
+    @Param("reviewId", zodPipe(uuidSchema)) reviewId: string,
+    @Body(zodPipe(resolveReviewSchema)) body: z.infer<typeof resolveReviewSchema>,
+  ): Promise<AdminReviewRow> {
+    return this.admin.resolveReview({
+      reviewId,
+      adminUserId,
+      resolution: body.resolution?.length ? body.resolution : null,
+    });
   }
 
   // --- تسویه ---

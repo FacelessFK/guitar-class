@@ -3,7 +3,13 @@ import { and, eq } from "drizzle-orm";
 import { BUSINESS_RULES, fromTehranWallClock, type NormalizedPhone } from "@music/shared";
 
 import { db } from "../db/client.js";
-import { bookings, ledgerEntries, notifications, orders } from "../db/schema/index.js";
+import {
+  bookings,
+  ledgerEntries,
+  notifications,
+  orders,
+  sessionReviews,
+} from "../db/schema/index.js";
 import { cancelBooking, createSingleBooking } from "../booking/booking.service.js";
 import { recordAttendance } from "../classroom/classroom.service.js";
 import { FakePaymentGateway } from "../payment/gateway.port.js";
@@ -125,6 +131,16 @@ async function refundRowsOf(bookingId: string) {
       and(eq(ledgerEntries.bookingId, bookingId), eq(ledgerEntries.type, "REFUND")),
     );
 }
+
+/**
+ * فقط سطرهای یادآوری، نه هر اعلانی که به این جلسه وصل است.
+ *
+ * از وقتی «رزرو قطعی شد» اعلان درون‌اپ می‌سازد، همان `booking_id` دو
+ * سطر `IN_APP` هم دارد. بدون این شرط، تست‌های ایدمپوتنسیِ یادآوری آن‌ها
+ * را هم می‌شمردند و شکستشان به‌جای «پیامک دوم رفت» می‌شد «عدد فرق کرد».
+ */
+const reminderRowsOf = (bookingId: string) =>
+  and(eq(notifications.bookingId, bookingId), eq(notifications.channel, "SMS"));
 
 /** لحظه‌ای که جارو باید جلسه را ببندد: پایان جلسه + مهلت + یک دقیقه. */
 const afterGrace = (booking: { endsAt: Date }): Date =>
@@ -303,6 +319,202 @@ describe("بستن خودکار جلسه", () => {
 });
 
 // ---------------------------------------------------------------------------
+// صف بررسی و اعلان رویدادهای رزرو
+// ---------------------------------------------------------------------------
+
+/** اعلان‌های درون‌اپِ یک کاربر، از تازه به قدیم. */
+async function inAppOf(userId: string, bookingId?: string) {
+  return db
+    .select({ type: notifications.type, payload: notifications.payload })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        eq(notifications.channel, "IN_APP"),
+        bookingId ? eq(notifications.bookingId, bookingId) : undefined,
+      ),
+    );
+}
+
+async function reviewsOf(bookingId: string) {
+  return db
+    .select()
+    .from(sessionReviews)
+    .where(eq(sessionReviews.bookingId, bookingId));
+}
+
+describe("صف بررسی جلسه‌های برگزارنشده", () => {
+  it("عدم حضور استاد پرونده باز می‌کند", async () => {
+    const booking = await confirmedBooking();
+    await join(booking.id, fixture.studentId, booking.scheduledAt);
+
+    const result = await runSessionClose(afterGrace(booking));
+
+    expect(result.reviewsOpened).toBe(1);
+
+    const reviews = await reviewsOf(booking.id);
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toMatchObject({
+      reason: "NO_SHOW_TEACHER",
+      status: "OPEN",
+      resolvedAt: null,
+    });
+  });
+
+  it("«هیچ‌کس نیامد» هم پرونده باز می‌کند", async () => {
+    const booking = await confirmedBooking();
+
+    await runSessionClose(afterGrace(booking));
+
+    expect(await reviewsOf(booking.id)).toMatchObject([{ reason: "NO_SHOW" }]);
+  });
+
+  /**
+   * دو حالتی که تکلیفشان روشن است نباید صف را شلوغ کنند. صفی که همه‌چیز
+   * در آن می‌ریزد، همان فهرست بی‌فایده‌ای است که این ماژول جایگزینش کرد.
+   */
+  it("جلسه‌ی برگزارشده و عدم حضور هنرجو پرونده نمی‌سازند", async () => {
+    const held = await confirmedBooking(17);
+    await join(held.id, fixture.teacherUserId, held.scheduledAt);
+    await join(held.id, fixture.studentId, held.scheduledAt);
+
+    const studentAbsent = await confirmedBooking(18);
+    await join(studentAbsent.id, fixture.teacherUserId, studentAbsent.scheduledAt);
+
+    const result = await runSessionClose(afterGrace(studentAbsent));
+
+    expect(result.reviewsOpened).toBe(0);
+    expect(await reviewsOf(held.id)).toEqual([]);
+    expect(await reviewsOf(studentAbsent.id)).toEqual([]);
+  });
+
+  /**
+   * قلب ایدمپوتنسی صف، و دلیل وجود ایندکس یکتای `booking_id`: جارو هر
+   * دقیقه اجرا می‌شود و پرونده تا رسیدگی ادمین باز می‌ماند.
+   */
+  it("اجرای دوباره‌ی جارو پرونده‌ی دوم و اعلان دوم نمی‌سازد", async () => {
+    const booking = await confirmedBooking();
+    await join(booking.id, fixture.studentId, booking.scheduledAt);
+
+    const first = await runSessionClose(afterGrace(booking));
+    const second = await runSessionClose(afterGrace(booking));
+
+    expect(first.reviewsOpened).toBe(1);
+    expect(second.reviewsOpened).toBe(0);
+    expect(await reviewsOf(booking.id)).toHaveLength(1);
+
+    const underReview = (await inAppOf(fixture.studentId, booking.id)).filter(
+      (row) => row.type === "SESSION_UNDER_REVIEW",
+    );
+    expect(underReview).toHaveLength(1);
+  });
+
+  it("هنرجو خبردار می‌شود که استاد نیامد و پول برگشت", async () => {
+    const booking = await confirmedBooking();
+    await join(booking.id, fixture.studentId, booking.scheduledAt);
+
+    await runSessionClose(afterGrace(booking));
+
+    const [review] = (await inAppOf(fixture.studentId, booking.id)).filter(
+      (row) => row.type === "SESSION_UNDER_REVIEW",
+    );
+
+    expect(review).toBeDefined();
+    expect((review!.payload as { message: string }).message).toContain("برگشت");
+  });
+});
+
+describe("اعلان رویدادهای رزرو", () => {
+  it("پرداخت موفق هر دو طرف را خبر می‌کند", async () => {
+    const booking = await confirmedBooking();
+
+    const student = await inAppOf(fixture.studentId, booking.id);
+    const teacher = await inAppOf(fixture.teacherUserId, booking.id);
+
+    expect(student).toHaveLength(1);
+    expect(teacher).toHaveLength(1);
+    expect(student[0]!.type).toBe("BOOKING_CONFIRMED");
+    expect(teacher[0]!.type).toBe("BOOKING_CONFIRMED");
+
+    // ساعت دیواری تهران در متن است، نه UTC — جلسه ۱۷:۰۰ تهران است
+    expect((student[0]!.payload as { message: string }).message).toContain("17:00");
+    expect((teacher[0]!.payload as { message: string }).message).toContain("هنرجوی الف");
+  });
+
+  /**
+   * کاربر صفحه‌ی بازگشت از درگاه را رفرش می‌کند و درگاه هم می‌تواند
+   * دوباره بفرستد. تأیید ایدمپوتنت است، پس اعلانش هم باید باشد — وگرنه
+   * هر رفرش یک «جلسه‌ات قطعی شد» تازه می‌سازد.
+   */
+  it("تأیید دوباره‌ی همان پرداخت اعلان دوم نمی‌سازد", async () => {
+    const booking = await createSingleBooking({
+      studentId: fixture.studentId,
+      teacherProfileId: fixture.teacherProfileId,
+      offeringId: fixture.offeringId,
+      scheduledAt: slotAt(19),
+      now: NOW,
+    });
+
+    const gateway = new FakePaymentGateway();
+    const checkout = await startCheckout({
+      studentId: fixture.studentId,
+      bookingId: booking.id,
+      gateway,
+      now: NOW,
+    });
+
+    const [order] = await db
+      .select({ authority: orders.gatewayAuthority })
+      .from(orders)
+      .where(eq(orders.id, checkout.orderId));
+
+    for (let i = 0; i < 3; i += 1) {
+      await settleOrder({ authority: order!.authority!, gateway, now: NOW });
+    }
+
+    expect(await inAppOf(fixture.studentId, booking.id)).toHaveLength(1);
+  });
+
+  it("لغو فقط طرف مقابل را خبر می‌کند", async () => {
+    const booking = await confirmedBooking();
+
+    await cancelBooking({
+      bookingId: booking.id,
+      actorId: fixture.studentId,
+      now: NOW,
+    });
+
+    const cancelled = (row: { type: string }) => row.type === "BOOKING_CANCELLED";
+
+    const teacher = (await inAppOf(fixture.teacherUserId, booking.id)).filter(cancelled);
+    const student = (await inAppOf(fixture.studentId, booking.id)).filter(cancelled);
+
+    expect(teacher).toHaveLength(1);
+    expect((teacher[0]!.payload as { message: string }).message).toContain("هنرجوی الف");
+
+    // کسی که خودش لغو کرده، لازم نیست خبردار شود
+    expect(student).toHaveLength(0);
+  });
+
+  it("لغو توسط استاد، هنرجو را خبر می‌کند", async () => {
+    const booking = await confirmedBooking();
+
+    await cancelBooking({
+      bookingId: booking.id,
+      actorId: fixture.teacherUserId,
+      now: NOW,
+    });
+
+    const student = (await inAppOf(fixture.studentId, booking.id)).filter(
+      (row) => row.type === "BOOKING_CANCELLED",
+    );
+
+    expect(student).toHaveLength(1);
+    expect((student[0]!.payload as { message: string }).message).toContain("استاد رضایی");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // یادآوری پیامکی
 // ---------------------------------------------------------------------------
 
@@ -347,7 +559,7 @@ describe("یادآوری جلسه", () => {
     const rows = await db
       .select({ type: notifications.type })
       .from(notifications)
-      .where(eq(notifications.bookingId, booking.id));
+      .where(reminderRowsOf(booking.id));
 
     expect(rows).toHaveLength(4);
     expect(new Set(rows.map((row) => row.type))).toEqual(
@@ -372,7 +584,7 @@ describe("یادآوری جلسه", () => {
     const rows = await db
       .select()
       .from(notifications)
-      .where(eq(notifications.bookingId, booking.id));
+      .where(reminderRowsOf(booking.id));
 
     expect(rows).toHaveLength(2);
     expect(rows.every((row) => row.status === "SENT")).toBe(true);
@@ -453,7 +665,7 @@ describe("یادآوری جلسه", () => {
     const rows = await db
       .select({ status: notifications.status, error: notifications.error })
       .from(notifications)
-      .where(eq(notifications.bookingId, booking.id));
+      .where(reminderRowsOf(booking.id));
 
     expect(rows.every((row) => row.status === "FAILED")).toBe(true);
     expect(rows[0]?.error).toContain("پنل پیامک");

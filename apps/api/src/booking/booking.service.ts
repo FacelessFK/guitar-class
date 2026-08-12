@@ -25,9 +25,19 @@ import {
   type DateKey,
 } from "@music/shared";
 
+import { alias } from "drizzle-orm/pg-core";
+
 import { db, type Database } from "../db/client.js";
-import { bookings, enrollments, users } from "../db/schema/index.js";
+import {
+  bookings,
+  enrollments,
+  instruments,
+  offerings,
+  users,
+} from "../db/schema/index.js";
 import { loadSchedule, type LoadedSchedule } from "../availability/availability.service.js";
+import { IN_APP_TYPES, notifyInApp } from "../notification/in-app.service.js";
+import { sessionDateTimeFa } from "../notification/templates.js";
 import {
   BookingNotCancellableError,
   BookingNotFoundError,
@@ -500,6 +510,10 @@ export interface CancellationResult {
 /** وضعیت‌هایی که هنوز می‌شود از آن‌ها لغو کرد. */
 const CANCELLABLE_STATUSES = ["PENDING_PAYMENT", "CONFIRMED"] as const;
 
+/** دو بار `users` در یک کوئری: یک بار هنرجو، یک بار استاد. */
+const cancelStudent = alias(users, "cancel_student");
+const cancelTeacher = alias(users, "cancel_teacher");
+
 /**
  * لغو رزرو.
  *
@@ -520,8 +534,15 @@ export async function cancelBooking(
       teacherId: bookings.teacherId,
       status: bookings.status,
       scheduledAt: bookings.scheduledAt,
+      studentName: cancelStudent.fullName,
+      teacherName: cancelTeacher.fullName,
+      instrumentName: instruments.nameFa,
     })
     .from(bookings)
+    .innerJoin(cancelStudent, eq(cancelStudent.id, bookings.studentId))
+    .innerJoin(cancelTeacher, eq(cancelTeacher.id, bookings.teacherId))
+    .innerJoin(offerings, eq(offerings.id, bookings.offeringId))
+    .innerJoin(instruments, eq(instruments.id, offerings.instrumentId))
     .where(eq(bookings.id, input.bookingId))
     .limit(1);
 
@@ -546,7 +567,16 @@ export async function cancelBooking(
   const refundable =
     isTeacher || hoursUntilSession >= BUSINESS_RULES.FREE_CANCELLATION_HOURS;
 
-  await db
+  /**
+   * شرط وضعیت روی خودِ `UPDATE` تکرار می‌شود، با اینکه چند خط بالاتر
+   * بررسی شده.
+   *
+   * بررسی جدا در برابر دو درخواست هم‌زمان بی‌دفاع است: هر دو رزرو را
+   * `CONFIRMED` می‌بینند، هر دو رد می‌شوند و هر دو اعلان می‌فرستند. با
+   * شرط روی `UPDATE`، سطر بازگشتی یعنی «همین درخواست لغوش کرد» و اعلان
+   * فقط یک بار می‌رود.
+   */
+  const [claimed] = await db
     .update(bookings)
     .set({
       status: nextStatus,
@@ -555,7 +585,36 @@ export async function cancelBooking(
       cancellationReason: input.reason ?? null,
       holdExpiresAt: null,
     })
-    .where(eq(bookings.id, input.bookingId));
+    .where(
+      and(
+        eq(bookings.id, input.bookingId),
+        inArray(bookings.status, [...CANCELLABLE_STATUSES]),
+      ),
+    )
+    .returning({ id: bookings.id });
+
+  /**
+   * اعلان فقط به **طرف مقابل** می‌رود.
+   *
+   * کسی که خودش دکمه‌ی لغو را زده، لازم نیست خبردار شود که لغو شد؛
+   * اعلانِ کارِ خودِ کاربر فقط شمارنده‌ی نخوانده‌ها را شلوغ می‌کند و
+   * ارزش بقیه‌ی اعلان‌ها را پایین می‌آورد.
+   *
+   * بیرون از هر تراکنشی و با خطای بلعیده‌شده — همان قاعده‌ی `notifyInApp`:
+   * لغوی که ثبت شده نباید به‌خاطر اعلان برگردد.
+   */
+  if (claimed) {
+    const actorName = isTeacher ? booking.teacherName : booking.studentName;
+    const when = sessionDateTimeFa(booking.scheduledAt);
+
+    await notifyInApp({
+      userId: isTeacher ? booking.studentId : booking.teacherId,
+      type: IN_APP_TYPES.BOOKING_CANCELLED,
+      message: `${actorName} جلسه‌ی ${booking.instrumentName} (${when}) را لغو کرد.`,
+      href: `/sessions/${booking.id}`,
+      bookingId: booking.id,
+    });
+  }
 
   return { status: nextStatus, refundable, hoursUntilSession };
 }

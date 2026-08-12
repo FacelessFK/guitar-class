@@ -81,6 +81,16 @@ export const recordingStatus = pgEnum("recording_status", [
   "FAILED",
 ]);
 
+export const sessionReviewReason = pgEnum("session_review_reason", [
+  "NO_SHOW_TEACHER",
+  "NO_SHOW",
+]);
+
+export const sessionReviewStatus = pgEnum("session_review_status", [
+  "OPEN",
+  "RESOLVED",
+]);
+
 export const notificationChannel = pgEnum("notification_channel", ["SMS", "IN_APP"]);
 
 export const notificationStatus = pgEnum("notification_status", [

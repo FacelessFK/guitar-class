@@ -1,12 +1,14 @@
 /**
- * متن پیامک‌ها.
+ * متن پیامک‌ها و اعلان‌های درون‌اپ.
  *
  * جدا از سرویس نگه داشته می‌شود چون تنها جایی از بک‌اند است که زمان UTC
- * به ساعت دیواری تهران ترجمه می‌شود. پیامک لایه‌ی نمایش است، پس تبدیل
- * اینجا مجاز است — و فقط اینجا.
+ * به ساعت دیواری تهران ترجمه می‌شود. پیامک و اعلان هر دو لایه‌ی نمایش‌اند
+ * — متنشان همین‌جا ساخته می‌شود و فرانت فقط نشانش می‌دهد — پس تبدیل
+ * اینجا مجاز است، و فقط اینجا.
  */
 
 import {
+  APP_TIMEZONE,
   formatMinutes,
   tehranDateKey,
   tehranMinutesOfDay,
@@ -36,6 +38,40 @@ export function relativeDayFa(sessionAt: Date, now: Date): string {
 
 export function tehranClock(instant: Date): string {
   return formatMinutes(tehranMinutesOfDay(instant));
+}
+
+/**
+ * تاریخ شمسیِ روز و ماه — «۲۴ مرداد».
+ *
+ * هم‌تای `formatJalaliShort` در `apps/web/src/lib/format.ts` است و
+ * عمداً تکرار شده: بردنش به پکیج مشترک یعنی قاعده‌ی «تبدیل شمسی فقط در
+ * لایه‌ی نمایش» جایی بنشیند که منطق دامنه هم به آن دسترسی دارد، و
+ * اولین محاسبه‌ای که تاریخ شمسی را ورودی بگیرد از همان‌جا شروع می‌شود.
+ * دو نسخه‌ی کوچک در دو لایه‌ی نمایش، ارزان‌تر از آن در است.
+ */
+export function jalaliDayMonthFa(instant: Date): string {
+  return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    timeZone: APP_TIMEZONE,
+    day: "numeric",
+    month: "long",
+  }).format(instant);
+}
+
+/**
+ * «شنبه ۲۴ مرداد ساعت ۱۷:۰۰» — برای اعلانی که می‌تواند هفته‌ها فاصله
+ * داشته باشد.
+ *
+ * `relativeDayFa` اینجا کافی نیست: یادآوری حداکثر یک روز جلوتر است و
+ * «شنبه» در آن بی‌ابهام است، ولی رزروی که همین حالا برای سه هفته‌ی دیگر
+ * قطعی شده هم «شنبه» است و هنرجو نمی‌داند کدام شنبه.
+ *
+ * نام روز از `WEEKDAY_NAMES_FA` می‌آید نه از `Intl`، به همان دلیل بقیه‌ی
+ * پروژه: `Intl` «پنجشنبه» می‌نویسد و جدول ما «پنج‌شنبه» با نیم‌فاصله.
+ */
+export function sessionDateTimeFa(instant: Date): string {
+  const weekday = weekdayNameFa(tehranWeekday(instant));
+
+  return `${weekday} ${jalaliDayMonthFa(instant)} ساعت ${tehranClock(instant)}`;
 }
 
 export interface ReminderContext {
