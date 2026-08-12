@@ -3,9 +3,12 @@ import { Test } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import type { App } from "supertest/types.js";
+import { eq } from "drizzle-orm";
 import { addDaysToDateKey, tehranDateKey, weekdayOfDateKey } from "@music/shared";
 
 import { AppModule } from "../app.module.js";
+import { db } from "../db/client.js";
+import { teacherProfiles } from "../db/schema/index.js";
 import { AuthExceptionFilter } from "../common/auth-exception.filter.js";
 import { DomainExceptionFilter } from "../common/domain-exception.filter.js";
 import { BigIntSerializationInterceptor } from "../common/serialization.interceptor.js";
@@ -128,6 +131,138 @@ describe("GET /api/auth/me", () => {
       .expect(200);
 
     expect(response.body.teacherProfileId).toBeNull();
+  });
+});
+
+describe("POST /api/teacher/apply", () => {
+  it("هنرجو درخواست می‌دهد و پروفایل در انتظار تأیید ساخته می‌شود", async () => {
+    const response = await request(server)
+      .post("/api/teacher/apply")
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ headline: "مدرس پیانو", bio: "ده سال تدریس", yearsExperience: 10 })
+      .expect(201);
+
+    expect(response.body.status).toBe("PENDING");
+    expect(response.body.yearsExperience).toBe(10);
+    // بدون نشانی دلخواه، سرور یکی می‌سازد
+    expect(response.body.slug).toMatch(/^teacher-[0-9a-f]{8}$/);
+    expect(response.body.offerings).toEqual([]);
+  });
+
+  /**
+   * مهم‌ترین بررسی این بخش: متقاضی نباید بتواند خودش را تأیید کند یا
+   * سهم پلتفرم را تعیین کند. هر دو فیلد در بدنه می‌آیند و باید بی‌اثر
+   * بمانند — نه اینکه خطا بدهند، فقط دور ریخته شوند.
+   */
+  it("وضعیت و درصد کمیسیونِ فرستاده‌شده از سمت کاربر نادیده گرفته می‌شود", async () => {
+    await request(server)
+      .post("/api/teacher/apply")
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ headline: "مدرس پیانو", status: "APPROVED", commissionRate: "0" })
+      .expect(201);
+
+    const profile = await request(server)
+      .get("/api/teacher/me")
+      .set("authorization", `Bearer ${studentToken}`)
+      .expect(200);
+
+    expect(profile.body.status).toBe("PENDING");
+
+    // و چون تأیید نشده، در فهرست عمومی هم نمی‌آید
+    const publicList = await request(server).get("/api/teachers").expect(200);
+    expect(publicList.body.teachers).toHaveLength(1);
+  });
+
+  it("درخواست دوم رد می‌شود", async () => {
+    await request(server)
+      .post("/api/teacher/apply")
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ headline: "مدرس پیانو" })
+      .expect(201);
+
+    const again = await request(server)
+      .post("/api/teacher/apply")
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ headline: "مدرس ویولن" })
+      .expect(409);
+
+    expect(again.body.code).toBe("ALREADY_A_TEACHER");
+  });
+
+  it("نشانی تکراری رد می‌شود", async () => {
+    const response = await request(server)
+      .post("/api/teacher/apply")
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ headline: "مدرس پیانو", slug: "rezaei" })
+      .expect(409);
+
+    expect(response.body.code).toBe("TEACHER_SLUG_TAKEN");
+  });
+});
+
+describe("PATCH /api/teacher/me", () => {
+  it("استاد ویدیوی معارفه و متن پروفایلش را می‌گذارد", async () => {
+    const response = await request(server)
+      .patch("/api/teacher/me")
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({
+        headline: "مدرس گیتار کلاسیک، ۱۲ سال سابقه",
+        bio: "فارغ‌التحصیل هنرستان موسیقی",
+        yearsExperience: 12,
+        introVideoUrl: "https://cdn.example.com/intro.mp4",
+      })
+      .expect(200);
+
+    expect(response.body.introVideoUrl).toBe("https://cdn.example.com/intro.mp4");
+    expect(response.body.yearsExperience).toBe(12);
+
+    // و روی صفحه‌ی عمومی هم دیده می‌شود — همان جایی که به نرخ تبدیل ربط دارد
+    const publicProfile = await request(server).get("/api/teachers/rezaei").expect(200);
+    expect(publicProfile.body.introVideoUrl).toBe("https://cdn.example.com/intro.mp4");
+  });
+
+  /**
+   * نشانی `javascript:` در `intro_video_url` روی صفحه‌ای می‌نشیند که
+   * ترافیک سئو رویش می‌آید. بررسی در ورودی است نه در رندر، چون رندرها
+   * چند تا هستند و ورودی یکی.
+   */
+  it("نشانی غیر http رد می‌شود", async () => {
+    await request(server)
+      .patch("/api/teacher/me")
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ introVideoUrl: "javascript:alert(1)" })
+      .expect(400);
+  });
+
+  it("استاد نمی‌تواند وضعیت خودش را عوض کند", async () => {
+    await request(server)
+      .patch("/api/teacher/me")
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ status: "APPROVED", commissionRate: "0", headline: "عنوان تازه" })
+      .expect(200);
+
+    const [row] = await db
+      .select({
+        status: teacherProfiles.status,
+        commissionRate: teacherProfiles.commissionRate,
+        headline: teacherProfiles.headline,
+      })
+      .from(teacherProfiles)
+      .where(eq(teacherProfiles.id, fixture.teacherProfileId));
+
+    expect(row?.headline).toBe("عنوان تازه");
+    expect(row?.status).toBe("APPROVED");
+    expect(row?.commissionRate).toBe("20.00");
+  });
+
+  it("هنرجو راه ندارد", async () => {
+    const response = await request(server)
+      .patch("/api/teacher/me")
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ headline: "عنوان" })
+      .expect(403);
+
+    expect(response.body.code).toBe("NOT_A_TEACHER");
   });
 });
 

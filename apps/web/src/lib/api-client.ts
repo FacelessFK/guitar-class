@@ -38,7 +38,7 @@ export class ApiError extends Error {
 }
 
 export interface ApiRequest {
-  method?: "GET" | "POST" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   query?: Record<string, string | number | undefined>;
   /**

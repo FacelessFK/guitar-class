@@ -16,6 +16,7 @@ import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { SLOT_OCCUPYING_STATUSES, type DateKey, type Weekday } from "@music/shared";
 
 import { db } from "../db/client.js";
+import { uniqueViolationConstraint } from "../common/pg-error.js";
 import {
   availabilityExceptions,
   availabilityRules,
@@ -25,9 +26,11 @@ import {
   teacherProfiles,
 } from "../db/schema/index.js";
 import {
+  AlreadyATeacherError,
   AvailabilityEntryNotFoundError,
   NotATeacherError,
   OverlappingRuleError,
+  TeacherSlugTakenError,
 } from "./errors.js";
 
 export interface TeacherProfileView {
@@ -128,6 +131,132 @@ export async function getTeacherProfile(userId: string): Promise<TeacherProfileV
       isActive: row.isActive,
     })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// استاد شدن و ویرایش پروفایل
+// ---------------------------------------------------------------------------
+
+export interface ApplyAsTeacherInput {
+  headline: string;
+  bio: string | null;
+  yearsExperience: number;
+  introVideoUrl: string | null;
+  /** `null` یعنی خودمان یکی بسازیم */
+  slug: string | null;
+}
+
+/**
+ * درخواست استاد شدن.
+ *
+ * پروفایل با وضعیت `PENDING` ساخته می‌شود و **هیچ‌کدام** از فیلدهای
+ * تجاری از کلاینت گرفته نمی‌شوند: `commissionRate` و `status` و
+ * `offerings` مال ادمین‌اند. اگر درصد کمیسیون در همین بدنه می‌آمد، هر
+ * متقاضی می‌توانست سهم پلتفرم را صفر بگذارد.
+ *
+ * به همین دلیل درخواست‌دهنده هنوز نمی‌تواند چیزی بفروشد: تا وقتی ادمین
+ * تأیید نکند و برایش offering نسازد، در `GET /teachers` نمی‌آید و هیچ
+ * اسلاتی قابل رزرو نیست.
+ */
+export async function applyAsTeacher(
+  userId: string,
+  input: ApplyAsTeacherInput,
+): Promise<TeacherProfileView> {
+  const [existing] = await db
+    .select({ status: teacherProfiles.status })
+    .from(teacherProfiles)
+    .where(eq(teacherProfiles.userId, userId))
+    .limit(1);
+
+  if (existing) throw new AlreadyATeacherError(existing.status);
+
+  try {
+    await db.insert(teacherProfiles).values({
+      userId,
+      slug: input.slug ?? generateTeacherSlug(),
+      headline: input.headline,
+      bio: input.bio,
+      yearsExperience: input.yearsExperience,
+      introVideoUrl: input.introVideoUrl,
+      status: "PENDING",
+    });
+  } catch (error) {
+    throw translateProfileConflict(error);
+  }
+
+  return getTeacherProfile(userId);
+}
+
+/**
+ * نشانی پیش‌فرض صفحه‌ی عمومی.
+ *
+ * از روی نام ساخته نمی‌شود چون نام‌ها فارسی‌اند و آوانگاری فارسی به
+ * لاتین یک منبع بی‌پایان اختلاف است («رضایی» یا «rezaee» یا «rezai»؟).
+ * نشانیِ تصادفی زشت ولی درست است، و هم استاد و هم ادمین می‌توانند
+ * بعداً عوضش کنند — که کار درستی هم هست، چون تا آن موقع صفحه هنوز
+ * منتشر نشده و هیچ لینکی به این نشانی وجود ندارد.
+ */
+function generateTeacherSlug(): string {
+  return `teacher-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+export interface UpdateTeacherProfileInput {
+  headline?: string;
+  bio?: string | null;
+  yearsExperience?: number;
+  introVideoUrl?: string | null;
+  slug?: string;
+}
+
+/**
+ * ویرایش پروفایل توسط خودِ استاد.
+ *
+ * ویدیوی معارفه اینجاست چون سند معماری آن را مؤثرترین عامل روی نرخ
+ * تبدیل می‌داند و تا امروز هیچ راهی برای گذاشتنش نبود.
+ *
+ * `status` و `commissionRate` و `bufferMinutes` عمداً بیرون‌اند: اولی
+ * یعنی استاد خودش را تأیید کند، دومی یعنی سهم پلتفرم را خودش تعیین
+ * کند. سومی مال ادمین است چون روی برنامه‌ی فروش اثر می‌گذارد و
+ * پنل استاد اصلاً نشانش نمی‌دهد.
+ *
+ * ویرایش وضعیت را عوض نمی‌کند: استادِ تأییدشده با عوض کردن متن معرفی
+ * دوباره به صف بررسی نمی‌رود. اگر روزی محتوای پروفایل نیاز به بازبینی
+ * داشت، جایش یک صف جدا است نه برگرداندن به `PENDING` که فروش فعالش
+ * را قطع می‌کند.
+ */
+export async function updateTeacherProfile(
+  userId: string,
+  input: UpdateTeacherProfileInput,
+): Promise<TeacherProfileView> {
+  const teacherId = await requireTeacherProfileId(userId);
+
+  // بدنه‌ی خالی به `UPDATE ... SET` بدون ستون تبدیل می‌شود که خطای
+  // نحوی پستگرس است؛ خواندنِ ساده جواب درست‌تری است
+  if (Object.keys(input).length === 0) return getTeacherProfile(userId);
+
+  try {
+    await db
+      .update(teacherProfiles)
+      .set(input)
+      .where(eq(teacherProfiles.id, teacherId));
+  } catch (error) {
+    throw translateProfileConflict(error);
+  }
+
+  return getTeacherProfile(userId);
+}
+
+/** تنها تعارضی که در این مسیرها ممکن است، نشانی تکراری است. */
+function translateProfileConflict(error: unknown): unknown {
+  const constraint = uniqueViolationConstraint(error);
+
+  if (constraint === "teacher_profiles_slug_unique") return new TeacherSlugTakenError();
+  if (constraint === "teacher_profiles_user_id_unique") {
+    // مسابقه‌ی دو درخواست هم‌زمانِ همان کاربر — دکمه دو بار خورده
+    return new AlreadyATeacherError("PENDING");
+  }
+
+  return error;
 }
 
 // ---------------------------------------------------------------------------

@@ -230,16 +230,47 @@ async function seedTeachers(): Promise<void> {
   }
 }
 
+/**
+ * کاربر ادمین توسعه.
+ *
+ * تا وقتی `is_admin` هیچ مسیر نوشتنی‌ای نداشت، ادمین شدن فقط با
+ * `db:studio` ممکن بود — یعنی همان بن‌بستی که پنل ادمین برای رفعش ساخته
+ * شد، خودش پشت یک قدم دستی می‌ماند.
+ *
+ * ⚠️ **این شماره در تولید نباید ادمین بماند.** ورود با OTP است و در
+ * توسعه کد در پاسخ `otp/request` برمی‌گردد، پس هرکسی که به API توسعه
+ * برسد می‌تواند با این شماره وارد پنل ادمین شود. پیش از انتشار، ادمین
+ * واقعی باید دستی ساخته شود و این سطر حذف.
+ *
+ * `is_admin` با `onConflictDoUpdate` دوباره روشن می‌شود ولی نام دست
+ * نمی‌خورد: اگر کسی دستی خاموشش کرده باشد، اجرای دوباره‌ی seed باید
+ * برش گرداند، وگرنه «چرا پنل باز نمی‌شود» به یک ساعت جست‌وجو تبدیل
+ * می‌شود.
+ */
+const ADMIN_PHONE = "+989120000000";
+
+async function seedAdmin(): Promise<void> {
+  await db
+    .insert(users)
+    .values({ phone: ADMIN_PHONE, fullName: "مدیر پلتفرم", isAdmin: true })
+    .onConflictDoUpdate({
+      target: users.phone,
+      set: { isAdmin: sql`true` },
+    });
+}
+
 async function main(): Promise<void> {
   await seedInstruments();
   await seedTeachers();
+  await seedAdmin();
 
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(instruments);
 
   console.log(
-    `داده‌ی اولیه نوشته شد: ${row?.count ?? 0} ساز، ${TEACHERS.length} استاد نمونه.`,
+    `داده‌ی اولیه نوشته شد: ${row?.count ?? 0} ساز، ${TEACHERS.length} استاد نمونه، ` +
+      `ادمین ${ADMIN_PHONE}.`,
   );
 
   await sqlClient.end();

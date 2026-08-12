@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db/client.js";
 import { redis } from "./redis/client.js";
 import { AuthGuard, Public } from "./auth/auth.guard.js";
+import { AdminController, AdminProvider } from "./admin/admin.controller.js";
 import { AuthController, AuthProvider } from "./auth/auth.controller.js";
 import {
   AvailabilityController,
@@ -85,9 +86,11 @@ export class HealthController {
     ClassroomController,
     PaymentController,
     TeacherController,
+    AdminController,
   ],
   providers: [
     AuthProvider,
+    AdminProvider,
     CatalogService,
     AvailabilityProvider,
     BookingProvider,

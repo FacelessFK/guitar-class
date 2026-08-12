@@ -43,6 +43,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <NavLink href="/teacher" active={pathname.startsWith("/teacher")}>
                   پنل استاد
                 </NavLink>
+              ) : (
+                /*
+                  کاربری که پروفایل استاد ندارد به‌جای پنل، راه ساختنش را
+                  می‌بیند. تا پیش از این هیچ لینکی به این مسیر نبود و
+                  «استاد شدن» فقط با ویرایش دستی دیتابیس ممکن بود.
+                */
+                <NavLink
+                  href="/become-teacher"
+                  active={pathname === "/become-teacher"}
+                >
+                  تدریس در پلتفرم
+                </NavLink>
+              )}
+
+              {user?.isAdmin ? (
+                <NavLink href="/admin" active={pathname.startsWith("/admin")}>
+                  پنل ادمین
+                </NavLink>
               ) : null}
             </ul>
           </div>
@@ -76,7 +94,7 @@ function NavLink({
   active,
   children,
 }: {
-  href: "/dashboard" | "/dashboard/book" | "/teacher";
+  href: "/dashboard" | "/dashboard/book" | "/teacher" | "/become-teacher" | "/admin";
   active: boolean;
   children: React.ReactNode;
 }) {

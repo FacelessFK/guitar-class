@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   SetMetadata,
   UnauthorizedException,
@@ -72,14 +73,33 @@ function extractBearerToken(request: Request): string | null {
   return value;
 }
 
-/** فقط برای ادمین‌ها. */
+/**
+ * فقط برای ادمین‌ها.
+ *
+ * پس از `AuthGuard` سراسری اجرا می‌شود، پس `request.user` از قبل نشسته
+ * و امضای توکن بررسی شده است. نبودنش یعنی مسیر به اشتباه `@Public()`
+ * شده — که برای مسیر ادمین بدترین حالت ممکن است، پس همان‌جا رد می‌شود.
+ *
+ * پاسخ **۴۰۳** است نه ۴۰۱. تفاوتشان اینجا رفتاری است، نه سلیقه‌ای:
+ * `apiFetch` در فرانت هر ۴۰۱ را «نشست منقضی شد» می‌خواند، یک بار تمدید
+ * می‌کند و اگر باز ۴۰۱ گرفت کاربر را بیرون می‌اندازد. با ۴۰۱، کاربر
+ * عادی‌ای که آدرس `/admin` را باز می‌کرد از حسابش خارج می‌شد — که نه
+ * درست است و نه قابل تشخیص از یک خرابی واقعی.
+ */
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
 
-    if (!request.user?.isAdmin) {
+    if (!request.user) {
       throw new UnauthorizedException({
+        code: "UNAUTHENTICATED",
+        message: "برای این عملیات باید وارد شوید.",
+      });
+    }
+
+    if (!request.user.isAdmin) {
+      throw new ForbiddenException({
         code: "FORBIDDEN",
         message: "این بخش فقط برای مدیران است.",
       });

@@ -7,21 +7,29 @@ import {
   HttpStatus,
   Injectable,
   Param,
+  Patch,
   Post,
 } from "@nestjs/common";
 import { z } from "zod";
 import { tehranDateKey } from "@music/shared";
 
 import { CurrentUserId } from "../common/current-user.decorator.js";
-import { dateKeySchema, minuteOfDaySchema, uuidSchema } from "../common/schemas.js";
+import {
+  dateKeySchema,
+  minuteOfDaySchema,
+  slugSchema,
+  uuidSchema,
+} from "../common/schemas.js";
 import { zodPipe } from "../common/validation.pipe.js";
 import {
+  applyAsTeacher,
   createException,
   createRule,
   deleteException,
   deleteRule,
   getSchedule,
   getTeacherProfile,
+  updateTeacherProfile,
   type ExceptionView,
   type RuleView,
   type TeacherProfileView,
@@ -31,12 +39,72 @@ import type { Weekday } from "@music/shared";
 @Injectable()
 export class TeacherProvider {
   readonly profile = getTeacherProfile;
+  readonly apply = applyAsTeacher;
+  readonly updateProfile = updateTeacherProfile;
   readonly schedule = getSchedule;
   readonly createRule = createRule;
   readonly deleteRule = deleteRule;
   readonly createException = createException;
   readonly deleteException = deleteException;
 }
+
+/**
+ * نشانی ویدیوی معارفه.
+ *
+ * فقط `http(s)` پذیرفته می‌شود. بدون این بررسی، `javascript:` در همان
+ * فیلد می‌نشیند و صفحه‌ی عمومی استاد آن را در `href` رندر می‌کند —
+ * پروفایلی که هر بازدیدکننده‌ی سئویی رویش می‌آید.
+ */
+const httpUrlSchema = z
+  .string()
+  .trim()
+  .max(500, "نشانی نمی‌تواند بیشتر از ۵۰۰ نویسه باشد")
+  .refine(
+    (value) => /^https?:\/\//i.test(value),
+    "نشانی باید با http:// یا https:// شروع شود",
+  );
+
+const headlineSchema = z
+  .string()
+  .trim()
+  .min(3, "معرفی کوتاه باید دست‌کم سه نویسه باشد")
+  .max(160, "معرفی کوتاه نمی‌تواند بیشتر از ۱۶۰ نویسه باشد");
+
+const bioSchema = z.string().trim().max(4000, "متن معرفی خیلی بلند است");
+
+const yearsSchema = z
+  .number()
+  .int("سال سابقه باید عدد صحیح باشد")
+  .min(0, "سال سابقه نمی‌تواند منفی باشد")
+  .max(80, "سال سابقه نامعتبر است");
+
+const applySchema = z.object({
+  headline: headlineSchema,
+  bio: bioSchema.optional(),
+  yearsExperience: yearsSchema.optional(),
+  introVideoUrl: httpUrlSchema.optional(),
+  /** اختیاری است؛ نبودنش یعنی سرور یکی بسازد */
+  slug: slugSchema.optional(),
+});
+
+/**
+ * ویرایش پروفایل — همه‌ی فیلدها اختیاری‌اند و «نبود» با «تهی» فرق دارد.
+ *
+ * `bio: null` یعنی «پاکش کن» و نبودن `bio` یعنی «دست نزن». اگر هر دو یک
+ * معنا داشتند، فرستادن فرمی که فقط عنوان را عوض کرده، متن معرفی را هم
+ * پاک می‌کرد.
+ */
+const updateProfileSchema = z
+  .object({
+    headline: headlineSchema.optional(),
+    bio: bioSchema.nullable().optional(),
+    yearsExperience: yearsSchema.optional(),
+    introVideoUrl: httpUrlSchema.nullable().optional(),
+    slug: slugSchema.optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "چیزی برای تغییر فرستاده نشده است",
+  });
 
 /**
  * پایان بازه می‌تواند ۱۴۴۰ باشد («تا نیمه‌شب») ولی شروع نه.
@@ -125,6 +193,47 @@ export class TeacherController {
   @Get("me")
   async me(@CurrentUserId() userId: string): Promise<TeacherProfileView> {
     return this.teacher.profile(userId);
+  }
+
+  /**
+   * درخواست استاد شدن.
+   *
+   * تنها مسیر این کنترلر که کاربرِ **غیر**استاد صدایش می‌زند. پروفایل با
+   * `PENDING` ساخته می‌شود و تا تأیید ادمین در هیچ صفحه‌ی عمومی نمی‌آید،
+   * پس این اندپوینت به‌تنهایی چیزی برای فروش نمی‌سازد.
+   */
+  @Post("apply")
+  @HttpCode(HttpStatus.CREATED)
+  async apply(
+    @CurrentUserId() userId: string,
+    @Body(zodPipe(applySchema)) body: z.infer<typeof applySchema>,
+  ): Promise<TeacherProfileView> {
+    return this.teacher.apply(userId, {
+      headline: body.headline,
+      bio: body.bio?.length ? body.bio : null,
+      yearsExperience: body.yearsExperience ?? 0,
+      introVideoUrl: body.introVideoUrl?.length ? body.introVideoUrl : null,
+      slug: body.slug ?? null,
+    });
+  }
+
+  /**
+   * ویرایش پروفایل توسط خودِ استاد.
+   *
+   * `commissionRate` و `status` عمداً پذیرفته نمی‌شوند — هرچه در بدنه
+   * بیاید، اسکیمای Zod حذفش می‌کند. تنظیمشان کار پنل ادمین است.
+   */
+  @Patch("me")
+  async updateProfile(
+    @CurrentUserId() userId: string,
+    @Body(zodPipe(updateProfileSchema)) body: z.infer<typeof updateProfileSchema>,
+  ): Promise<TeacherProfileView> {
+    return this.teacher.updateProfile(userId, {
+      ...body,
+      // فیلد متنی خالی‌شده در فرم یعنی «پاکش کن»، نه رشته‌ی خالی در
+      // دیتابیس؛ وگرنه صفحه‌ی عمومی به‌جای نداشتن متن، متنِ خالی دارد
+      ...(body.bio === undefined ? {} : { bio: body.bio?.length ? body.bio : null }),
+    });
   }
 
   /** قوانین هفتگی و استثناهای پیشِ رو. */

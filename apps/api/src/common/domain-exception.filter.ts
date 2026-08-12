@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import type { Response } from "express";
 
+import { PayoutExceedsBalanceError } from "../admin/errors.js";
 import { PackageConflictError } from "../booking/errors.js";
 import { RoomNotOpenYetError } from "../classroom/errors.js";
 import { DomainError } from "./domain-error.js";
@@ -46,6 +47,15 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   NOT_A_TEACHER: HttpStatus.FORBIDDEN,
   AVAILABILITY_ENTRY_NOT_FOUND: HttpStatus.NOT_FOUND,
   OVERLAPPING_RULE: HttpStatus.CONFLICT,
+  ALREADY_A_TEACHER: HttpStatus.CONFLICT,
+  TEACHER_SLUG_TAKEN: HttpStatus.CONFLICT,
+
+  // پنل ادمین
+  ADMIN_RECORD_NOT_FOUND: HttpStatus.NOT_FOUND,
+  INSTRUMENT_SLUG_TAKEN: HttpStatus.CONFLICT,
+  OFFERING_EXISTS: HttpStatus.CONFLICT,
+  PAYOUT_EXCEEDS_BALANCE: HttpStatus.CONFLICT,
+  PAYOUT_NOT_PENDING: HttpStatus.CONFLICT,
 
   // پرداخت
   ORDER_NOT_FOUND: HttpStatus.NOT_FOUND,
@@ -71,6 +81,13 @@ export class DomainExceptionFilter implements ExceptionFilter<DomainError> {
     // معکوس نشان دهد به‌جای اینکه کاربر دکمه را بی‌هدف تکرار کند
     if (exception instanceof RoomNotOpenYetError) {
       body.opensAt = exception.opensAt.toISOString();
+    }
+
+    // مبلغ تسویه که رد شده باید بگوید مانده‌ی واقعی چقدر است، وگرنه
+    // ادمین باید صفحه را ببندد و از جای دیگری عدد را پیدا کند.
+    // رشته می‌رود نه عدد، چون `bigint` را `JSON.stringify` پرت می‌کند.
+    if (exception instanceof PayoutExceedsBalanceError) {
+      body.outstanding = exception.outstanding.toString();
     }
 
     // تداخل پکیج باید بگوید دقیقاً کدام هفته‌ها مشکل دارند، تا هنرجو

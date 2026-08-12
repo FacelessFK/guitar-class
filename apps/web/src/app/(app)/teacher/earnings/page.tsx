@@ -38,15 +38,22 @@ export default function EarningsPage() {
         <p className="mt-8 text-sm text-ink-muted">در حال بارگذاری…</p>
       ) : (
         <>
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Total label="ناخالص" amount={earnings.gross} />
             <Total label="سهم پلتفرم" amount={earnings.commission} />
-            <Total label="سهم شما" amount={earnings.net} emphasis />
+            <Total label="تسویه‌شده" amount={earnings.paidOut} />
+            <Total label="مانده" amount={earnings.outstanding} emphasis />
           </div>
 
+          {/*
+            «ناخالص» با تسویه شدن پایین نمی‌آید، هرچند سطر تسویه در دفتر
+            کل ناچار `gross` منفی دارد: API سطرهای تسویه را از دو ستون
+            اول کنار می‌گذارد. وگرنه استاد بعد از گرفتن پول می‌دید که
+            «درآمد ناخالص»‌اش کم شده.
+          */}
           <p className="alert-info mt-6">
-            تسویه در حال حاضر ماهانه و دستی انجام می‌شود. «سهم شما» همان مبلغی
-            است که پرداخت می‌شود.
+            تسویه در حال حاضر ماهانه و دستی انجام می‌شود. «مانده» همان مبلغی است
+            که در تسویه‌ی بعدی پرداخت می‌شود.
           </p>
 
           <section className="mt-10">

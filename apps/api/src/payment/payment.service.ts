@@ -18,7 +18,7 @@
  *      پلتفرم به اوست.
  */
 
-import { and, eq, inArray, lt, sum } from "drizzle-orm";
+import { and, eq, inArray, lt, sql, sum } from "drizzle-orm";
 import {
   BUSINESS_RULES,
   negateSplit,
@@ -741,6 +741,57 @@ export async function teacherLedgerSummary(
     gross: BigInt(row?.gross ?? 0),
     commission: BigInt(row?.commission ?? 0),
     net: BigInt(row?.net ?? 0),
+  };
+}
+
+export interface EarningsBreakdown {
+  /** فروش ناخالص — تسویه‌ها در آن نیستند */
+  gross: bigint;
+  commission: bigint;
+  /** آنچه از دفتر کل به استاد تعلق گرفته، پیش از کسر تسویه‌ها */
+  earned: bigint;
+  /** جمع تسویه‌های انجام‌شده، به صورت مثبت */
+  paidOut: bigint;
+  /** بدهی فعلی پلتفرم به استاد = `earned − paidOut` */
+  outstanding: bigint;
+}
+
+/**
+ * تفکیک درآمد استاد — برای پنل استاد و برای ثبت تسویه در پنل ادمین.
+ *
+ * `teacherLedgerSummary` جمع خامِ همه‌ی سطرهاست و `net` آن دقیقاً مانده
+ * است؛ ولی `gross` آن بعد از یک تسویه پایین می‌آید، چون سطر تسویه
+ * ناچار `gross` منفی دارد (قید `ledger_amounts_balance` می‌گوید
+ * `gross = commission + net` و تسویه کمیسیون ندارد).
+ *
+ * برای استاد این گمراه‌کننده است: «درآمد ناخالص» نباید با گرفتنِ پول کم
+ * شود. پس تسویه‌ها از دو ستون اول کنار گذاشته می‌شوند و به‌جایش ستون
+ * خودشان را می‌گیرند. مانده همچنان همان جمع ساده است، چون هر دو راه به
+ * یک عدد می‌رسند.
+ */
+export async function teacherEarningsBreakdown(
+  teacherProfileId: string,
+): Promise<EarningsBreakdown> {
+  const [row] = await db
+    .select({
+      gross: sum(sql`CASE WHEN ${ledgerEntries.type} = 'PAYOUT' THEN 0 ELSE ${ledgerEntries.grossAmount} END`),
+      commission: sum(sql`CASE WHEN ${ledgerEntries.type} = 'PAYOUT' THEN 0 ELSE ${ledgerEntries.commission} END`),
+      earned: sum(sql`CASE WHEN ${ledgerEntries.type} = 'PAYOUT' THEN 0 ELSE ${ledgerEntries.netAmount} END`),
+      /** سطر تسویه منفی است؛ قرینه‌اش را می‌گیریم تا رو به کاربر مثبت باشد */
+      paidOut: sum(sql`CASE WHEN ${ledgerEntries.type} = 'PAYOUT' THEN -${ledgerEntries.netAmount} ELSE 0 END`),
+    })
+    .from(ledgerEntries)
+    .where(eq(ledgerEntries.teacherId, teacherProfileId));
+
+  const earned = BigInt(row?.earned ?? 0);
+  const paidOut = BigInt(row?.paidOut ?? 0);
+
+  return {
+    gross: BigInt(row?.gross ?? 0),
+    commission: BigInt(row?.commission ?? 0),
+    earned,
+    paidOut,
+    outstanding: earned - paidOut,
   };
 }
 

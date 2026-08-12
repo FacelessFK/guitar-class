@@ -221,9 +221,16 @@ export const getOrders = () =>
   apiFetch<{ orders: Order[] }>("/payments/orders").then((data) => data.orders);
 
 export interface Earnings {
+  /** فروش ناخالص — تسویه‌ها در آن نیستند */
   gross: string;
   commission: string;
+  /** مانده‌ی پرداختنی. هم‌معنی `outstanding` است و برای سازگاری مانده */
   net: string;
+  /** آنچه تا امروز به استاد تعلق گرفته، پیش از کسر تسویه‌ها */
+  earned: string;
+  /** جمع تسویه‌های انجام‌شده */
+  paidOut: string;
+  outstanding: string;
   entries: Array<{
     type: "EARNING" | "REFUND" | "PAYOUT" | "ADJUSTMENT";
     gross: string;
@@ -260,6 +267,36 @@ export interface TeacherProfile {
 }
 
 export const getTeacherProfile = () => apiFetch<TeacherProfile>("/teacher/me");
+
+/**
+ * درخواست استاد شدن.
+ *
+ * `slug` اختیاری است؛ نفرستادنش یعنی سرور یکی بسازد. نه وضعیت و نه
+ * درصد کمیسیون در این بدنه جا ندارند — سرور هرچه بفرستی دور می‌ریزد و
+ * پروفایل همیشه `PENDING` ساخته می‌شود.
+ */
+export const applyAsTeacher = (body: {
+  headline: string;
+  bio?: string;
+  yearsExperience?: number;
+  introVideoUrl?: string;
+  slug?: string;
+}) => apiFetch<TeacherProfile>("/teacher/apply", { method: "POST", body });
+
+/**
+ * ویرایش پروفایل توسط خود استاد.
+ *
+ * `null` یعنی «پاکش کن» و نبودنِ کلید یعنی «دست نزن» — پس فرم باید فقط
+ * فیلدهای عوض‌شده را بفرستد، وگرنه یک فیلد خالی‌مانده چیزی را که در
+ * دیتابیس هست پاک می‌کند.
+ */
+export const updateTeacherProfile = (body: {
+  headline?: string;
+  bio?: string | null;
+  yearsExperience?: number;
+  introVideoUrl?: string | null;
+  slug?: string;
+}) => apiFetch<TeacherProfile>("/teacher/me", { method: "PATCH", body });
 
 export interface ScheduleRule {
   id: string;
@@ -313,6 +350,234 @@ export const addException = (body: {
 export const removeException = (exceptionId: string) =>
   apiFetch<{ message: string }>(`/teacher/availability/exceptions/${exceptionId}`, {
     method: "DELETE",
+  });
+
+// ---------------------------------------------------------------------------
+// پنل ادمین
+// ---------------------------------------------------------------------------
+
+/**
+ * همه‌ی این مسیرها پشت `AdminGuard` هستند و برای کاربر غیرادمین **۴۰۳**
+ * برمی‌گردانند، نه ۴۰۱ — وگرنه `apiFetch` آن را «نشست تمام شد» می‌خواند
+ * و کاربر را از حساب بیرون می‌انداخت.
+ */
+
+export type TeacherStatus = "PENDING" | "APPROVED" | "SUSPENDED";
+export type SkillLevel = "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
+
+export interface AdminOverview {
+  pendingTeachers: number;
+  approvedTeachers: number;
+  activeInstruments: number;
+  upcomingBookings: number;
+  pendingPayouts: number;
+  outstandingTotal: string;
+}
+
+export const getAdminOverview = () => apiFetch<AdminOverview>("/admin/overview");
+
+export interface AdminTeacher {
+  profileId: string;
+  userId: string;
+  fullName: string;
+  phone: string;
+  slug: string;
+  headline: string;
+  status: TeacherStatus;
+  commissionRate: string;
+  yearsExperience: number;
+  offeringCount: number;
+  createdAt: string;
+}
+
+export interface AdminTeacherDetail extends AdminTeacher {
+  bio: string | null;
+  introVideoUrl: string | null;
+  bufferMinutes: number;
+  offerings: Array<{
+    id: string;
+    instrumentId: string;
+    instrumentName: string;
+    instrumentSlug: string;
+    price: string;
+    durationMinutes: number;
+    levels: SkillLevel[];
+    isActive: boolean;
+  }>;
+  balance: {
+    gross: string;
+    commission: string;
+    earned: string;
+    paidOut: string;
+    outstanding: string;
+  };
+}
+
+export const getAdminTeachers = (status?: TeacherStatus) =>
+  apiFetch<{ teachers: AdminTeacher[] }>("/admin/teachers", {
+    query: { status },
+  }).then((data) => data.teachers);
+
+export const getAdminTeacher = (profileId: string) =>
+  apiFetch<AdminTeacherDetail>(`/admin/teachers/${profileId}`);
+
+export const updateAdminTeacher = (
+  profileId: string,
+  body: {
+    status?: TeacherStatus;
+    commissionRate?: string;
+    bufferMinutes?: number;
+    slug?: string;
+  },
+) => apiFetch<AdminTeacherDetail>(`/admin/teachers/${profileId}`, {
+  method: "PATCH",
+  body,
+});
+
+export interface AdminInstrument {
+  id: string;
+  slug: string;
+  nameFa: string;
+  descriptionFa: string | null;
+  iconUrl: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  offeringCount: number;
+}
+
+export const getAdminInstruments = () =>
+  apiFetch<{ instruments: AdminInstrument[] }>("/admin/instruments").then(
+    (data) => data.instruments,
+  );
+
+export const createInstrument = (body: {
+  slug: string;
+  nameFa: string;
+  descriptionFa?: string;
+  sortOrder?: number;
+}) => apiFetch<AdminInstrument>("/admin/instruments", { method: "POST", body });
+
+export const updateInstrument = (
+  instrumentId: string,
+  body: {
+    slug?: string;
+    nameFa?: string;
+    descriptionFa?: string | null;
+    sortOrder?: number;
+    isActive?: boolean;
+  },
+) => apiFetch<AdminInstrument>(`/admin/instruments/${instrumentId}`, {
+  method: "PATCH",
+  body,
+});
+
+/** مبلغ رشته و به ریال است — هیچ محاسبه‌ی پولی در فرانت انجام نمی‌شود. */
+export const createOffering = (
+  profileId: string,
+  body: {
+    instrumentId: string;
+    price: string;
+    durationMinutes?: number;
+    levels?: SkillLevel[];
+  },
+) => apiFetch<AdminTeacherDetail>(`/admin/teachers/${profileId}/offerings`, {
+  method: "POST",
+  body,
+});
+
+export const updateOffering = (
+  offeringId: string,
+  body: {
+    price?: string;
+    durationMinutes?: number;
+    levels?: SkillLevel[];
+    isActive?: boolean;
+  },
+) => apiFetch<AdminTeacherDetail>(`/admin/offerings/${offeringId}`, {
+  method: "PATCH",
+  body,
+});
+
+export interface AdminBooking {
+  id: string;
+  type: "TRIAL" | "SINGLE" | "PACKAGE";
+  status: BookingStatus;
+  scheduledAt: string;
+  endsAt: string;
+  durationMinutes: number;
+  price: string;
+  commissionRate: string;
+  studentName: string;
+  studentPhone: string;
+  teacherName: string;
+  teacherProfileId: string | null;
+  instrumentName: string;
+  enrollmentId: string | null;
+  sessionIndex: number | null;
+  teacherJoinedAt: string | null;
+  studentJoinedAt: string | null;
+}
+
+export const getAdminBookings = (filter: {
+  /** چند وضعیت با کاما */
+  status?: string;
+  teacherProfileId?: string;
+  from?: string;
+  to?: string;
+}) =>
+  apiFetch<{ bookings: AdminBooking[] }>("/admin/bookings", { query: filter }).then(
+    (data) => data.bookings,
+  );
+
+export interface AdminOrder {
+  id: string;
+  amount: string;
+  status: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+  gateway: string;
+  refId: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  studentName: string;
+  studentPhone: string;
+}
+
+export const getAdminOrders = (status?: string) =>
+  apiFetch<{ orders: AdminOrder[] }>("/admin/orders", { query: { status } }).then(
+    (data) => data.orders,
+  );
+
+export interface AdminPayout {
+  id: string;
+  teacherProfileId: string;
+  teacherName: string;
+  periodStart: string;
+  periodEnd: string;
+  amount: string;
+  status: "PENDING" | "PAID";
+  paidAt: string | null;
+  trackingCode: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export const getAdminPayouts = (teacherProfileId?: string) =>
+  apiFetch<{ payouts: AdminPayout[] }>("/admin/payouts", {
+    query: { teacherProfileId },
+  }).then((data) => data.payouts);
+
+export const createPayout = (body: {
+  teacherProfileId: string;
+  periodStart: string;
+  periodEnd: string;
+  amount: string;
+  note?: string;
+}) => apiFetch<AdminPayout>("/admin/payouts", { method: "POST", body });
+
+/** پول واقعاً رفت — سطر منفی در دفتر کل همین‌جا نوشته می‌شود. */
+export const markPayoutPaid = (payoutId: string, trackingCode?: string) =>
+  apiFetch<AdminPayout>(`/admin/payouts/${payoutId}/paid`, {
+    method: "POST",
+    body: { ...(trackingCode ? { trackingCode } : {}) },
   });
 
 // ---------------------------------------------------------------------------

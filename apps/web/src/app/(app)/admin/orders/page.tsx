@@ -1,0 +1,118 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+import { errorMessage } from "@/lib/api-client";
+import { getAdminOrders, type AdminOrder } from "@/lib/app-api";
+import { formatJalaliDate, formatTehranTime, formatToman } from "@/lib/format";
+
+const FILTERS = [
+  { label: "همه", value: undefined },
+  { label: "پرداخت‌شده", value: "PAID" },
+  { label: "در انتظار", value: "PENDING" },
+  { label: "ناموفق", value: "FAILED" },
+  { label: "مسترد", value: "REFUNDED" },
+] as const;
+
+const STATUS_LABEL: Record<AdminOrder["status"], string> = {
+  PAID: "پرداخت‌شده",
+  PENDING: "در انتظار",
+  FAILED: "ناموفق",
+  REFUNDED: "مسترد",
+};
+
+const STATUS_TONE: Record<AdminOrder["status"], string> = {
+  PAID: "badge-ok",
+  PENDING: "badge-wait",
+  FAILED: "badge-off",
+  REFUNDED: "badge-neutral",
+};
+
+/**
+ * تراکنش‌ها.
+ *
+ * این فهرست سفارش‌هاست نه دفتر کل: سفارش یعنی «کاربر چقدر پرداخت کرد»
+ * و دفتر کل یعنی «آن پول چطور بین پلتفرم و استاد تقسیم شد». دومی در
+ * پرونده‌ی هر استاد است، چون سؤالش همیشه درباره‌ی یک استاد مشخص است.
+ */
+export default function AdminOrdersPage() {
+  const [status, setStatus] = useState<string | undefined>(undefined);
+  const [orders, setOrders] = useState<AdminOrder[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setOrders(null);
+    try {
+      setOrders(await getAdminOrders(status));
+      setError(null);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setOrders([]);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <div className="mx-auto max-w-5xl px-5 py-12">
+      <h1 className="text-2xl font-bold">تراکنش‌ها</h1>
+
+      <div className="mt-6 flex flex-wrap gap-2">
+        {FILTERS.map((filter) => (
+          <button
+            key={filter.label}
+            type="button"
+            onClick={() => setStatus(filter.value)}
+            className={
+              status === filter.value
+                ? "rounded-full bg-accent px-4 py-1.5 text-sm text-accent-ink"
+                : "rounded-full border border-border px-4 py-1.5 text-sm text-ink-muted"
+            }
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
+      {error ? <p className="alert-error mt-6">{error}</p> : null}
+
+      {orders === null ? (
+        <p className="mt-8 text-sm text-ink-muted">در حال بارگذاری…</p>
+      ) : orders.length === 0 ? (
+        <p className="alert-info mt-8">تراکنشی با این فیلتر پیدا نشد.</p>
+      ) : (
+        <ul className="mt-8 space-y-2">
+          {orders.map((order) => (
+            <li
+              key={order.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 text-sm"
+            >
+              <div>
+                <p className="font-medium">
+                  {formatToman(order.amount)} تومان · {order.studentName}
+                </p>
+                <p className="mt-1 text-ink-muted">
+                  <span dir="ltr">{order.studentPhone}</span> ·{" "}
+                  {formatJalaliDate(order.createdAt.slice(0, 10))} ساعت{" "}
+                  {formatTehranTime(order.createdAt)}
+                  {order.refId ? (
+                    <>
+                      {" · کد رهگیری "}
+                      <span dir="ltr">{order.refId}</span>
+                    </>
+                  ) : null}
+                </p>
+              </div>
+
+              <span className={`badge ${STATUS_TONE[order.status]}`}>
+                {STATUS_LABEL[order.status]}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

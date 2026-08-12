@@ -329,6 +329,9 @@ describe("سفارش‌ها و درآمد", () => {
       gross: "0",
       commission: "0",
       net: "0",
+      earned: "0",
+      paidOut: "0",
+      outstanding: "0",
       entries: [],
     });
   });

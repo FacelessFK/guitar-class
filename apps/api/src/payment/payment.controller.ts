@@ -25,7 +25,7 @@ import { PaymentError } from "./errors.js";
 import {
   settleOrder,
   startCheckout,
-  teacherLedgerSummary,
+  teacherEarningsBreakdown,
   type SettlementResult,
 } from "./payment.service.js";
 
@@ -33,7 +33,7 @@ import {
 export class PaymentProvider {
   readonly checkout = startCheckout;
   readonly settle = settleOrder;
-  readonly earnings = teacherLedgerSummary;
+  readonly earnings = teacherEarningsBreakdown;
 }
 
 /**
@@ -173,14 +173,25 @@ export class PaymentController {
   /**
    * درآمد استاد.
    *
-   * `net` همان چیزی است که در تسویه پرداخت می‌شود. چون بازپرداخت در
-   * دفتر کل سطر منفی است، این عدد از پیش خالص است.
+   * `outstanding` همان چیزی است که در تسویه‌ی بعدی پرداخت می‌شود. چون
+   * بازپرداخت در دفتر کل سطر منفی است، این عدد از پیش خالص است.
+   *
+   * `gross` و `commission` سطرهای تسویه را **نمی‌شمارند**: سطر تسویه
+   * ناچار `gross` منفی دارد (قید دفتر کل `gross = commission + net` را
+   * می‌خواهد و تسویه کمیسیون ندارد)، و بدون این تفکیک، «درآمد ناخالص»
+   * استاد با گرفتنِ پول کم می‌شد.
+   *
+   * `net` هنوز هست و همان `outstanding` است — فرانتِ منتشرشده آن را
+   * می‌خواند و شکستنش فقط برای تمیزی نام، صفحه‌ی درآمد را خالی می‌کرد.
    */
   @Get("earnings")
   async getEarnings(@CurrentUserId() userId: string): Promise<{
     gross: string;
     commission: string;
     net: string;
+    earned: string;
+    paidOut: string;
+    outstanding: string;
     entries: Array<{
       type: string;
       gross: string;
@@ -197,10 +208,18 @@ export class PaymentController {
       .limit(1);
 
     if (!profile) {
-      return { gross: "0", commission: "0", net: "0", entries: [] };
+      return {
+        gross: "0",
+        commission: "0",
+        net: "0",
+        earned: "0",
+        paidOut: "0",
+        outstanding: "0",
+        entries: [],
+      };
     }
 
-    const [summary, entries] = await Promise.all([
+    const [breakdown, entries] = await Promise.all([
       this.payment.earnings(profile.id),
       db
         .select()
@@ -211,9 +230,12 @@ export class PaymentController {
     ]);
 
     return {
-      gross: summary.gross.toString(),
-      commission: summary.commission.toString(),
-      net: summary.net.toString(),
+      gross: breakdown.gross.toString(),
+      commission: breakdown.commission.toString(),
+      net: breakdown.outstanding.toString(),
+      earned: breakdown.earned.toString(),
+      paidOut: breakdown.paidOut.toString(),
+      outstanding: breakdown.outstanding.toString(),
       entries: entries.map((entry) => ({
         type: entry.type,
         gross: entry.grossAmount.toString(),

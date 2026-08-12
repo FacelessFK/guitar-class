@@ -63,6 +63,39 @@ export function statusDisplay(
   }
 }
 
+/**
+ * برچسب وضعیت از دید ناظرِ بیرونی.
+ *
+ * `statusDisplay` همیشه یک طرفِ ماجراست و «شما» می‌گوید؛ ادمین هیچ‌کدام
+ * از دو طرف نیست، پس آنجا «شما لغو کردید» صریحاً غلط است و برای رسیدگی
+ * به اختلاف هم دقیقاً همان چیزی که لازم است — «کدام‌شان» — را پنهان
+ * می‌کند.
+ */
+export function statusLabel(status: BookingStatus): string {
+  switch (status) {
+    case "PENDING_PAYMENT":
+      return "در انتظار پرداخت";
+    case "CONFIRMED":
+      return "تأییدشده";
+    case "IN_PROGRESS":
+      return "در حال برگزاری";
+    case "COMPLETED":
+      return "برگزار شد";
+    case "CANCELLED_BY_STUDENT":
+      return "لغو توسط هنرجو";
+    case "CANCELLED_BY_TEACHER":
+      return "لغو توسط استاد";
+    case "NO_SHOW_STUDENT":
+      return "عدم حضور هنرجو";
+    case "NO_SHOW_TEACHER":
+      return "عدم حضور استاد";
+    case "NO_SHOW":
+      return "هیچ‌کس نیامد";
+    case "EXPIRED":
+      return "مهلت پرداخت تمام شد";
+  }
+}
+
 export function typeLabel(type: "TRIAL" | "SINGLE" | "PACKAGE"): string {
   switch (type) {
     case "TRIAL":

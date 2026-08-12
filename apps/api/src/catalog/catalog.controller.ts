@@ -1,6 +1,5 @@
 import { Controller, Get, Injectable, NotFoundException, Param, Query } from "@nestjs/common";
 import { and, asc, eq } from "drizzle-orm";
-import { z } from "zod";
 
 import { db } from "../db/client.js";
 import {
@@ -10,13 +9,8 @@ import {
   users,
 } from "../db/schema/index.js";
 import { zodPipe } from "../common/validation.pipe.js";
+import { slugSchema } from "../common/schemas.js";
 import { Public } from "../auth/auth.guard.js";
-
-const slugSchema = z
-  .string()
-  .min(1)
-  .max(80)
-  .regex(/^[a-z0-9-]+$/, "شناسه‌ی نشانی نامعتبر است");
 
 /**
  * کاتالوگ عمومی — سازها، استادها و سرویس‌هایشان.
