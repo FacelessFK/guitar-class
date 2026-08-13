@@ -31,12 +31,20 @@ export default async function HomePage() {
       <section className="mx-auto max-w-5xl px-5 pt-14 pb-12 sm:pt-20">
         <p className="text-sm font-medium text-accent">خصوصی · زنده · یک‌به‌یک</p>
 
-        <h1 className="mt-4 font-display text-4xl leading-[1.5] sm:text-5xl sm:leading-[1.45]">
+        {/**
+         * تیتر عمداً بزرگ است و تا نزدیک لبه می‌رود.
+         *
+         * با عرض کم، سمت چپِ دسکتاپ یک خالیِ بی‌دلیل می‌ماند که شبیه
+         * چیزی است که قرار بوده بیاید و نیامده. لاله‌زار در این اندازه
+         * تازه خودش را نشان می‌دهد، و همین‌جا تنها جایی است که خرجش
+         * می‌کنیم.
+         */}
+        <h1 className="mt-4 max-w-4xl font-display text-4xl leading-[1.5] sm:text-6xl sm:leading-[1.35]">
           {instruments.length > 0 ? `${faNumber(instruments.length)} ساز، ` : null}
           استاد خصوصی، کلاس زنده
         </h1>
 
-        <p className="mt-5 max-w-xl text-lg leading-9 text-ink-soft">
+        <p className="mt-6 max-w-xl text-lg leading-9 text-ink-soft">
           ساز و استادت را انتخاب کن، ساعت آزادش را بردار، و کلاس را زنده و
           یک‌به‌یک برگزار کن. جلسه‌ی معارفه بیست دقیقه است و رایگان — یک بار،
           برای آشنایی با استاد و سبک کارش.
