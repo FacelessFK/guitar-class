@@ -18,8 +18,24 @@
  */
 export const CATALOG_REVALIDATE_SECONDS = 3600;
 
+/**
+ * این ماژول **فقط سمت سرور** اجرا می‌شود (بیلد و ISR)، پس می‌تواند از
+ * آدرسی استفاده کند که مرورگر اصلاً نمی‌شناسد.
+ *
+ * `API_INTERNAL_URL` برای همان است: در داکر، فرانت و API روی یک شبکه‌ی
+ * داخلی‌اند و `http://api:4000/api` بی‌واسطه در دسترس است. رفتن از راه
+ * دامنه‌ی عمومی یعنی درخواست از کانتینر بیرون برود، به nginx برسد و
+ * دوباره برگردد — با سه شکست ممکن که هیچ‌کدام ربطی به برنامه ندارند:
+ * گواهی TLS، برگشت DNS به خودِ ماشین، و باز بودن مسیر از بیرون.
+ *
+ * ⚠️ برخلاف `NEXT_PUBLIC_API_URL` این مقدار **در باندل مرورگر نمی‌نشیند**
+ * (نامش `NEXT_PUBLIC_` نیست و نباید بشود). اگر تعریف نشود، همان آدرس
+ * عمومی استفاده می‌شود و رفتار دقیقاً مثل قبل است.
+ */
 const apiBaseUrl = (): string =>
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+  process.env.API_INTERNAL_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:4000/api";
 
 export interface Instrument {
   id: string;

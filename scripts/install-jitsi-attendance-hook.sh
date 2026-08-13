@@ -23,9 +23,16 @@ SERVER="${JITSI_SSH_HOST:-87.107.104.218}"
 REMOTE_DIR="${JITSI_REMOTE_DIR:-/home/fardin/music-platform/jitsi}"
 SERVICE="prosody"
 
-# دامنه‌ی XMPP **داخلی**، نه دامنه‌ی عمومی. همان چیزی که در `sub` توکن
-# می‌رود و یک بار قبلاً با دامنه‌ی عمومی اشتباه گرفته شد.
-XMPP_DOMAIN="${JITSI_XMPP_DOMAIN:-meet.jitsi}"
+# ⚠️ نام کامپوننت MUC **حدس زده نمی‌شود**. نصب‌های داکری
+# `muc.meet.jitsi` دارند نه `conference.meet.jitsi`، و ماژول با نام
+# اشتباه بی‌صدا هیچ رویدادی نمی‌فرستد — لود می‌شود، خطا نمی‌دهد، و روی
+# هیچ اتاقی قلاب نمی‌زند. مقدارها از همان `.env`ی خوانده می‌شوند که
+# خودِ jitsi با آن بالا آمده.
+REMOTE_JITSI_ENV="$REMOTE_DIR/.env"
+
+read_remote_env() {
+  ssh "$SERVER" "grep -E '^$1=' '$REMOTE_JITSI_ENV' | cut -d= -f2-" | tr -d '\r'
+}
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"
@@ -54,26 +61,38 @@ read_env() {
   sed -n "s/^${key}=[\"']\{0,1\}\([^\"']*\)[\"']\{0,1\}$/\1/p" "$ENV_FILE" | tail -n1
 }
 
-API_BASE="$(read_env NEXT_PUBLIC_API_URL)"
-SECRET="$(read_env JITSI_WEBHOOK_SECRET)"
+# روی سرور، API از راه شبکه‌ی داخلی داکر در دسترس است و این‌جا بهتر از
+# دامنه‌ی عمومی است: بدون TLS، بدون برگشت DNS، و بدون وابستگی به باز
+# بودن مسیر از بیرون. با `JITSI_HOOK_API_PREFIX` قابل تغییر است.
+API_PREFIX="${JITSI_HOOK_API_PREFIX:-http://api:4000/api/classroom/hook}"
+
+# راز مشترک از `.env`ی خوانده می‌شود که **خودِ API با آن بالا آمده**، نه
+# از `.env` مخزن. اگر از مخزن خوانده می‌شد، یک استقرار با راز متفاوت
+# یعنی prosody کد ۴۰۱ بگیرد و حضور بی‌صدا تأییدنشده بماند — دقیقاً همان
+# خرابی‌ای که این هوک برای بستنش نوشته شده.
+APP_ENV_REMOTE="${APP_ENV_REMOTE:-/home/fardin/music-platform/app/.env}"
+
+SECRET="$(ssh "$SERVER" "grep -E '^JITSI_WEBHOOK_SECRET=' '$APP_ENV_REMOTE' | cut -d= -f2-" 2>/dev/null | tr -d '\r')"
+[ -n "$SECRET" ] || SECRET="$(read_env JITSI_WEBHOOK_SECRET)"
 
 CHECK_ONLY="false"
 [ "${1:-}" = "--check" ] && CHECK_ONLY="true"
 
 if [ "$CHECK_ONLY" = "false" ]; then
   [ -n "$SECRET" ] || fail "JITSI_WEBHOOK_SECRET در .env خالی است. با «openssl rand -base64 48» یکی بسازید."
-  [ -n "$API_BASE" ] || fail "NEXT_PUBLIC_API_URL در .env خالی است — نشانی API را نمی‌دانم."
 fi
-
-# `api_prefix` را خود ماژول با `/events/occupant/joined` و سه تای دیگر
-# کامل می‌کند، پس اینجا نباید اسلش انتهایی داشته باشد.
-API_PREFIX="${API_BASE%/}/classroom/hook"
 
 # ---------------------------------------------------------------------------
 # وضعیت فعلی
 # ---------------------------------------------------------------------------
 
+MUC_DOMAIN="$(read_remote_env XMPP_MUC_DOMAIN)"
+XMPP_DOMAIN="$(read_remote_env XMPP_DOMAIN)"
+: "${MUC_DOMAIN:?XMPP_MUC_DOMAIN در .env جیتسی پیدا نشد}"
+: "${XMPP_DOMAIN:=meet.jitsi}"
+
 say "→ سرور: $SERVER · پروژه: $REMOTE_DIR"
+say "→ کامپوننت MUC: $MUC_DOMAIN · مقصد رویدادها: $API_PREFIX"
 
 remote "docker compose ps --status running --services" | grep -qx "$SERVICE" \
   || fail "سرویس $SERVICE در $REMOTE_DIR بالا نیست."
@@ -129,7 +148,8 @@ warn_anonymous() {
 if [ "$CHECK_ONLY" = "true" ]; then
   say ""
   say "→ آخرین رویداد رسیده به API:"
-  curl -fsS "${API_BASE%/}/health" | grep -o '"classroomHookLastEventAt":[^,}]*' || true
+  ssh "$SERVER" "docker exec jitsi-class-prosody-1 curl -fsS -m 8 http://api:4000/api/health" 2>/dev/null |
+    grep -o '"classroomHookLastEventAt":[^,}]*' || say "  (در دسترس نبود)"
   exit 0
 fi
 
@@ -156,7 +176,7 @@ cat > "$TMP/event-sync.cfg.lua" <<LUA
 -- بالا آمدن بازنویسی می‌شود ولی این فایل دست‌نخورده می‌ماند، چون
 -- prosody.cfg.lua کل conf.d/*.cfg.lua را Include می‌کند.
 Component "esync.$XMPP_DOMAIN" "event_sync_component"
-    muc_component = "conference.$XMPP_DOMAIN"
+    muc_component = "$MUC_DOMAIN"
 
     -- صریح نوشته شده و پیش‌فرضش استفاده نمی‌شود: مقدار پیش‌فرض ماژول
     -- از muc_mapper_domain_base ساخته می‌شود و اگر آن تعریف نشده باشد،
@@ -178,7 +198,20 @@ Component "esync.$XMPP_DOMAIN" "event_sync_component"
 LUA
 
 scp -q "$TMP/event-sync.cfg.lua" "$SERVER:/tmp/event-sync.cfg.lua"
+
+# ‏`/config/conf.d` در ایمیج تازه وجود ندارد: اسکریپت راه‌اندازی
+# خودش `/run/prosody/config/conf.d` را می‌سازد و کانفیگ تولیدشده را
+# آنجا می‌گذارد، ولی چیزی در `/config` نمی‌سازد. چون کل `/config` پیش
+# از آن به `/run/prosody/config` کپی می‌شود، فایل ما هم از همین‌جا
+# می‌رسد — به شرط اینکه پوشه‌اش باشد.
+# ‏`--user root` لازم است: پروسه‌ی داخل کانتینر با کاربر `s6` اجرا
+# می‌شود و `/config` مال root است.
+remote "docker compose exec -T --user root $SERVICE mkdir -p /config/conf.d"
 remote "docker compose cp /tmp/event-sync.cfg.lua $SERVICE:$CONF_TARGET"
+
+# کانفیگ را کاربر غیرروت prosody می‌خواند، پس باید خواندنی باشد. راز
+# مشترک داخلش است، برای همین «خواندنی برای همه» نه — فقط گروه.
+remote "docker compose exec -T --user root $SERVICE chmod 0644 $CONF_TARGET"
 
 say "→ ری‌استارت prosody"
 # `restart` و نه `up -d`: بازسازی کانتینر با ولوم ناشناس یعنی احتمال
@@ -202,13 +235,13 @@ warn_anonymous "$CONFIG_MOUNT" /config
 
 say ""
 say "حالا یک کلاس واقعی برگزار کنید و بعد بزنید:"
-say "  curl -s ${API_BASE%/}/health | grep classroomHookLastEventAt"
+say "  ./scripts/install-jitsi-attendance-hook.sh --check"
 say ""
 say "اگر همچنان null بود، به ترتیب:"
 say "  ۱. لاگ prosody را ببینید — «API Response code» یعنی رسیده ولی رد شده،"
 say "     و نبودن هر پیامی یعنی ماژول اصلاً لود نشده."
 say "  ۲. از داخل کانتینر به API برسید:"
-say "     ssh $SERVER 'cd $REMOTE_DIR && docker compose exec $SERVICE curl -sS -o /dev/null -w \"%{http_code}\\n\" $API_PREFIX/events/room/created'"
+say "     ssh $SERVER 'docker exec jitsi-class-prosody-1 curl -sS -o /dev/null -w \"%{http_code}\\n\" $API_PREFIX/events/room/created'"
 say "     پاسخ ۴۰۱ یعنی مسیر و شبکه سالم‌اند و فقط راز مشترک نرفته."
 say "     خطای TLS یعنی گواهی داخل کانتینر شناخته نمی‌شود — گزارش‌شده‌ی"
 say "     شناخته‌شده‌ی این ماژول است و راه‌حلش نصب ca-certificates در ایمیج"

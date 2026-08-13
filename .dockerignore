@@ -1,0 +1,20 @@
+# کانتکست بیلد را کوچک نگه می‌دارد.
+#
+# بدون این، هر بیلد چند گیگابایت node_modules و خروجی بیلد را به دیمن
+# داکر می‌فرستد — کند، و بدتر: node_modulesِ ماشین توسعه داخل ایمیج
+# می‌نشیند و باینری‌های نیتیو (@swc/core) می‌توانند با معماری ایمیج
+# نخوانند.
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+.git
+.env
+.env.*
+!.env.example
+*.log
+**/*.tsbuildinfo
+coverage
+**/coverage

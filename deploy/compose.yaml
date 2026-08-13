@@ -1,0 +1,114 @@
+name: music-platform
+
+# استقرار پلتفرم روی سرور، کنار jitsi (پروژه‌ی کامپوزِ `jitsi-class`).
+#
+# ⚠️ نام پروژه صریح است و این عمدی است: یک بار روی همین ماشین، دو پوشه‌ی
+# هم‌نام باعث شد `docker compose up -d` کانتینرهای پروژه‌ی دیگری را
+# جایگزین کند و سرویسشان پایین برود (سند معماری، بخش ۶.۲.۱).
+#
+# ایمیج‌ها روی ماشین توسعه ساخته و با `docker save` منتقل می‌شوند —
+# سرور به npm و گیت‌هاب دسترسی ندارد. `deploy/README.md`.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: music
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: music
+      # وقت دیتابیس UTC است. تبدیل به تهران فقط در لایه‌ی نمایش.
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # هیچ پورتی روی میزبان منتشر نمی‌شود. این ماشین چند پروژه‌ی دیگر
+    # دارد و یک پستگرسِ در معرض اینترنت، سطح حمله‌ای است که هیچ‌کس
+    # لازمش ندارد؛ کانتینرهای همین شبکه از راه نام سرویس می‌رسند.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U music -d music"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: music-api:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # فقط روی لوپ‌بک. nginx جلویش می‌نشیند و TLS را تمام می‌کند.
+      - "127.0.0.1:7342:4000"
+    networks:
+      - default
+      # شبکه‌ی جیتسیِ پلتفرم، تا prosody بتواند رویدادهای حضور را
+      # مستقیم به `http://api:4000` بفرستد.
+      #
+      # چرا از شبکه‌ی داخلی و نه از دامنه‌ی عمومی: درخواستی که از
+      # کانتینر بیرون برود و دوباره به همان ماشین برگردد، سه شکست ممکن
+      # اضافه می‌کند که هیچ‌کدام ربطی به هوک ندارند — گواهی TLS داخل
+      # کانتینر prosody، برگشت DNS به خود ماشین، و باز بودن مسیر از
+      # بیرون (که روی همین سرور بسته است).
+      - jitsi
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: music-api:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    env_file: .env
+    # همان ایمیج، پروسه‌ی دیگر.
+    #
+    # **فراموش کردن این سرویس رایج‌ترین اشتباه استقرار است** و هیچ
+    # درخواستی از نبودنش خطا نمی‌دهد: مهلت‌های پرداخت آزاد نمی‌شوند،
+    # یادآوری نمی‌رود، جلسه‌ها بسته نمی‌شوند. `GET /api/health` تنها
+    # جایی است که می‌گوید — سند استقرار بخش ۴.
+    #
+    # از API چند نمونه می‌شود بالا آورد ولی این یکی باید **یکی** بماند.
+    command: ["node", "--import", "@swc-node/register/esm-register", "src/worker.ts"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    image: music-web:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    environment:
+      # رندر سمت سرور و ISR از شبکه‌ی داخلی به API می‌روند، نه از راه
+      # دامنه‌ی عمومی: بیرون رفتن و برگشتن به همان ماشین، سه شکستِ
+      # بی‌ربط به برنامه اضافه می‌کند (گواهی، برگشت DNS، دسترسی از
+      # بیرون). آدرس عمومی فقط در باندل مرورگر است و در زمان بیلد
+      # نشسته.
+      API_INTERNAL_URL: http://api:4000/api
+    ports:
+      - "127.0.0.1:7341:3000"
+    depends_on:
+      - api
+
+networks:
+  default:
+  # شبکه‌ی پروژه‌ی کامپوزِ `jitsi-class`. اینجا فقط به آن **وصل**
+  # می‌شویم؛ ساخته یا حذفش نمی‌کنیم.
+  jitsi:
+    external: true
+    name: jitsi-class_default
+
+volumes:
+  postgres_data:
+  redis_data:
