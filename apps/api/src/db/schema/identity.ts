@@ -1,7 +1,7 @@
-import { relations } from "drizzle-orm";
-import { boolean, index, pgTable, uuid, varchar } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { boolean, check, index, pgTable, uuid, varchar } from "drizzle-orm/pg-core";
 
-import { createdAt, primaryId, tstz, updatedAt } from "./columns.js";
+import { createdAt, primaryId, rial, tstz, updatedAt } from "./columns.js";
 import { userStatus } from "./enums.js";
 import { teacherProfiles } from "./catalog.js";
 
@@ -37,10 +37,39 @@ export const users = pgTable(
     /** جلسه‌ی معارفه‌ی رایگان یک‌بار برای همیشه است، نه یکی به ازای هر استاد. */
     trialUsedAt: tstz("trial_used_at"),
 
+    /**
+     * موجودی اعتبار، به ریال — **کشِ جمع `credit_entries`، نه منبع حقیقت**.
+     *
+     * منبع حقیقت سطرهای `credit_entries` است. این ستون فقط برای خواندن
+     * است (هر صفحه‌ی رزرو موجودی را نشان می‌دهد و جمع زدن تاریخچه در هر
+     * بار باز شدن صفحه بی‌دلیل است).
+     *
+     * **هرگز `balance + delta` نوشته نمی‌شود.** هر تغییر، ستون را از نو
+     * از روی `SUM(amount)` می‌نویسد، داخل همان تراکنش و زیر همان قفل
+     * `FOR UPDATE`ی که خرج اعتبار به‌هرحال لازم دارد. با این شکل ستون یک
+     * ماتریالایز از جمع است نه یک انباشتگر مستقل، و «دو منبع حقیقتی که
+     * بی‌صدا از هم جدا می‌شوند» ممکن نیست. `credit.service.ts` تنها جایی
+     * است که این ستون را می‌نویسد.
+     */
+    // پیش‌فرض با `sql` نوشته می‌شود نه `0n`: `drizzle-kit` هنگام ساختن
+    // اسنپ‌شات مایگریشن `JSON.stringify` می‌زند و `BigInt` را نمی‌شناسد.
+    creditBalance: rial("credit_balance").notNull().default(sql`0`),
+
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (table) => [index("users_status_idx").on(table.status)],
+  (table) => [
+    index("users_status_idx").on(table.status),
+    /**
+     * موجودی هرگز منفی نمی‌شود.
+     *
+     * لایه‌ی سرویس پیش از خرج، موجودی را زیر قفل می‌سنجد؛ این قید همان
+     * را در سطح دیتابیس می‌گوید تا هر مسیر تازه‌ای که فردا اضافه شود هم
+     * از آن رد نشود. خرجِ بیشتر از موجودی یعنی پلتفرم چیزی را که ندارد
+     * به هنرجو داده.
+     */
+    check("users_credit_balance_not_negative", sql`${table.creditBalance} >= 0`),
+  ],
 );
 
 export const refreshTokens = pgTable(

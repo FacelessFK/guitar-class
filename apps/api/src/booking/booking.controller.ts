@@ -239,7 +239,12 @@ export class BookingController {
     @CurrentUserId() actorId: string,
     @Param("bookingId", zodPipe(uuidSchema)) bookingId: string,
     @Body(zodPipe(cancelSchema)) body: z.infer<typeof cancelSchema>,
-  ): Promise<{ status: string; refundable: boolean; refunded: boolean }> {
+  ): Promise<{
+    status: string;
+    refundable: boolean;
+    refunded: boolean;
+    creditGranted: string | null;
+  }> {
     const result = await this.booking.cancel({
       bookingId,
       actorId,
@@ -250,8 +255,13 @@ export class BookingController {
      * `refundable` تصمیم سیاست است و `refunded` اتفاق مالی.
      * لغو یک رزروِ هنوز پرداخت‌نشده، برگشت‌پذیر است ولی چیزی برای
      * برگرداندن ندارد — فرانت باید این دو را از هم جدا ببیند.
+     *
+     * `creditGranted` مبلغی است که همین لحظه به اعتبار هنرجو رفت.
+     * `null` یعنی چیزی اضافه نشد — یا جلسه سوخته، یا پرداخت‌نشده بوده،
+     * یا اعتبارش از قبل ثبت شده. فرانت بدون این عدد فقط می‌تواند بگوید
+     * «لغو شد»، و هنرجویی که پول داده باید همان‌جا ببیند کجا رفت.
      */
-    const refund = await this.booking.recordRefund({
+    const settlement = await this.booking.recordRefund({
       bookingId,
       refundable: result.refundable,
     });
@@ -259,7 +269,8 @@ export class BookingController {
     return {
       status: result.status,
       refundable: result.refundable,
-      refunded: refund !== null,
+      refunded: settlement?.refund != null,
+      creditGranted: settlement?.credit?.toString() ?? null,
     };
   }
 

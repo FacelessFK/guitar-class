@@ -210,25 +210,73 @@ export const getMyBookings = () =>
 export const getBooking = (bookingId: string) =>
   apiFetch<BookingDetail | null>(`/bookings/${bookingId}`);
 
+export interface CancellationResult {
+  status: BookingStatus;
+  /** تصمیم سیاست لغو */
+  refundable: boolean;
+  /** آیا سطر مالی واقعاً نوشته شد */
+  refunded: boolean;
+  /** مبلغی که همین لحظه به اعتبار رفت، به ریال. تهی یعنی چیزی اضافه نشد. */
+  creditGranted: string | null;
+}
+
 export const cancelBooking = (bookingId: string, reason?: string) =>
-  apiFetch<{ status: BookingStatus; refundable: boolean; refunded: boolean }>(
-    `/bookings/${bookingId}/cancel`,
-    { method: "POST", body: { ...(reason ? { reason } : {}) } },
-  );
+  apiFetch<CancellationResult>(`/bookings/${bookingId}/cancel`, {
+    method: "POST",
+    body: { ...(reason ? { reason } : {}) },
+  });
 
 // ---------------------------------------------------------------------------
 // پرداخت
 // ---------------------------------------------------------------------------
 
-export const startCheckout = (body: { bookingId?: string; enrollmentId?: string }) =>
-  apiFetch<{ orderId: string; amount: string; gateway: string; redirectUrl: string }>(
-    "/payments/checkout",
-    { method: "POST", body },
-  );
+export interface CheckoutResult {
+  orderId: string;
+  /** کل مبلغ سفارش، به ریال */
+  amount: string;
+  /** سهمی که از اعتبار برداشته می‌شود */
+  creditApplied: string;
+  /** سهمی که به درگاه می‌رود */
+  gatewayAmount: string;
+  gateway: string | null;
+  /**
+   * تهی یعنی درگاهی در کار نبود — اعتبار کل مبلغ را پوشاند و سفارش
+   * همان‌جا قطعی شد.
+   */
+  redirectUrl: string | null;
+  /** سفارش بدون رفتن به درگاه قطعی شد */
+  settled: boolean;
+  /** مبلغ کم شد ولی جلسه‌ای قطعی نشد — مهلت رزرو در همان لحظه تمام شده */
+  unmatched: boolean;
+}
+
+export const startCheckout = (body: {
+  bookingId?: string;
+  enrollmentId?: string;
+  useCredit?: boolean;
+}) => apiFetch<CheckoutResult>("/payments/checkout", { method: "POST", body });
+
+// ---------------------------------------------------------------------------
+// اعتبار
+// ---------------------------------------------------------------------------
+
+export interface CreditEntry {
+  reason: "CANCELLATION" | "SPEND" | "ADMIN_ADJUSTMENT";
+  /** ریال. مثبت یعنی اعطا، منفی یعنی خرج. */
+  amount: string;
+  bookingId: string | null;
+  description: string;
+  createdAt: string;
+}
+
+export const getCredit = () =>
+  apiFetch<{ balance: string; entries: CreditEntry[] }>("/payments/credit");
 
 export interface Order {
   id: string;
   amount: string;
+  /** سهمی که با اعتبار پرداخت شد، به ریال */
+  creditApplied: string;
   status: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
   gateway: string;
   refId: string | null;

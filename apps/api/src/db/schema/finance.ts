@@ -11,7 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { createdAt, primaryId, rial, tstz, updatedAt } from "./columns.js";
-import { ledgerType, orderStatus, payoutStatus } from "./enums.js";
+import { creditReason, ledgerType, orderStatus, payoutStatus } from "./enums.js";
 import { users } from "./identity.js";
 import { teacherProfiles } from "./catalog.js";
 import { bookings, enrollments } from "./booking.js";
@@ -23,8 +23,21 @@ export const orders = pgTable(
     studentId: uuid("student_id")
       .notNull()
       .references(() => users.id),
-    /** ریال */
+    /** ریال — کل مبلغ سفارش، پیش از کسر اعتبار */
     amount: rial("amount").notNull(),
+    /**
+     * چقدر از `amount` با اعتبار هنرجو پرداخت می‌شود.
+     *
+     * `amount` عمداً کل قیمت می‌ماند و کم نمی‌شود: آن حقیقتِ «این سفارش
+     * چقدر بود» است و گزارش‌های مالی رویش بنا شده‌اند. آنچه به درگاه
+     * می‌رود `amount − credit_applied` است — در **هر دو** مرحله‌ی درخواست
+     * و تأیید، از یک تابع (`gatewayAmountOf`). اگر این دو از هم جدا
+     * شوند، درگاه مبلغ تأیید را با مبلغ درخواست نمی‌خواند و پرداخت با
+     * خطای بی‌ربط رد می‌شود.
+     *
+     * برابر بودنش با `amount` یعنی سفارش اصلاً به درگاه نمی‌رود.
+     */
+    creditApplied: rial("credit_applied").notNull().default(sql`0`),
     status: orderStatus().notNull().default("PENDING"),
 
     gateway: varchar({ length: 40 }).notNull(),
@@ -49,6 +62,17 @@ export const orders = pgTable(
      */
     uniqueIndex("orders_gateway_authority_key").on(table.gatewayAuthority),
     check("orders_amount_positive", sql`${table.amount} > 0`),
+    /**
+     * اعتبار اعمال‌شده نه منفی است و نه از خود سفارش بیشتر.
+     *
+     * بیشتر بودنش یعنی سفارشی که مبلغ منفی به درگاه می‌فرستد؛ منفی بودنش
+     * یعنی سفارشی که به هنرجو اعتبار می‌دهد. هیچ‌کدام مسیر کد ندارند،
+     * ولی این ستون با حساب پر می‌شود و حسابِ اشتباه بی‌صداست.
+     */
+    check(
+      "orders_credit_applied_within_amount",
+      sql`${table.creditApplied} >= 0 AND ${table.creditApplied} <= ${table.amount}`,
+    ),
   ],
 );
 
@@ -134,6 +158,85 @@ export const ledgerEntries = pgTable(
   ],
 );
 
+/**
+ * اعتبار هنرجو — فقط افزودنی، دقیقاً مثل دفتر کل.
+ *
+ * **این دفتر کلِ استاد نیست و نباید با آن جمع شود.** `ledger_entries`
+ * می‌گوید پلتفرم به استاد چه بدهکار است، این می‌گوید به هنرجو. یک لغو
+ * هر دو را می‌نویسد: سطر منفی `REFUND` سهم استاد را برمی‌گرداند و سطر
+ * مثبت `CANCELLATION` همان پول را به هنرجو. یعنی پس از لغو، کمیسیون هم
+ * برگشته و کل مبلغ به شکل بدهی به هنرجو نزد پلتفرم می‌ماند — که دقیقاً
+ * معنای «جلسه به اعتبار برمی‌گردد» در سیاست لغو است.
+ *
+ * موجودی جمع ساده‌ی `amount` است. ستون `users.credit_balance` کشِ همین
+ * جمع است و از روی آن نوشته می‌شود، نه جدا از آن.
+ */
+export const creditEntries = pgTable(
+  "credit_entries",
+  {
+    id: primaryId(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id),
+    reason: creditReason().notNull(),
+    /** ریال. مثبت یعنی اعطا، منفی یعنی خرج. */
+    amount: rial("amount").notNull(),
+
+    /** رزروی که این اعتبار از لغوش آمده */
+    bookingId: uuid("booking_id").references(() => bookings.id),
+    /** سفارشی که این اعتبار در آن خرج شده */
+    orderId: uuid("order_id").references(() => orders.id),
+    /** ادمینی که اعطای دستی را ثبت کرده — فقط برای `ADMIN_ADJUSTMENT` */
+    createdById: uuid("created_by_id").references(() => users.id),
+
+    description: varchar({ length: 200 }).notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("credit_student_created_idx").on(table.studentId, table.createdAt),
+    /**
+     * هر رزرو حداکثر یک بار به اعتبار تبدیل می‌شود.
+     *
+     * قرینه‌ی `ledger_one_refund_per_booking` و به همان دلیل: دو مسیر
+     * مستقل (لغو دستی و جاروی عدم حضور) به یک رزرو می‌رسند و
+     * «اول ببین هست، بعد درج کن» در برابر دو اجرای هم‌زمان مصون نیست.
+     * درج دوم اینجا به خطا می‌خورد — به جای اینکه هنرجو دو برابر اعتبار
+     * بگیرد.
+     *
+     * هر دو سطر (دفتر کل و اعتبار) در یک تراکنش نوشته می‌شوند، پس این
+     * قید و آن یکی با هم می‌ایستند یا با هم عقب می‌روند.
+     */
+    uniqueIndex("credit_one_cancellation_per_booking")
+      .on(table.bookingId)
+      .where(sql`${table.reason} = 'CANCELLATION'`),
+    /**
+     * و هر سفارش حداکثر یک بار اعتبار خرج می‌کند.
+     *
+     * تأیید پرداخت ایدمپوتنت است ولی چند بار صدا زده می‌شود (رفرش صفحه‌ی
+     * بازگشت، ارسال دوباره‌ی درگاه). بدون این قید، تلاش دوم می‌توانست
+     * اعتبار را دوباره کم کند در حالی که سفارش قبلاً قطعی شده.
+     */
+    uniqueIndex("credit_one_spend_per_order")
+      .on(table.orderId)
+      .where(sql`${table.reason} = 'SPEND'`),
+    check("credit_amount_not_zero", sql`${table.amount} <> 0`),
+    /**
+     * علامت مبلغ باید با دلیلش بخواند.
+     *
+     * همان قاعده‌ی `isCreditAmountValid` در `packages/shared`. دو جا
+     * بودنش عمدی است: تابع خطای قابل فهم می‌دهد و قید جلوی هر مسیری را
+     * می‌گیرد که فردا آن تابع را صدا نزند. یک `SPEND` مثبت یعنی خرج
+     * کردنی که به موجودی اضافه می‌کند.
+     */
+    check(
+      "credit_amount_sign_matches_reason",
+      sql`(${table.reason} = 'CANCELLATION' AND ${table.amount} > 0)
+        OR (${table.reason} = 'SPEND' AND ${table.amount} < 0)
+        OR ${table.reason} = 'ADMIN_ADJUSTMENT'`,
+    ),
+  ],
+);
+
 /** تسویه با استاد. در فاز فعلی دستی انجام می‌شود؛ این جدول فقط ثبت می‌کند. */
 export const payouts = pgTable(
   "payouts",
@@ -199,6 +302,12 @@ export const ledgerEntriesRelations = relations(ledgerEntries, ({ one }) => ({
     fields: [ledgerEntries.teacherId],
     references: [teacherProfiles.id],
   }),
+}));
+
+export const creditEntriesRelations = relations(creditEntries, ({ one }) => ({
+  student: one(users, { fields: [creditEntries.studentId], references: [users.id] }),
+  booking: one(bookings, { fields: [creditEntries.bookingId], references: [bookings.id] }),
+  order: one(orders, { fields: [creditEntries.orderId], references: [orders.id] }),
 }));
 
 export const payoutsRelations = relations(payouts, ({ one }) => ({

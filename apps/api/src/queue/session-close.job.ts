@@ -43,6 +43,8 @@ export interface SessionCloseResult {
   noShow: number;
   /** بازپرداخت‌هایی که واقعاً در دفتر کل نوشته شدند */
   refunded: number;
+  /** جمع اعتباری که همین اجرا به هنرجوها برگشت، به ریال */
+  credited: bigint;
   /** پرونده‌هایی که همین اجرا روی میز ادمین باز شدند */
   reviewsOpened: number;
   /**
@@ -97,7 +99,8 @@ const shouldRefund = (session: ClosedSession): boolean =>
 
 /** آنچه هنرجو می‌بیند. به ازای هر دلیل، نه به ازای وضعیت جلسه. */
 const REVIEW_MESSAGE: Record<SessionReviewReason, string> = {
-  NO_SHOW_TEACHER: "استاد در جلسه‌ی شما حاضر نشد. هزینه برگشت خورد و موضوع در حال بررسی است.",
+  NO_SHOW_TEACHER:
+    "استاد در جلسه‌ی شما حاضر نشد. هزینه به اعتبار شما برگشت و موضوع در حال بررسی است.",
   NO_SHOW: "جلسه‌ی شما برگزار نشد و موضوع در حال بررسی است.",
   ATTENDANCE_UNVERIFIED:
     "برگزاری جلسه‌ی شما تأیید نشد و موضوع در حال بررسی است. نتیجه را به شما اطلاع می‌دهیم.",
@@ -132,17 +135,19 @@ export async function runSessionClose(
   const closed = await closeFinishedSessions(now);
 
   let refunded = 0;
+  let credited = 0n;
   let reviewsOpened = 0;
   let unverified = 0;
 
   for (const session of closed) {
     if (shouldRefund(session)) {
-      const refund = await recordCancellationRefund({
+      const settlement = await recordCancellationRefund({
         bookingId: session.id,
         refundable: true,
       });
 
-      if (refund) refunded += 1;
+      if (settlement?.refund) refunded += 1;
+      if (settlement?.credit) credited += settlement.credit;
 
       logger.warn(
         `استاد ${session.teacherId} در جلسه‌ی ${session.id} حاضر نشد — پرونده‌ی بررسی باز شد.`,
@@ -206,6 +211,7 @@ export async function runSessionClose(
     noShowTeacher: countOf(closed, "NO_SHOW_TEACHER"),
     noShow: countOf(closed, "NO_SHOW"),
     refunded,
+    credited,
     reviewsOpened,
     unverified,
   };

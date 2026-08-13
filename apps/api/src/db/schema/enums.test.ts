@@ -63,6 +63,10 @@ describe("همگامی شمارشی‌های دیتابیس و پکیج مشتر
     expectSameValues("PayoutStatus", dbEnums.payoutStatus.enumValues, shared.PayoutStatus);
   });
 
+  it("CreditReason", () => {
+    expectSameValues("CreditReason", dbEnums.creditReason.enumValues, shared.CreditReason);
+  });
+
   it("AssignmentStatus", () => {
     expectSameValues(
       "AssignmentStatus",

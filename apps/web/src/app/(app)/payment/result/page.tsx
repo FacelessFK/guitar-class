@@ -51,6 +51,17 @@ function PaymentResult() {
       {order ? (
         <dl className="card mt-8 space-y-2 text-right text-sm">
           <Row label="مبلغ" value={`${formatToman(order.amount)} تومان`} />
+          {/*
+            سهم اعتبار فقط وقتی نوشته می‌شود که وجود داشته باشد.
+            «از اعتبار: ۰ تومان» روی سفارشی که با کارت پرداخت شده، فقط
+            یک سطر اضافه است.
+          */}
+          {BigInt(order.creditApplied) > 0n ? (
+            <Row
+              label="از اعتبار"
+              value={`${formatToman(order.creditApplied)} تومان`}
+            />
+          ) : null}
           {order.refId ? (
             <Row label="کد رهگیری" value={faDigits(order.refId)} />
           ) : null}

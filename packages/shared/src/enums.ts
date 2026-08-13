@@ -93,6 +93,29 @@ export const PayoutStatus = {
 } as const;
 export type PayoutStatus = (typeof PayoutStatus)[keyof typeof PayoutStatus];
 
+/**
+ * چرا یک سطر اعتبار نوشته شده است.
+ *
+ * اعتبارِ هنرجو دفتر کلِ خودش را دارد و با دفتر کلِ استاد یکی نیست: آن
+ * یکی می‌گوید پلتفرم به استاد چه بدهکار است، این می‌گوید به هنرجو. یک
+ * لغو هر دو را می‌نویسد — سطر منفی `REFUND` سهم استاد را برمی‌گرداند و
+ * سطر مثبت `CANCELLATION` پول را به هنرجو. قاطی کردنشان یعنی جمعِ هیچ‌کدام
+ * دیگر بدهی واقعی نباشد.
+ *
+ * علامت مبلغ از روی دلیل قابل حدس است و در دیتابیس هم قید دارد:
+ * `CANCELLATION` مثبت، `SPEND` منفی، `ADMIN_ADJUSTMENT` هر دو (ادمین هم
+ * می‌بخشد و هم اشتباهِ خودش را پس می‌گیرد).
+ */
+export const CreditReason = {
+  /** جلسه‌ای لغو شد یا استاد نیامد — مبلغِ ناخالص به هنرجو برمی‌گردد */
+  CANCELLATION: "CANCELLATION",
+  /** خرج شدن در یک سفارش */
+  SPEND: "SPEND",
+  /** اعطا یا اصلاح دستی از پنل ادمین */
+  ADMIN_ADJUSTMENT: "ADMIN_ADJUSTMENT",
+} as const;
+export type CreditReason = (typeof CreditReason)[keyof typeof CreditReason];
+
 export const AssignmentStatus = {
   ASSIGNED: "ASSIGNED",
   SUBMITTED: "SUBMITTED",

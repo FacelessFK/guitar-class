@@ -51,6 +51,11 @@ import {
   type AdminPostRow,
   type PostSummary,
 } from "../blog/blog.service.js";
+import {
+  creditBalanceOf,
+  grantAdminCredit,
+  listCreditEntries,
+} from "../payment/credit.service.js";
 import type { Page } from "./pagination.js";
 import {
   listSessionReviews,
@@ -81,6 +86,9 @@ export class AdminProvider {
   readonly createPost = createPost;
   readonly updatePost = updatePost;
   readonly deletePost = deletePost;
+  readonly grantCredit = grantAdminCredit;
+  readonly creditBalance = creditBalanceOf;
+  readonly creditEntries = listCreditEntries;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +320,27 @@ const createPayoutSchema = z
 
 const markPaidSchema = z.object({
   trackingCode: z.string().trim().max(120).optional(),
+});
+
+/**
+ * اعطای دستی اعتبار.
+ *
+ * مبلغ **علامت‌دار** است و نه `rialSchema`: ادمین باید بتواند اعتبارِ
+ * اشتباهیِ خودش را هم پس بگیرد. تنها راه دیگر، ساختن دو اندپوینت جدا
+ * بود که هر دو یک کار می‌کنند و اولین تفاوتشان یک باگ است.
+ *
+ * توضیح **اجباری** است. اعتبارِ بی‌دلیل، مبلغی است که فردا هیچ‌کس
+ * نمی‌تواند بگوید چرا داده شده؛ و برخلاف تسویه، اینجا هیچ سند بیرونی‌ای
+ * وجود ندارد که بشود به آن رجوع کرد.
+ */
+const grantCreditSchema = z.object({
+  amount: z
+    .string()
+    .trim()
+    .regex(/^-?\d{1,18}$/, "مبلغ باید عددی صحیح و به ریال باشد")
+    .transform((value) => BigInt(value))
+    .refine((value) => value !== 0n, "مبلغ نمی‌تواند صفر باشد"),
+  description: z.string().trim().min(3).max(200),
 });
 
 /**
@@ -613,5 +642,70 @@ export class AdminController {
     @Body(zodPipe(markPaidSchema)) body: z.infer<typeof markPaidSchema>,
   ): Promise<AdminPayoutRow> {
     return this.admin.markPayoutPaid(payoutId, body.trackingCode?.length ? body.trackingCode : null);
+  }
+
+  // --- اعتبار هنرجو ---
+
+  /**
+   * اعطا یا اصلاح دستی اعتبار.
+   *
+   * دو حالتی که تا امروز هیچ فعلی نداشتند و در پنل فقط «نیازمند
+   * بازپرداخت دستی» دیده می‌شدند:
+   *
+   *   • سطر `ADJUSTMENT` — پولی که گرفته شد ولی جلسه‌ای پشتش قطعی نشد.
+   *   • پرونده‌ی `ATTENDANCE_UNVERIFIED` — عمداً بازپرداخت خودکار
+   *     نمی‌گیرد و منتظر تصمیم آدم می‌ماند.
+   *
+   * شناسه‌ی ادمین از توکن می‌آید نه از بدنه: «چه کسی این اعتبار را داد»
+   * نباید چیزی باشد که فرستنده‌ی درخواست خودش تعیین کند.
+   */
+  @Post("students/:userId/credit")
+  @HttpCode(HttpStatus.CREATED)
+  async grantCredit(
+    @CurrentUserId() adminId: string,
+    @Param("userId", zodPipe(uuidSchema)) userId: string,
+    @Body(zodPipe(grantCreditSchema)) body: z.infer<typeof grantCreditSchema>,
+  ): Promise<{ balance: string }> {
+    const balance = await this.admin.grantCredit({
+      studentId: userId,
+      amount: body.amount,
+      adminId,
+      description: body.description,
+    });
+
+    return { balance: balance.toString() };
+  }
+
+  /** موجودی و تاریخچه‌ی اعتبار یک هنرجو. */
+  @Get("students/:userId/credit")
+  async getCredit(
+    @Param("userId", zodPipe(uuidSchema)) userId: string,
+  ): Promise<{
+    balance: string;
+    entries: Array<{
+      reason: string;
+      amount: string;
+      bookingId: string | null;
+      orderId: string | null;
+      description: string;
+      createdAt: string;
+    }>;
+  }> {
+    const [balance, entries] = await Promise.all([
+      this.admin.creditBalance(userId),
+      this.admin.creditEntries(userId),
+    ]);
+
+    return {
+      balance: balance.toString(),
+      entries: entries.map((entry) => ({
+        reason: entry.reason,
+        amount: entry.amount.toString(),
+        bookingId: entry.bookingId,
+        orderId: entry.orderId,
+        description: entry.description,
+        createdAt: entry.createdAt.toISOString(),
+      })),
+    };
   }
 }

@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { BookingCard } from "@/components/booking-card";
 import { errorMessage } from "@/lib/api-client";
-import { getMyBookings, type BookingDetail } from "@/lib/app-api";
+import { getCredit, getMyBookings, type BookingDetail } from "@/lib/app-api";
+import { formatToman } from "@/lib/format";
 import { LIVE_STATUSES } from "@/lib/booking-display";
 import { buildPaymentPlans, type PaymentPlan } from "@/lib/payment-plan";
 import { useSession } from "@/lib/session";
@@ -21,11 +22,25 @@ import { useSession } from "@/lib/session";
 export default function DashboardPage() {
   const { user, reload } = useSession();
   const [bookings, setBookings] = useState<BookingDetail[] | null>(null);
+  const [credit, setCredit] = useState<bigint | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setBookings(await getMyBookings());
+      /**
+       * موجودی اعتبار کنار فهرست خوانده می‌شود، نه داخل هر کارت.
+       *
+       * چند کارتِ در انتظار پرداخت یعنی چند بار پرسیدنِ همان عدد. خطای
+       * خواندن اعتبار هم فهرست را نمی‌خواباند: بدون آن هنوز می‌شود
+       * پرداخت کرد، فقط تیک استفاده از اعتبار نمی‌آید.
+       */
+      const [loaded, balance] = await Promise.all([
+        getMyBookings(),
+        getCredit().catch(() => null),
+      ]);
+
+      setBookings(loaded);
+      setCredit(balance ? BigInt(balance.balance) : null);
       setError(null);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -76,6 +91,19 @@ export default function DashboardPage() {
         </p>
       ) : null}
 
+      {/*
+        موجودی اعتبار فقط وقتی گفته می‌شود که وجود دارد.
+
+        «اعتبار شما: ۰ تومان» برای کسی که هیچ‌وقت لغوی نداشته، سؤال
+        می‌سازد نه اطلاعات.
+      */}
+      {credit !== null && credit > 0n ? (
+        <p className="alert-info mt-6">
+          {formatToman(credit.toString())} تومان اعتبار دارید. در پرداخت کلاس
+          بعدی می‌توانید خرجش کنید.
+        </p>
+      ) : null}
+
       {error ? <p className="alert-error mt-6">{error}</p> : null}
 
       {bookings === null ? (
@@ -88,12 +116,14 @@ export default function DashboardPage() {
             title="پیشِ رو"
             bookings={upcoming}
             plans={paymentPlans}
+            credit={credit}
             onChange={refresh}
           />
           <Section
             title="گذشته"
             bookings={past}
             plans={paymentPlans}
+            credit={credit}
             onChange={refresh}
           />
         </>
@@ -106,11 +136,13 @@ function Section({
   title,
   bookings,
   plans,
+  credit,
   onChange,
 }: {
   title: string;
   bookings: BookingDetail[];
   plans: Map<string, PaymentPlan>;
+  credit: bigint | null;
   onChange: () => void;
 }) {
   if (bookings.length === 0) return null;
@@ -124,6 +156,7 @@ function Section({
             key={booking.id}
             booking={booking}
             paymentPlan={plans.get(booking.id)}
+            creditBalance={credit}
             onChange={onChange}
           />
         ))}

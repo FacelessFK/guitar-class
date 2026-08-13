@@ -13,6 +13,7 @@ import {
 import { cancelBooking, createSingleBooking } from "../booking/booking.service.js";
 import { recordAttendance } from "../classroom/classroom.service.js";
 import { recordHookAttendance } from "../classroom/hook.service.js";
+import { creditBalanceOf } from "../payment/credit.service.js";
 import { FakePaymentGateway } from "../payment/gateway.port.js";
 import { settleOrder, startCheckout } from "../payment/payment.service.js";
 import { setSmsSender, type SmsSender } from "../notification/sms.port.js";
@@ -482,6 +483,10 @@ describe("حضور تأییدشده", () => {
     expect(result.unverified).toBe(0);
     expect(await statusOf(booking.id)).toBe("NO_SHOW_TEACHER");
     expect(await refundRowsOf(booking.id)).toHaveLength(1);
+
+    // و همان مبلغ به اعتبار هنرجو رفته، نه فقط از دفتر استاد کم شده
+    expect(result.credited).toBe(PRICE);
+    expect(await creditBalanceOf(fixture.studentId)).toBe(PRICE);
   });
 
   /**
@@ -501,6 +506,17 @@ describe("حضور تأییدشده", () => {
     expect(result.refunded).toBe(0);
     expect(result.unverified).toBe(1);
     expect(await refundRowsOf(booking.id)).toHaveLength(0);
+
+    /**
+     * اعتبار هم نه — و این مهم‌تر از سطر دفتر کل است.
+     *
+     * سطر منفی دفتر کل فقط عددی در گزارش استاد است؛ اعتبار پولی است که
+     * هنرجو می‌تواند همان دقیقه خرج کند. اگر اینجا اعتبار داده می‌شد،
+     * جعل حضور دوباره پول جابه‌جا می‌کرد — همان چیزی که ستون‌های
+     * `*_verified_at` برای بستنش ساخته شدند.
+     */
+    expect(result.credited).toBe(0n);
+    expect(await creditBalanceOf(fixture.studentId)).toBe(0n);
 
     expect(await reviewsOf(booking.id)).toMatchObject([
       { reason: "ATTENDANCE_UNVERIFIED", status: "OPEN" },

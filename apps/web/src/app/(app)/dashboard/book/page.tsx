@@ -14,6 +14,7 @@ import {
   bookPackage,
   bookSingle,
   bookTrial,
+  getCredit,
   getInstruments,
   getSlots,
   getTeachers,
@@ -74,6 +75,23 @@ function BookingFlow() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  /**
+   * اعتبار همان اول خوانده می‌شود، نه در مرحله‌ی تأیید.
+   *
+   * خواندنش موقع تأیید یعنی تیک «استفاده از اعتبار» یک لحظه بعد از
+   * دیده شدنِ باقی صفحه ظاهر شود — درست وقتی کاربر دستش روی دکمه است.
+   * خطای خواندنش صفحه را نمی‌خواباند: بدون اعتبار هم می‌شود رزرو کرد.
+   */
+  const [credit, setCredit] = useState<bigint | null>(null);
+  const [useCredit, setUseCredit] = useState(true);
+
+  useEffect(() => {
+    getCredit()
+      .then((result) => setCredit(BigInt(result.balance)))
+      .catch(() => setCredit(null));
+  }, []);
+
+  const hasCredit = credit !== null && credit > 0n;
   const offering = findOffering(teacher, instrument);
 
   /**
@@ -183,17 +201,32 @@ function BookingFlow() {
         return;
       }
 
+      const spendCredit = hasCredit && useCredit;
+
       const order =
         sessionType === "SINGLE"
           ? await bookSingle(selection).then((booking) =>
-              startCheckout({ bookingId: booking.id }),
+              startCheckout({ bookingId: booking.id, useCredit: spendCredit }),
             )
           : await bookPackage({
               teacherProfileId: selection.teacherProfileId,
               offeringId: selection.offeringId,
               firstSessionDate: selection.date,
               startMinute: selection.startMinute,
-            }).then((result) => startCheckout({ enrollmentId: result.enrollmentId }));
+            }).then((result) =>
+              startCheckout({ enrollmentId: result.enrollmentId, useCredit: spendCredit }),
+            );
+
+      // اعتبار کل مبلغ را پوشاند و سفارش همان‌جا قطعی شد — درگاهی نبود
+      if (order.settled) {
+        const outcome = order.unmatched ? "paid_unmatched" : "paid";
+        router.push(`/payment/result?order=${order.orderId}&status=${outcome}`);
+        return;
+      }
+
+      if (!order.redirectUrl) {
+        throw new Error("درگاه پرداخت آدرسی برنگرداند.");
+      }
 
       // درگاه بیرون از دامنه‌ی ماست
       window.location.href = order.redirectUrl;
@@ -278,6 +311,9 @@ function BookingFlow() {
           slot={slot}
           pending={pending}
           error={error}
+          credit={hasCredit ? credit : null}
+          useCredit={useCredit}
+          onUseCreditChange={setUseCredit}
           onConfirm={() => void confirm()}
         />
       ) : null}
@@ -600,6 +636,9 @@ function Confirmation({
   slot,
   pending,
   error,
+  credit,
+  useCredit,
+  onUseCreditChange,
   onConfirm,
 }: {
   teacher: Teacher;
@@ -608,6 +647,10 @@ function Confirmation({
   slot: Slot;
   pending: boolean;
   error: string | null;
+  /** موجودی اعتبار به ریال — تهی یعنی اعتباری نیست و گزینه‌ای نشان داده نمی‌شود */
+  credit: bigint | null;
+  useCredit: boolean;
+  onUseCreditChange: (value: boolean) => void;
   onConfirm: () => void;
 }) {
   const [preview, setPreview] = useState<PackagePreview | null>(null);
@@ -662,6 +705,23 @@ function Confirmation({
 
       {sessionType === "PACKAGE" ? (
         <PackageSessions preview={preview} error={previewError} />
+      ) : null}
+
+      {/*
+        اعتبار روی جلسه‌ی معارفه نمی‌آید: رایگان است و مرحله‌ی پرداختی
+        ندارد، پس تیکی که هیچ اثری ندارد فقط گمراه می‌کند.
+      */}
+      {sessionType !== "TRIAL" && credit !== null ? (
+        <label className="mt-4 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={useCredit}
+            onChange={(event) => onUseCreditChange(event.target.checked)}
+          />
+          <span>
+            استفاده از اعتبار ({formatToman(credit.toString())} تومان موجودی)
+          </span>
+        </label>
       ) : null}
 
       {sessionType !== "TRIAL" ? (

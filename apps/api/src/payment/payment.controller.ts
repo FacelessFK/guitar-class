@@ -22,6 +22,7 @@ import { CurrentUserId } from "../common/current-user.decorator.js";
 import { uuidSchema } from "../common/schemas.js";
 import { zodPipe } from "../common/validation.pipe.js";
 import { PaymentError } from "./errors.js";
+import { creditBalanceOf, listCreditEntries } from "./credit.service.js";
 import {
   settleOrder,
   startCheckout,
@@ -34,6 +35,8 @@ export class PaymentProvider {
   readonly checkout = startCheckout;
   readonly settle = settleOrder;
   readonly earnings = teacherEarningsBreakdown;
+  readonly creditBalance = creditBalanceOf;
+  readonly creditEntries = listCreditEntries;
 }
 
 /**
@@ -47,6 +50,15 @@ const checkoutSchema = z
   .object({
     bookingId: uuidSchema.optional(),
     enrollmentId: uuidSchema.optional(),
+    /**
+     * خرج کردن اعتبار **درخواستی** است، نه پیش‌فرض.
+     *
+     * هنرجویی که اعتبارش را برای پکیج ماه بعد نگه داشته نباید آن را
+     * روی یک تک‌جلسه از دست بدهد، و از سمت سرور نمی‌شود فهمید کدام را
+     * می‌خواهد. نبودن این فیلد یعنی «نه» — همان جهت امنی که گارد
+     * احراز هویت هم دارد.
+     */
+    useCredit: z.boolean().optional(),
   })
   .refine(
     (value) => (value.bookingId === undefined) !== (value.enrollmentId === undefined),
@@ -68,6 +80,8 @@ const callbackSchema = z.object({
 interface OrderView {
   id: string;
   amount: string;
+  /** سهمی از `amount` که با اعتبار پرداخت شد */
+  creditApplied: string;
   status: string;
   gateway: string;
   refId: string | null;
@@ -86,24 +100,48 @@ export class PaymentController {
    *
    * سفارش ساخته می‌شود و آدرس درگاه برمی‌گردد. فرانت کاربر را به همان
    * آدرس می‌فرستد؛ خودِ مبلغ هرگز از سمت کلاینت نمی‌آید.
+   *
+   * `redirectUrl` می‌تواند `null` باشد: یعنی اعتبار کل مبلغ را پوشانده،
+   * سفارش همین‌جا قطعی شده و درگاهی در کار نبوده. فرانت در این حالت
+   * مستقیم به صفحه‌ی نتیجه می‌رود. `settled` همان تفاوت را صریح می‌گوید
+   * تا تصمیم فرانت به «آیا این رشته تهی است» گره نخورد.
    */
   @Post("checkout")
   @HttpCode(HttpStatus.CREATED)
   async checkout(
     @CurrentUserId() studentId: string,
     @Body(zodPipe(checkoutSchema)) body: z.infer<typeof checkoutSchema>,
-  ): Promise<{ orderId: string; amount: string; gateway: string; redirectUrl: string }> {
+  ): Promise<{
+    orderId: string;
+    amount: string;
+    creditApplied: string;
+    gatewayAmount: string;
+    gateway: string | null;
+    redirectUrl: string | null;
+    settled: boolean;
+    unmatched: boolean;
+  }> {
     const result = await this.payment.checkout({
       studentId,
       bookingId: body.bookingId,
       enrollmentId: body.enrollmentId,
+      useCredit: body.useCredit,
     });
 
     return {
       orderId: result.orderId,
       amount: result.amount.toString(),
+      creditApplied: result.creditApplied.toString(),
+      gatewayAmount: result.gatewayAmount.toString(),
       gateway: result.gateway,
       redirectUrl: result.redirectUrl,
+      settled: result.settlement?.status === "PAID",
+      /**
+       * همان حالت نادرِ `paid_unmatched` مسیر درگاه، این بار با اعتبار:
+       * مبلغ کم شده ولی جلسه قطعی نشده چون مهلتش در همان لحظه تمام
+       * شده. صفحه‌ی نتیجه باید صریح بگوید، نه اینکه «موفق» نشان دهد.
+       */
+      unmatched: (result.settlement?.unconfirmedBookingIds.length ?? 0) > 0,
     };
   }
 
@@ -168,6 +206,42 @@ export class PaymentController {
       .limit(100);
 
     return { orders: rows.map(toOrderView) };
+  }
+
+  /**
+   * موجودی اعتبار کاربر جاری و تاریخچه‌اش.
+   *
+   * تاریخچه همراه موجودی می‌آید و در اندپوینت جدا نیست: صفحه‌ای که
+   * موجودی را نشان می‌دهد همیشه باید بتواند به «این عدد از کجا آمد؟»
+   * جواب بدهد. اعتباری که توضیحش پیدا نباشد، به شکل تیکت پشتیبانی
+   * برمی‌گردد.
+   */
+  @Get("credit")
+  async getCredit(@CurrentUserId() userId: string): Promise<{
+    balance: string;
+    entries: Array<{
+      reason: string;
+      amount: string;
+      bookingId: string | null;
+      description: string;
+      createdAt: string;
+    }>;
+  }> {
+    const [balance, entries] = await Promise.all([
+      this.payment.creditBalance(userId),
+      this.payment.creditEntries(userId),
+    ]);
+
+    return {
+      balance: balance.toString(),
+      entries: entries.map((entry) => ({
+        reason: entry.reason,
+        amount: entry.amount.toString(),
+        bookingId: entry.bookingId,
+        description: entry.description,
+        createdAt: entry.createdAt.toISOString(),
+      })),
+    };
   }
 
   /**
@@ -252,6 +326,7 @@ function toOrderView(row: typeof orders.$inferSelect): OrderView {
   return {
     id: row.id,
     amount: row.amount.toString(),
+    creditApplied: row.creditApplied.toString(),
     status: row.status,
     gateway: row.gateway,
     refId: row.gatewayRefId,

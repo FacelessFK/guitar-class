@@ -66,6 +66,12 @@ export const ledgerType = pgEnum("ledger_type", [
 
 export const payoutStatus = pgEnum("payout_status", ["PENDING", "PAID"]);
 
+export const creditReason = pgEnum("credit_reason", [
+  "CANCELLATION",
+  "SPEND",
+  "ADMIN_ADJUSTMENT",
+]);
+
 export const assignmentStatus = pgEnum("assignment_status", [
   "ASSIGNED",
   "SUBMITTED",

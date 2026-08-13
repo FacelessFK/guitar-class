@@ -28,11 +28,14 @@ import { useNow } from "@/lib/use-now";
 export function BookingCard({
   booking,
   paymentPlan,
+  creditBalance = null,
   onChange,
 }: {
   booking: BookingDetail;
   /** تهی یعنی این کارت کنش پرداختی ندارد — تمام‌شده یا مال استاد است */
   paymentPlan?: PaymentPlan;
+  /** موجودی اعتبار هنرجو به ریال؛ صفحه‌ی استاد آن را نمی‌فرستد */
+  creditBalance?: bigint | null;
   onChange: () => void;
 }) {
   const now = useNow();
@@ -61,6 +64,7 @@ export function BookingCard({
         <PaymentPanel
           booking={booking}
           plan={paymentPlan}
+          creditBalance={creditBalance}
           now={now}
           onChange={onChange}
         />
@@ -120,20 +124,25 @@ const SESSION_FILE_STATUSES: readonly BookingDetail["status"][] = [
 function PaymentPanel({
   booking,
   plan,
+  creditBalance,
   now,
   onChange,
 }: {
   booking: BookingDetail;
   plan: PaymentPlan | undefined;
+  /** موجودی اعتبار هنرجو به ریال — تهی یعنی هنوز خوانده نشده */
+  creditBalance: bigint | null;
   now: number | null;
   onChange: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [useCredit, setUseCredit] = useState(true);
 
   const expiresAt = booking.holdExpiresAt ? Date.parse(booking.holdExpiresAt) : null;
   const remaining = expiresAt !== null && now !== null ? expiresAt - now : null;
   const expired = remaining !== null && remaining <= 0;
+  const hasCredit = creditBalance !== null && creditBalance > 0n;
 
   async function pay() {
     if (!plan || plan.kind === "COVERED_BY_PACKAGE") return;
@@ -142,11 +151,32 @@ function PaymentPanel({
     setError(null);
 
     try {
-      const order = await startCheckout(
-        plan.kind === "ENROLLMENT"
+      const order = await startCheckout({
+        ...(plan.kind === "ENROLLMENT"
           ? { enrollmentId: plan.enrollmentId }
-          : { bookingId: booking.id },
-      );
+          : { bookingId: booking.id }),
+        useCredit: hasCredit && useCredit,
+      });
+
+      /**
+       * اعتبار کل مبلغ را پوشانده و سفارش همان‌جا قطعی شده — درگاهی در
+       * کار نبود.
+       *
+       * `redirectUrl` تهی است و فرستادن مرورگر به رشته‌ی تهی یعنی رفتن
+       * به همان صفحه. تصمیم به `settled` گره خورده نه به تهی بودن
+       * آدرس: اگر روزی مسیر سومی اضافه شود، این شرط باید صریح بشکند نه
+       * اینکه بی‌صدا به شاخه‌ی درگاه بیفتد.
+       */
+      if (order.settled) {
+        const outcome = order.unmatched ? "paid_unmatched" : "paid";
+        window.location.href = `/payment/result?order=${order.orderId}&status=${outcome}`;
+        return;
+      }
+
+      if (!order.redirectUrl) {
+        throw new Error("درگاه پرداخت آدرسی برنگرداند.");
+      }
+
       // درگاه بیرون از دامنه‌ی ماست، پس `router.push` کار نمی‌کند
       window.location.href = order.redirectUrl;
     } catch (caught) {
@@ -205,6 +235,27 @@ function PaymentPanel({
         ) : null}
       </p>
 
+      {/*
+        خرج کردن اعتبار انتخابی است و تیکش از پیش زده شده.
+
+        پیش‌فرضِ روشن، کاری است که بیشتر آدم‌ها می‌خواهند؛ ولی هنرجویی که
+        اعتبارش را برای پکیج ماه بعد نگه داشته باید بتواند برش دارد.
+        نشان دادن این گزینه به کسی که اعتباری ندارد فقط سؤال می‌سازد،
+        پس وقتی موجودی صفر است اصلاً نمی‌آید.
+      */}
+      {hasCredit ? (
+        <label className="mt-3 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={useCredit}
+            onChange={(event) => setUseCredit(event.target.checked)}
+          />
+          <span>
+            استفاده از اعتبار ({formatToman(creditBalance!.toString())} تومان موجودی)
+          </span>
+        </label>
+      ) : null}
+
       <button
         type="button"
         className="btn-primary mt-3"
@@ -212,7 +263,7 @@ function PaymentPanel({
         onClick={() => void pay()}
       >
         {pending
-          ? "در حال انتقال به درگاه…"
+          ? "کمی صبر کنید…"
           : plan?.kind === "ENROLLMENT"
             ? "پرداخت کل پکیج"
             : "پرداخت"}
@@ -291,6 +342,7 @@ function CancelPanel({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [credited, setCredited] = useState<string | null>(null);
 
   const hoursLeft =
     now === null ? null : (Date.parse(booking.scheduledAt) - now) / 3_600_000;
@@ -302,14 +354,32 @@ function CancelPanel({
     setError(null);
 
     try {
-      await cancelBooking(booking.id, reason.trim() || undefined);
+      const result = await cancelBooking(booking.id, reason.trim() || undefined);
       setOpen(false);
+      setCredited(result.creditGranted);
       onChange();
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
       setPending(false);
     }
+  }
+
+  /**
+   * پس از لغو، مبلغی که به اعتبار رفت همان‌جا گفته می‌شود.
+   *
+   * کارت با `onChange` تازه می‌شود و وضعیتش عوض؛ ولی «پولم کجا رفت؟»
+   * جوابی است که باید در همان لحظه دیده شود، نه بعد از رفتن به صفحه‌ی
+   * دیگری. `null` یعنی چیزی اضافه نشد — یا جلسه سوخته یا پرداخت‌نشده
+   * بوده — و در آن حالت چیزی هم نوشته نمی‌شود.
+   */
+  if (credited) {
+    return (
+      <p className="alert-info mt-4">
+        {formatToman(credited)} تومان به اعتبار شما اضافه شد و در رزرو بعدی خرج
+        می‌شود.
+      </p>
+    );
   }
 
   if (!open) {
@@ -328,9 +398,9 @@ function CancelPanel({
     <div className="mt-4 space-y-3">
       <p className="alert-info">
         {booking.role === "TEACHER"
-          ? "لغو از سمت شما یعنی مبلغ به هنرجو برمی‌گردد و برایش پیامک اطلاع‌رسانی می‌رود."
+          ? "لغو از سمت شما یعنی مبلغ به اعتبار هنرجو برمی‌گردد و برایش پیامک اطلاع‌رسانی می‌رود."
           : freeCancellation
-            ? `تا ${faNumber(BUSINESS_RULES.FREE_CANCELLATION_HOURS)} ساعت پیش از کلاس، لغو بدون سوخت شدن است و مبلغ برمی‌گردد.`
+            ? `تا ${faNumber(BUSINESS_RULES.FREE_CANCELLATION_HOURS)} ساعت پیش از کلاس، لغو بدون سوخت شدن است و مبلغ به اعتبار شما برمی‌گردد تا در رزرو بعدی خرج شود.`
             : `کمتر از ${faNumber(BUSINESS_RULES.FREE_CANCELLATION_HOURS)} ساعت به کلاس مانده؛ با لغو، این جلسه می‌سوزد و مبلغ برنمی‌گردد.`}
       </p>
 

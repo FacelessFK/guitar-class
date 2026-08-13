@@ -18,12 +18,13 @@
  *      پلتفرم به اوست.
  */
 
-import { and, eq, inArray, lt, sql, sum } from "drizzle-orm";
+import { and, eq, gt, inArray, lt, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   BUSINESS_RULES,
   negateSplit,
   splitCommission,
+  splitPayment,
   type CommissionSplit,
 } from "@music/shared";
 
@@ -44,11 +45,18 @@ import { BookingNotFoundError } from "../booking/errors.js";
 import { IN_APP_TYPES, notifyInApp } from "../notification/in-app.service.js";
 import { sessionDateTimeFa } from "../notification/templates.js";
 import {
+  CreditCheckoutInProgressError,
   GatewayUnreachableError,
   NotPayableError,
   OrderNotFoundError,
   PaymentHoldExpiredError,
 } from "./errors.js";
+import {
+  cancellationCreditExists,
+  creditBalanceOf,
+  spendCredit,
+  writeCreditEntry,
+} from "./credit.service.js";
 import { paymentGateway, type PaymentGateway } from "./gateway.port.js";
 
 const MINUTE_MS = 60_000;
@@ -247,6 +255,8 @@ export interface CheckoutInput {
   studentId: string;
   bookingId?: string;
   enrollmentId?: string;
+  /** هنرجو خواسته اعتبارش خرج شود. پیش‌فرض خاموش است. */
+  useCredit?: boolean;
   /** پیش‌فرض از `PAYMENT_CALLBACK_URL` خوانده می‌شود */
   callbackUrl?: string;
   gateway?: PaymentGateway;
@@ -255,10 +265,21 @@ export interface CheckoutInput {
 
 export interface CheckoutResult {
   orderId: string;
+  /** کل مبلغ سفارش */
   amount: bigint;
-  gateway: string;
-  redirectUrl: string;
+  /** چقدرش از اعتبار هنرجو برداشته می‌شود */
+  creditApplied: bigint;
+  /** چقدرش به درگاه می‌رود. صفر یعنی مسیر بدون درگاه. */
+  gatewayAmount: bigint;
+  /** `null` یعنی سفارش با اعتبار تمام شد و درگاهی در کار نبود */
+  gateway: string | null;
+  redirectUrl: string | null;
+  /** فقط در مسیر بدون درگاه پر می‌شود — سفارش همان‌جا قطعی شده */
+  settlement: SettlementResult | null;
 }
+
+/** نام درگاهِ سفارشی که هرگز به درگاه نمی‌رود. */
+const CREDIT_ONLY_GATEWAY = "CREDIT";
 
 function callbackUrlFromEnv(): string {
   return (
@@ -267,11 +288,28 @@ function callbackUrlFromEnv(): string {
 }
 
 /**
+ * مبلغی که واقعاً به درگاه می‌رود.
+ *
+ * **در هر دو مرحله‌ی درخواست و تأیید از همین تابع خوانده می‌شود.**
+ * زرین‌پال مبلغ تأیید را با مبلغ درخواست می‌سنجد و اختلافشان کد `-50`
+ * می‌گیرد — همان خطایی که واحد ریال/تومان هم می‌دهد. یعنی اگر این
+ * محاسبه دو جا نوشته شود، خرابی‌اش شبیه یک مسئله‌ی کاملاً دیگر به نظر
+ * می‌رسد.
+ */
+function gatewayAmountOf(order: { amount: bigint; creditApplied: bigint }): bigint {
+  return order.amount - order.creditApplied;
+}
+
+/**
  * سفارش می‌سازد و آدرس درگاه را برمی‌گرداند.
  *
  * فراخوانی درگاه **بیرون** از تراکنش دیتابیس انجام می‌شود. باز نگه
  * داشتن تراکنش روی یک درخواست شبکه یعنی یک درگاه کند، استخر اتصال
  * پستگرس را تمام می‌کند و کل سرویس می‌خوابد.
+ *
+ * اگر اعتبار کل مبلغ را بپوشاند، هیچ درگاهی در کار نیست و سفارش همین‌جا
+ * قطعی می‌شود. آن مسیر عمداً از همان `applySuccessfulPayment` رد می‌شود
+ * که مسیر درگاه رد می‌شود — نه یک میان‌بر موازی.
  */
 export async function startCheckout(input: CheckoutInput): Promise<CheckoutResult> {
   const now = input.now ?? new Date();
@@ -285,13 +323,52 @@ export async function startCheckout(input: CheckoutInput): Promise<CheckoutResul
     ? await resolveBookingTarget(input.studentId, input.bookingId, now)
     : await resolveEnrollmentTarget(input.studentId, input.enrollmentId!, now);
 
-  const orderId = await upsertPendingOrder(input.studentId, gateway.name, target);
+  const existingOrderId = await findPendingOrder(input.studentId, target);
+
+  const split = splitPayment({
+    total: target.amount,
+    balance: input.useCredit ? await creditBalanceOf(input.studentId) : 0n,
+    useCredit: input.useCredit === true,
+  });
+
+  if (split.fromCredit > 0n) {
+    await assertNoOtherCreditCheckout(input.studentId, existingOrderId);
+  }
+
+  const creditOnly = split.fromGateway === 0n;
+  const gatewayName = creditOnly ? CREDIT_ONLY_GATEWAY : gateway.name;
+
+  const orderId = await upsertPendingOrder({
+    orderId: existingOrderId,
+    studentId: input.studentId,
+    gatewayName,
+    target,
+    creditApplied: split.fromCredit,
+  });
+
+  if (creditOnly) {
+    const settlement = await applySuccessfulPayment(orderId, null, now);
+
+    if (settlement.status === "PAID") {
+      await notifyConfirmedBookings(settlement.confirmedBookingIds);
+    }
+
+    return {
+      orderId,
+      amount: target.amount,
+      creditApplied: split.fromCredit,
+      gatewayAmount: 0n,
+      gateway: null,
+      redirectUrl: null,
+      settlement,
+    };
+  }
 
   let requested;
   try {
     requested = await gateway.request({
       orderId,
-      amount: target.amount,
+      amount: split.fromGateway,
       description: target.description,
       callbackUrl: input.callbackUrl ?? callbackUrlFromEnv(),
     });
@@ -307,24 +384,61 @@ export async function startCheckout(input: CheckoutInput): Promise<CheckoutResul
   return {
     orderId,
     amount: target.amount,
+    creditApplied: split.fromCredit,
+    gatewayAmount: split.fromGateway,
     gateway: gateway.name,
     redirectUrl: requested.redirectUrl,
+    settlement: null,
   };
 }
 
 /**
- * سفارش در انتظارِ همین هدف را پیدا می‌کند یا می‌سازد.
+ * جلوی دومین چک‌اوتِ اعتباریِ هم‌زمان را می‌گیرد.
+ *
+ * اعتبار **هنگام قطعی شدن** سفارش کم می‌شود، نه هنگام چک‌اوت. این عمدی
+ * است: سفارشی که کاربر رهایش می‌کند نباید اعتبارش را تا انقضای مهلت
+ * گروگان بگیرد، و رها کردن صفحه‌ی درگاه رایج‌ترین اتفاق این مسیر است.
+ *
+ * بهایش این حالت است: دو سفارشِ در انتظار که هر دو روی یک موجودی حساب
+ * کرده‌اند. دومی هنگام قطعی شدن موجودی را نمی‌یابد — و آن لحظه پول درگاه
+ * گرفته شده و برگرداندنش دستی است. اینجا تنها نقطه‌ای است که این حالت
+ * هنوز هزینه ندارد.
+ *
+ * سفارشِ خودِ همین هدف مستثناست: هنرجویی که صفحه‌ی پرداخت را دوباره باز
+ * می‌کند یا تصمیمش را درباره‌ی اعتبار عوض می‌کند، نباید به دیوار بخورد.
+ */
+async function assertNoOtherCreditCheckout(
+  studentId: string,
+  currentOrderId: string | null,
+): Promise<void> {
+  const rows = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.studentId, studentId),
+        eq(orders.status, "PENDING"),
+        gt(orders.creditApplied, 0n),
+      ),
+    );
+
+  if (rows.some((row) => row.id !== currentOrderId)) {
+    throw new CreditCheckoutInProgressError();
+  }
+}
+
+/**
+ * سفارشِ در انتظارِ همین هدف، اگر وجود داشته باشد.
  *
  * چرا دوباره استفاده می‌شود: کاربر ممکن است چند بار روی «پرداخت» بزند
  * یا از درگاه برگردد و دوباره تلاش کند. ساختن سفارش تازه در هر تلاش،
  * جدول را پر از رکورد بی‌صاحب می‌کند و گزارش‌های مالی را مبهم. شناسه‌ی
  * درگاه در هر تلاش تازه می‌شود، ولی سفارش یکی می‌ماند.
  */
-async function upsertPendingOrder(
+async function findPendingOrder(
   studentId: string,
-  gatewayName: string,
   target: PayableTarget,
-): Promise<string> {
+): Promise<string | null> {
   const targetCondition = target.enrollmentId
     ? eq(orderItems.enrollmentId, target.enrollmentId)
     : eq(orderItems.bookingId, target.bookingIds[0]!);
@@ -333,18 +447,62 @@ async function upsertPendingOrder(
     .select({ id: orders.id })
     .from(orders)
     .innerJoin(orderItems, eq(orderItems.orderId, orders.id))
-    .where(and(eq(orders.status, "PENDING"), eq(orders.amount, target.amount), targetCondition))
+    .where(
+      and(
+        eq(orders.studentId, studentId),
+        eq(orders.status, "PENDING"),
+        eq(orders.amount, target.amount),
+        targetCondition,
+      ),
+    )
     .limit(1);
 
-  if (existing) return existing.id;
+  return existing?.id ?? null;
+}
+
+interface UpsertOrderInput {
+  /** خروجی `findPendingOrder` — `null` یعنی سفارش تازه لازم است */
+  orderId: string | null;
+  studentId: string;
+  gatewayName: string;
+  target: PayableTarget;
+  creditApplied: bigint;
+}
+
+/**
+ * سفارش در انتظار را می‌سازد، یا سهم اعتبارِ سفارش موجود را به‌روز می‌کند.
+ *
+ * به‌روز کردن لازم است چون تصمیم درباره‌ی اعتبار مال **این** تلاش است، نه
+ * تلاش قبلی: کاربری که یک بار بدون اعتبار به درگاه رفت و برگشت، حق دارد
+ * این بار با اعتبار برود. چون اعتبار تا لحظه‌ی قطعی شدن سفارش کم نشده،
+ * عوض کردن این ستون روی سفارشِ در انتظار هیچ سطر مالی‌ای را باطل
+ * نمی‌کند.
+ *
+ * `WHERE status = 'PENDING'` روی خودِ `UPDATE` تکرار می‌شود: بین پیدا
+ * کردن سفارش و به‌روز کردنش ممکن است تأیید درگاه رسیده و قطعی‌اش کرده
+ * باشد، و عوض کردن سهم اعتبارِ سفارشِ پرداخت‌شده یعنی مبلغی که هیچ‌وقت
+ * جابه‌جا نشده.
+ */
+async function upsertPendingOrder(input: UpsertOrderInput): Promise<string> {
+  const { target } = input;
+
+  if (input.orderId) {
+    await db
+      .update(orders)
+      .set({ creditApplied: input.creditApplied, gateway: input.gatewayName })
+      .where(and(eq(orders.id, input.orderId), eq(orders.status, "PENDING")));
+
+    return input.orderId;
+  }
 
   return db.transaction(async (tx) => {
     const [order] = await tx
       .insert(orders)
       .values({
-        studentId,
+        studentId: input.studentId,
         amount: target.amount,
-        gateway: gatewayName,
+        creditApplied: input.creditApplied,
+        gateway: input.gatewayName,
         status: "PENDING",
       })
       .returning({ id: orders.id });
@@ -433,7 +591,8 @@ export async function settleOrder(input: SettleInput): Promise<SettlementResult>
   try {
     verification = await gateway.verify({
       authority: input.authority,
-      amount: order.amount,
+      // آنچه درگاه گرفته، نه کل سفارش — سهم اعتبار هرگز به درگاه نرفته
+      amount: gatewayAmountOf(order),
     });
   } catch {
     throw new GatewayUnreachableError();
@@ -557,10 +716,20 @@ async function bookingIdsOfOrder(orderId: string): Promise<string[]> {
  *
  * سفارش با `UPDATE` شرطی قطعی می‌شود. اگر صفر سطر برگشت یعنی درخواست
  * هم‌زمان دیگری زودتر رسیده — همان‌جا برمی‌گردیم و دوباره کاری نمی‌کنیم.
+ *
+ * `refId` برای سفارشِ تماماً اعتباری `null` است: کد رهگیری چیزی است که
+ * درگاه می‌دهد و اینجا درگاهی نبوده. جعل کردنِ یک رشته به‌جایش یعنی
+ * گزارش مالی نتواند این دو را از هم تشخیص دهد.
+ *
+ * **کم کردن اعتبار داخل همین تراکنش انجام می‌شود.** اگر بیرون بود،
+ * حالتی وجود داشت که سفارش قطعی شده باشد و اعتبار کم نشده — یعنی
+ * جلسه‌ای که هنرجو بابتش چیزی نداده. ایندکس یکتای
+ * `credit_one_spend_per_order` هم اجرای دوم را ناممکن می‌کند، پس رسیدنِ
+ * دوباره‌ی کال‌بک دو بار خرج نمی‌کند.
  */
 async function applySuccessfulPayment(
   orderId: string,
-  refId: string,
+  refId: string | null,
   now: Date,
 ): Promise<SettlementResult> {
   return db.transaction(async (tx) => {
@@ -573,9 +742,15 @@ async function applySuccessfulPayment(
           inArray(orders.status, [...SETTLEABLE_ORDER_STATUSES]),
         ),
       )
-      .returning({ id: orders.id });
+      .returning({
+        id: orders.id,
+        studentId: orders.studentId,
+        creditApplied: orders.creditApplied,
+      });
 
-    if (claimed.length === 0) {
+    const claimedOrder = claimed[0];
+
+    if (!claimedOrder) {
       return {
         orderId,
         status: "ALREADY_PAID" as const,
@@ -584,6 +759,14 @@ async function applySuccessfulPayment(
         unconfirmedBookingIds: [],
         reason: null,
       };
+    }
+
+    if (claimedOrder.creditApplied > 0n) {
+      await spendCredit(tx, {
+        studentId: claimedOrder.studentId,
+        orderId,
+        amount: claimedOrder.creditApplied,
+      });
     }
 
     const items = await tx
@@ -724,21 +907,50 @@ export interface RefundInput {
   refundable: boolean;
 }
 
+export interface CancellationSettlement {
+  /**
+   * سطر منفی دفتر کل که درآمد استاد را خنثی می‌کند.
+   * `null` یعنی از قبل نوشته شده بود.
+   */
+  refund: CommissionSplit | null;
+  /**
+   * مبلغی که به اعتبار هنرجو اضافه شد، به ریال.
+   * `null` یعنی از قبل اضافه شده بود.
+   */
+  credit: bigint | null;
+}
+
 /**
- * بازپرداخت لغو را در دفتر کل ثبت می‌کند.
+ * اثر مالی لغو: هم سمت استاد، هم سمت هنرجو.
  *
- * برگرداندن واقعی پول به کارت در این فاز **دستی** است: درگاه‌های ایرانی
- * استرداد خودکار را به همه‌ی پذیرنده‌ها نمی‌دهند. کاری که اینجا انجام
- * می‌شود ثبت بدهی است، نه انتقال وجه. سطر منفی در دفتر کل، درآمد استاد
- * را دقیقاً خنثی می‌کند تا تسویه‌ی ماه بعد درست باشد.
+ * **دو سطر در یک تراکنش**، و این یکی بودن اصل ماجراست. سطر منفی
+ * `REFUND` درآمد استاد را دقیقاً خنثی می‌کند و سطر مثبت `CANCELLATION`
+ * همان مبلغ را به اعتبار هنرجو می‌برد. اگر دو تابع جدا بودند، حالتی
+ * وجود داشت که یکی نوشته شده باشد و دیگری نه: یا استاد پولی را از دست
+ * بدهد که به کسی نرسیده، یا هنرجو اعتباری بگیرد که از حساب هیچ‌کس کم
+ * نشده. هیچ‌کدام سر و صدا نمی‌کنند.
+ *
+ * **مبلغ اعتبار ناخالص است، نه سهم استاد.** هنرجو کل قیمت جلسه را داده
+ * و کل آن برمی‌گردد؛ کمیسیون پلتفرم هم با همان سطر منفی برگشته. یعنی
+ * پس از لغو، پلتفرم چیزی نگه نداشته و کل مبلغ به شکل بدهی به هنرجو نزد
+ * او مانده.
+ *
+ * برگرداندن واقعی پول به کارت همچنان **در دامنه نیست**: درگاه‌های ایرانی
+ * استرداد خودکار را به همه‌ی پذیرنده‌ها نمی‌دهند. آنچه ثبت می‌شود بدهی
+ * است، و اعتبار شکلی است که هنرجو می‌تواند خرجش کند.
  *
  * اگر جلسه سوخته باشد (`refundable === false`) هیچ سطری نوشته نمی‌شود:
  * پول پیش استاد می‌ماند، که دقیقاً معنای سیاست لغوِ بخش ۵ سند معماری
  * است.
+ *
+ * دو بررسی جدا انجام می‌شود و نه یکی، با اینکه هر دو سطر همیشه با هم
+ * نوشته می‌شوند: رزروهایی که **پیش از وجود اعتبار** لغو شده‌اند سطر
+ * `REFUND` دارند و سطر اعتبار ندارند. بررسی مشترک یعنی آن‌ها هرگز
+ * اعتبارشان را نگیرند.
  */
 export async function recordCancellationRefund(
   input: RefundInput,
-): Promise<CommissionSplit | null> {
+): Promise<CancellationSettlement | null> {
   if (!input.refundable) return null;
 
   return db.transaction(async (tx) => {
@@ -761,26 +973,54 @@ export async function recordCancellationRefund(
       )
       .limit(1);
 
-    if (alreadyRefunded) return null;
+    const alreadyCredited = await cancellationCreditExists(tx, input.bookingId);
 
-    const refund = negateSplit({
-      gross: earning.grossAmount,
-      commission: earning.commission,
-      net: earning.netAmount,
-    });
+    if (alreadyRefunded && alreadyCredited) return null;
 
-    await tx.insert(ledgerEntries).values({
-      type: "REFUND",
-      orderId: earning.orderId,
-      bookingId: input.bookingId,
-      teacherId: earning.teacherId,
-      grossAmount: refund.gross,
-      commission: refund.commission,
-      netAmount: refund.net,
-      description: "بازپرداخت لغو جلسه",
-    });
+    let refund: CommissionSplit | null = null;
 
-    return refund;
+    if (!alreadyRefunded) {
+      refund = negateSplit({
+        gross: earning.grossAmount,
+        commission: earning.commission,
+        net: earning.netAmount,
+      });
+
+      await tx.insert(ledgerEntries).values({
+        type: "REFUND",
+        orderId: earning.orderId,
+        bookingId: input.bookingId,
+        teacherId: earning.teacherId,
+        grossAmount: refund.gross,
+        commission: refund.commission,
+        netAmount: refund.net,
+        description: "بازپرداخت لغو جلسه",
+      });
+    }
+
+    let credit: bigint | null = null;
+
+    if (!alreadyCredited) {
+      const [booking] = await tx
+        .select({ studentId: bookings.studentId })
+        .from(bookings)
+        .where(eq(bookings.id, input.bookingId))
+        .limit(1);
+
+      if (!booking) throw new BookingNotFoundError(input.bookingId);
+
+      credit = earning.grossAmount;
+
+      await writeCreditEntry(tx, {
+        studentId: booking.studentId,
+        reason: "CANCELLATION",
+        amount: credit,
+        bookingId: input.bookingId,
+        description: "بازگشت هزینه‌ی جلسه‌ی لغوشده",
+      });
+    }
+
+    return { refund, credit };
   });
 }
 

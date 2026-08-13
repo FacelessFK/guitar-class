@@ -12,6 +12,7 @@ import { BigIntSerializationInterceptor } from "../common/serialization.intercep
 import { db } from "../db/client.js";
 import {
   bookings,
+  creditEntries,
   ledgerEntries,
   orders,
   payouts,
@@ -43,6 +44,7 @@ let app: INestApplication;
 let server: App;
 let fixture: Fixture;
 let adminToken: string;
+let adminId: string;
 let studentToken: string;
 let teacherToken: string;
 
@@ -67,6 +69,8 @@ beforeEach(async () => {
     .insert(users)
     .values({ phone: "+989120000009", fullName: "مدیر", isAdmin: true })
     .returning({ id: users.id });
+
+  adminId = admin!.id;
 
   [adminToken, studentToken, teacherToken] = await Promise.all([
     accessTokenFor(admin!.id, true),
@@ -908,6 +912,108 @@ describe("صفحه‌بندی", () => {
       .expect(200);
 
     expect(paid.body).toMatchObject({ id: oldest, status: "PAID" });
+  });
+});
+
+describe("اعتبار هنرجو", () => {
+  it("ادمین اعتبار می‌دهد و موجودی برمی‌گردد", async () => {
+    const response = await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ amount: "5000000", description: "بازپرداخت دستی سفارش بی‌جلسه" })
+      .expect(201);
+
+    expect(response.body).toEqual({ balance: "5000000" });
+  });
+
+  /** هویت دهنده‌ی اعتبار از توکن می‌آید، نه از بدنه‌ی درخواست. */
+  it("سطر به نام همان ادمینی ثبت می‌شود که درخواست را فرستاده", async () => {
+    await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ amount: "1000000", description: "جبران جلسه‌ی تأییدنشده" })
+      .expect(201);
+
+    const [entry] = await db.select().from(creditEntries);
+    expect(entry?.createdById).toBe(adminId);
+    expect(entry?.reason).toBe("ADMIN_ADJUSTMENT");
+  });
+
+  it("اصلاح منفی هم پذیرفته می‌شود", async () => {
+    await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ amount: "3000000", description: "اعطای اولیه" })
+      .expect(201);
+
+    const response = await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ amount: "-1000000", description: "اصلاح اشتباه" })
+      .expect(201);
+
+    expect(response.body).toEqual({ balance: "2000000" });
+  });
+
+  it("اعتبار بیشتر از موجودی را پس نمی‌گیرد", async () => {
+    await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ amount: "1000000", description: "اعطای اولیه" })
+      .expect(201);
+
+    await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ amount: "-2000000", description: "بیشتر از موجودی" })
+      .expect(400);
+  });
+
+  it("توضیح اجباری است — اعتبار بی‌دلیل ثبت نمی‌شود", async () => {
+    await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ amount: "1000000" })
+      .expect(400);
+  });
+
+  it("مبلغ صفر رد می‌شود", async () => {
+    await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ amount: "0", description: "هیچ" })
+      .expect(400);
+  });
+
+  it("هنرجو نمی‌تواند به خودش اعتبار بدهد", async () => {
+    await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ amount: "9999999", description: "خودم به خودم" })
+      .expect(403);
+
+    expect(await db.select().from(creditEntries)).toHaveLength(0);
+  });
+
+  it("تاریخچه‌ی اعتبار هنرجو را برمی‌گرداند", async () => {
+    await request(server)
+      .post(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .send({ amount: "2000000", description: "جبران" })
+      .expect(201);
+
+    const response = await request(server)
+      .get(`/api/admin/students/${fixture.studentId}/credit`)
+      .set("authorization", `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(response.body.balance).toBe("2000000");
+    expect(response.body.entries).toHaveLength(1);
+    expect(response.body.entries[0]).toMatchObject({
+      reason: "ADMIN_ADJUSTMENT",
+      amount: "2000000",
+      description: "جبران",
+    });
   });
 });
 

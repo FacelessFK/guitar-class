@@ -529,14 +529,14 @@ describe("بازپرداخت", () => {
       now: new Date(booking.scheduledAt.getTime() - 48 * 3_600_000),
     });
 
-    const refund = await recordCancellationRefund({
+    const settlement = await recordCancellationRefund({
       bookingId: booking.id,
       refundable: cancellation.refundable,
     });
 
-    expect(refund).not.toBeNull();
-    expect(refund?.gross).toBe(-PRICE);
-    expect(refund?.net).toBe(-NET);
+    expect(settlement).not.toBeNull();
+    expect(settlement?.refund?.gross).toBe(-PRICE);
+    expect(settlement?.refund?.net).toBe(-NET);
 
     // جمع دفتر کل باید دقیقاً صفر شود، بدون هیچ باقی‌مانده‌ای
     const summary = await teacherLedgerSummary(fixture.teacherProfileId);

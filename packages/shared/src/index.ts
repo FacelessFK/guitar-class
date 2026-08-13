@@ -6,3 +6,4 @@ export * from "./classroom";
 export * from "./phone";
 export * from "./password";
 export * from "./money";
+export * from "./credit";
