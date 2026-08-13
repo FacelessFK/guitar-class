@@ -20,26 +20,48 @@ export default function SiteLayout({
   );
 }
 
+/**
+ * وردامارک — نام برند هنوز انتخاب نشده، پس همین توصیف با فونت نمایشی
+ * نقشش را بازی می‌کند. روزی که نام آمد، فقط همین رشته عوض می‌شود.
+ */
+export function Wordmark({ className }: { className?: string }) {
+  return (
+    <Link
+      href="/"
+      className={`font-display text-xl leading-none text-ink transition-colors hover:text-accent ${className ?? ""}`}
+    >
+      کلاس آنلاین موسیقی
+    </Link>
+  );
+}
+
 function SiteHeader() {
   return (
-    <header className="border-b border-border">
-      <nav className="mx-auto flex max-w-5xl items-center justify-between gap-6 px-5 py-4">
-        <Link href="/" className="font-bold">
-          کلاس آنلاین موسیقی
-        </Link>
+    <header className="border-b border-border bg-surface-sunken">
+      <nav className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-4">
+        <Wordmark />
 
-        <ul className="flex items-center gap-6 text-sm">
+        <ul className="flex items-center gap-5 text-sm text-ink-muted sm:gap-6">
           <li>
-            <Link href="/teachers">استادها</Link>
+            <Link href="/teachers" className="transition-colors hover:text-ink">
+              استادها
+            </Link>
           </li>
           <li>
-            <Link href="/blog">مقاله‌ها</Link>
+            <Link href="/blog" className="transition-colors hover:text-ink">
+              مقاله‌ها
+            </Link>
           </li>
           <li>
-            <Link href="/rules">قوانین</Link>
+            <Link href="/rules" className="transition-colors hover:text-ink">
+              قوانین
+            </Link>
           </li>
           <li>
-            <Link href="/dashboard" className="font-medium text-accent">
+            <Link
+              href="/dashboard"
+              className="font-medium text-accent transition-colors hover:text-accent-strong"
+            >
               ورود
             </Link>
           </li>
@@ -51,11 +73,11 @@ function SiteHeader() {
 
 function SiteFooter() {
   return (
-    <footer className="border-t border-border text-sm text-ink-muted">
-      <div className="mx-auto max-w-5xl px-5 py-8">
+    <footer className="mt-20 border-t border-border bg-surface-sunken text-sm text-ink-muted">
+      <div className="mx-auto max-w-5xl px-5 py-10">
         <p>
           کلاس خصوصی آنلاین موسیقی، یک‌به‌یک و زنده. پیش از رزرو،{" "}
-          <Link href="/rules" className="underline">
+          <Link href="/rules" className="text-accent underline underline-offset-4">
             قوانین و سیاست لغو
           </Link>{" "}
           را بخوانید.

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { InstrumentDrawing } from "@/components/instrument-art";
 import {
   getInstrument,
   getInstruments,
@@ -82,16 +83,35 @@ export default async function InstrumentPage({ params }: PageProps) {
         instrumentName={instrument.nameFa}
       />
 
-      <article className="mx-auto max-w-5xl px-5 py-16">
-        <h1 className="text-3xl font-bold sm:text-4xl">{title}</h1>
+      <article className="mx-auto max-w-5xl px-5 py-12 sm:py-16">
+        {/**
+         * قهرمانِ صفحه‌ی ساز، خودِ ساز است.
+         *
+         * طرحِ خطی در این اندازه کار می‌کند و نشانِ خطی نه — برعکسِ
+         * کارت‌های صفحه‌ی اصلی که آنجا رابطه وارونه است.
+         */}
+        <header className="grid items-center gap-8 sm:grid-cols-[1fr_auto]">
+          <div>
+            <h1 className="font-display text-4xl leading-[1.5] sm:text-5xl sm:leading-[1.45]">
+              {title}
+            </h1>
 
-        {instrument.descriptionFa ? (
-          <p className="mt-6 max-w-2xl text-lg text-ink-muted">
-            {instrument.descriptionFa}
-          </p>
-        ) : null}
+            {instrument.descriptionFa ? (
+              <p className="mt-5 max-w-2xl text-lg leading-9 text-ink-soft">
+                {instrument.descriptionFa}
+              </p>
+            ) : null}
+          </div>
 
-        <section className="mt-14">
+          <div className="order-first flex justify-center rounded-lg border border-border bg-surface-sunken p-3 sm:order-none">
+            <InstrumentDrawing
+              slug={instrument.slug}
+              className="h-48 w-48 text-accent sm:h-60 sm:w-60"
+            />
+          </div>
+        </header>
+
+        <section className="mt-16">
           <h2 className="text-2xl font-bold">
             استادهای {instrument.nameFa}
           </h2>
@@ -111,10 +131,10 @@ export default async function InstrumentPage({ params }: PageProps) {
           )}
         </section>
 
-        <section className="mt-14">
+        <section className="mt-16">
           <h2 className="text-2xl font-bold">کلاس چطور برگزار می‌شود؟</h2>
 
-          <ol className="mt-6 max-w-2xl list-decimal space-y-3 pr-5">
+          <ol className="mt-6 max-w-2xl list-decimal space-y-3 pr-5 marker:font-bold marker:text-accent">
             <li>ساز و استاد را انتخاب می‌کنی و ساعت آزادش را می‌بینی.</li>
             <li>
               اولین جلسه، یک معارفه‌ی رایگان بیست‌دقیقه‌ای است تا استاد و روش
@@ -149,10 +169,7 @@ function TeacherCard({
   const cheapest = lowestPrice(offerings.map((offering) => offering.price));
 
   return (
-    <Link
-      href={`/teachers/${teacher.slug}`}
-      className="card"
-    >
+    <Link href={`/teachers/${teacher.slug}`} className="card">
       <h3 className="font-bold">{teacher.fullName}</h3>
       <p className="mt-1 text-sm text-ink-muted">{teacher.headline}</p>
 
@@ -160,14 +177,14 @@ function TeacherCard({
         {teacher.yearsExperience > 0 ? (
           <div className="flex gap-2">
             <dt className="text-ink-muted">سابقه:</dt>
-            <dd>{faNumber(teacher.yearsExperience)} سال</dd>
+            <dd className="tnum">{faNumber(teacher.yearsExperience)} سال</dd>
           </div>
         ) : null}
 
         {cheapest ? (
           <div className="flex gap-2">
             <dt className="text-ink-muted">شروع از:</dt>
-            <dd>
+            <dd className="tnum">
               {formatToman(cheapest)} تومان
               {offerings[0]
                 ? ` / ${formatDuration(offerings[0].durationMinutes)}`

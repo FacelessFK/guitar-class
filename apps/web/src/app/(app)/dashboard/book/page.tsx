@@ -9,6 +9,7 @@ import {
   tehranDateKey,
 } from "@music/shared";
 
+import { SlotBoard } from "@/components/slot-board";
 import { errorMessage } from "@/lib/api-client";
 import {
   bookPackage,
@@ -538,8 +539,6 @@ function SlotPicker({
     void load();
   }, [load]);
 
-  const byDate = groupByDate(slots ?? []);
-
   return (
     <div>
       <div className="flex items-center justify-between gap-4 text-sm">
@@ -569,57 +568,18 @@ function SlotPicker({
 
       {slots === null ? (
         <p className="mt-4 text-sm text-ink-muted">در حال بارگذاری ساعت‌های آزاد…</p>
-      ) : byDate.length === 0 ? (
+      ) : slots.length === 0 ? (
         <p className="alert-info mt-4">
           در این دو هفته ساعت آزادی نیست. بازه‌ی بعدی را ببینید یا استاد دیگری
           انتخاب کنید.
         </p>
       ) : (
-        <ul className="mt-4 space-y-5">
-          {byDate.map(([date, daySlots]) => (
-            <li key={date}>
-              <h3 className="text-sm font-medium">{formatJalaliDayMonth(date)}</h3>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {daySlots.map((item) => (
-                  <button
-                    key={item.startAt}
-                    type="button"
-                    onClick={() => onSelect(item)}
-                    className={
-                      selected?.startAt === item.startAt
-                        ? "rounded-lg bg-accent px-3 py-2 text-sm text-accent-ink"
-                        : "rounded-lg border border-border px-3 py-2 text-sm hover:border-accent"
-                    }
-                  >
-                    {faDigits(item.startTime)}
-                  </button>
-                ))}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-5">
+          <SlotBoard slots={slots} selected={selected} onSelect={onSelect} />
+        </div>
       )}
     </div>
   );
-}
-
-/**
- * اسلات‌ها روزبه‌روز گروه می‌شوند.
- *
- * API آن‌ها را مرتب و تخت می‌دهد؛ یک فهرست تخت از هشتاد ساعت برای
- * کاربر غیرقابل خواندن است، و تاریخ هر ساعت باید بالای گروهش بیاید نه
- * کنار تک‌تکشان.
- */
-function groupByDate(slots: Slot[]): Array<[string, Slot[]]> {
-  const groups = new Map<string, Slot[]>();
-
-  for (const slot of slots) {
-    const existing = groups.get(slot.date);
-    if (existing) existing.push(slot);
-    else groups.set(slot.date, [slot]);
-  }
-
-  return [...groups.entries()];
 }
 
 /**

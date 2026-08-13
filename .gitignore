@@ -26,3 +26,4 @@ apps/api/prisma/*.db-journal
 
 # فایل‌های موقت Playwright MCP
 .playwright-mcp/
+.shots/

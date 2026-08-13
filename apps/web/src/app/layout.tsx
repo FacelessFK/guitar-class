@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Vazirmatn } from "next/font/google";
+import { Lalezar, Vazirmatn } from "next/font/google";
 
 import "./globals.css";
 
@@ -11,10 +11,28 @@ import "./globals.css";
  * ایرانی این فقط یک نکته‌ی حریم خصوصی نیست: دسترسی به دامنه‌های گوگل
  * پایدار نیست و فونتِ بارنشده یعنی صفحه‌ای که با فونت پیش‌فرض و
  * شکسته دیده می‌شود.
+ *
+ * همین دانلودِ زمانِ بیلد است که اضافه کردن فونت دوم را روی سرورِ
+ * بدون اینترنت ممکن می‌کند: بیلد روی ماشین توسعه انجام می‌شود و
+ * ایمیج با `docker save` منتقل می‌شود.
  */
 const vazirmatn = Vazirmatn({
   subsets: ["arabic"],
   variable: "--font-vazirmatn",
+  display: "swap",
+});
+
+/**
+ * لاله‌زار — فونت نمایشی، از حروف‌نگاری تابلوها و پوسترهای ایرانی.
+ *
+ * تک‌وزن است و زیر ۲۰px به‌هم می‌چسبد، پس فقط `h1`، نام ساز، و
+ * وردامارک. `--font-display` در `globals.css` به آن اشاره می‌کند و
+ * یوتیلیتی `font-display` از همان‌جا می‌آید.
+ */
+const lalezar = Lalezar({
+  subsets: ["arabic"],
+  weight: "400",
+  variable: "--font-lalezar",
   display: "swap",
 });
 
@@ -61,7 +79,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fa" dir="rtl" className={vazirmatn.variable}>
+    <html lang="fa" dir="rtl" className={`${vazirmatn.variable} ${lalezar.variable}`}>
       <body className="min-h-screen font-sans">{children}</body>
     </html>
   );

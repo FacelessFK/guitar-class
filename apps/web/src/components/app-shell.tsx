@@ -26,50 +26,53 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="border-b border-border">
-        <nav className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-5 py-4">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="font-bold">
-              کلاس آنلاین موسیقی
-            </Link>
+      <header className="border-b border-border bg-surface-sunken">
+        {/**
+         * روی ۳۷۵px این نوار جا نمی‌شد و کل صفحه را افقی اسکرول
+         * می‌کرد — «پنل ادمین» از لبه بیرون می‌زد و دیده نمی‌شد.
+         *
+         * راه‌حل بدون منوی کشویی: فهرست لینک‌ها روی موبایل به سطر
+         * دوم می‌رود و **خودش** افقی اسکرول می‌شود. اسکرول داخل یک
+         * نوارِ عمدی قابل‌قبول است؛ اسکرول افقیِ کل صفحه نه.
+         */}
+        <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
+          <Link href="/" className="font-display text-xl leading-none text-ink">
+            کلاس آنلاین موسیقی
+          </Link>
 
-            <ul className="flex items-center gap-5 text-sm">
-              <NavLink href="/dashboard" active={pathname.startsWith("/dashboard")}>
-                کلاس‌های من
+          <ul className="scroll-strip order-last -mx-5 flex w-full items-center gap-5 px-5 text-sm sm:order-none sm:mx-0 sm:w-auto sm:overflow-x-visible sm:px-0">
+            <NavLink href="/dashboard" active={pathname.startsWith("/dashboard")}>
+              کلاس‌های من
+            </NavLink>
+            <NavLink href="/dashboard/book" active={pathname === "/dashboard/book"}>
+              رزرو کلاس
+            </NavLink>
+            <NavLink href="/practice" active={pathname.startsWith("/practice")}>
+              تمرین‌ها
+            </NavLink>
+            {user?.teacherProfileId ? (
+              <NavLink href="/teacher" active={pathname.startsWith("/teacher")}>
+                پنل استاد
               </NavLink>
-              <NavLink href="/dashboard/book" active={pathname === "/dashboard/book"}>
-                رزرو کلاس
+            ) : (
+              /*
+                کاربری که پروفایل استاد ندارد به‌جای پنل، راه ساختنش را
+                می‌بیند. تا پیش از این هیچ لینکی به این مسیر نبود و
+                «استاد شدن» فقط با ویرایش دستی دیتابیس ممکن بود.
+              */
+              <NavLink href="/become-teacher" active={pathname === "/become-teacher"}>
+                تدریس در پلتفرم
               </NavLink>
-              <NavLink href="/practice" active={pathname.startsWith("/practice")}>
-                تمرین‌ها
-              </NavLink>
-              {user?.teacherProfileId ? (
-                <NavLink href="/teacher" active={pathname.startsWith("/teacher")}>
-                  پنل استاد
-                </NavLink>
-              ) : (
-                /*
-                  کاربری که پروفایل استاد ندارد به‌جای پنل، راه ساختنش را
-                  می‌بیند. تا پیش از این هیچ لینکی به این مسیر نبود و
-                  «استاد شدن» فقط با ویرایش دستی دیتابیس ممکن بود.
-                */
-                <NavLink
-                  href="/become-teacher"
-                  active={pathname === "/become-teacher"}
-                >
-                  تدریس در پلتفرم
-                </NavLink>
-              )}
+            )}
 
-              {user?.isAdmin ? (
-                <NavLink href="/admin" active={pathname.startsWith("/admin")}>
-                  پنل ادمین
-                </NavLink>
-              ) : null}
-            </ul>
-          </div>
+            {user?.isAdmin ? (
+              <NavLink href="/admin" active={pathname.startsWith("/admin")}>
+                پنل ادمین
+              </NavLink>
+            ) : null}
+          </ul>
 
-          <div className="flex items-center gap-5 text-sm">
+          <div className="ms-auto flex items-center gap-4 text-sm sm:gap-5">
             <NotificationBell />
 
             {/*
@@ -133,10 +136,13 @@ function NavLink({
   children: React.ReactNode;
 }) {
   return (
-    <li>
+    <li className="flex-none">
       <Link
         href={href}
-        className={active ? "font-medium text-accent" : "text-ink-muted"}
+        aria-current={active ? "page" : undefined}
+        className={`whitespace-nowrap transition-colors ${
+          active ? "font-medium text-accent" : "text-ink-muted hover:text-ink"
+        }`}
       >
         {children}
       </Link>

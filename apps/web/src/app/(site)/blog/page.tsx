@@ -33,16 +33,18 @@ export default async function BlogIndexPage() {
   const posts = await getPosts();
 
   return (
-    <article className="mx-auto max-w-3xl px-5 py-16">
-      <h1 className="text-3xl font-bold sm:text-4xl">{title}</h1>
-      <p className="mt-4 text-lg text-ink-muted">{description}</p>
+    <article className="mx-auto max-w-3xl px-5 py-12 sm:py-16">
+      <h1 className="font-display text-4xl leading-[1.5] sm:text-5xl sm:leading-[1.45]">
+        {title}
+      </h1>
+      <p className="mt-4 text-lg leading-9 text-ink-soft">{description}</p>
 
       {posts.length === 0 ? (
         <p className="mt-12 text-ink-muted">هنوز نوشته‌ای منتشر نشده است.</p>
       ) : (
-        <ul className="mt-12 space-y-8">
+        <ul className="mt-10 divide-y divide-border border-y border-border">
           {posts.map((post) => (
-            <li key={post.id}>
+            <li key={post.id} className="py-6">
               <PostCard post={post} />
             </li>
           ))}
@@ -56,12 +58,12 @@ function PostCard({ post }: { post: PostSummary }) {
   return (
     <article>
       <h2 className="text-xl font-bold">
-        <Link href={`/blog/${post.slug}`} className="hover:text-accent">
+        <Link href={`/blog/${post.slug}`} className="transition-colors hover:text-accent">
           {post.title}
         </Link>
       </h2>
 
-      <p className="mt-2 text-ink-muted">{post.excerpt}</p>
+      <p className="mt-2 leading-8 text-ink-muted">{post.excerpt}</p>
 
       <p className="mt-3 text-sm text-ink-muted">
         {post.publishedAt ? (

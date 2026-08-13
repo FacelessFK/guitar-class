@@ -65,8 +65,17 @@ export default async function BlogPostPage({ params }: PageProps) {
         slug={post.slug}
       />
 
-      <article className="mx-auto max-w-3xl px-5 py-16">
-        <h1 className="text-3xl font-bold sm:text-4xl">{post.title}</h1>
+      {/**
+       * نوشته روی **برگه‌ی کاغذی** خوانده می‌شود، نه روی زمینه‌ی تیره.
+       *
+       * همان تصمیمِ صفحه‌ی قوانین: پوسته تیره می‌ماند و فقط سطحِ
+       * متن‌بلند روشن می‌شود. `.sheet` نقش‌ها را عوض می‌کند و
+       * `.prose-fa` که رنگ خام ندارد، خودش دنبالش می‌آید.
+       */}
+      <article className="sheet mx-auto my-12 max-w-3xl rounded-lg border border-border px-5 py-10 sm:px-10">
+        <h1 className="font-display text-3xl leading-[1.5] sm:text-4xl">
+          {post.title}
+        </h1>
 
         <p className="mt-4 text-sm text-ink-muted">
           {post.authorName}
@@ -99,7 +108,7 @@ export default async function BlogPostPage({ params }: PageProps) {
         <div className="prose-fa mt-8" dangerouslySetInnerHTML={{ __html: html }} />
 
         {post.instrumentSlug ? (
-          <p className="mt-12 rounded-lg bg-surface-muted p-4 text-sm">
+          <p className="mt-12 rounded-md border border-border bg-surface-muted p-4 text-sm">
             می‌خواهید {post.instrumentName} یاد بگیرید؟{" "}
             <Link
               href={`/instruments/${post.instrumentSlug}`}

@@ -3,9 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
-  getTeachers,
-  type Teacher,
-} from "@/lib/api";
+  InstrumentDrawing,
+  InstrumentSignature,
+} from "@/components/instrument-art";
+import { getTeachers, type Teacher } from "@/lib/api";
 import { faNumber, formatDuration, formatToman } from "@/lib/format";
 
 /**
@@ -74,20 +75,55 @@ export default async function TeacherPage({ params }: PageProps) {
     <>
       <PersonJsonLd teacher={teacher} />
 
-      <article className="mx-auto max-w-5xl px-5 py-16">
-        <h1 className="text-3xl font-bold sm:text-4xl">{teacher.fullName}</h1>
-        <p className="mt-3 text-lg text-ink-muted">{teacher.headline}</p>
+      <article className="mx-auto max-w-5xl px-5 py-12 sm:py-16">
+        <header className="flex flex-wrap items-start justify-between gap-6">
+          <div>
+            <h1 className="font-display text-4xl leading-[1.5] sm:text-5xl sm:leading-[1.45]">
+              {teacher.fullName}
+            </h1>
+            <p className="mt-2 text-lg text-ink-soft">{teacher.headline}</p>
 
-        {teacher.yearsExperience > 0 ? (
-          <p className="mt-4 text-sm">
-            {faNumber(teacher.yearsExperience)} سال سابقه‌ی تدریس
-          </p>
-        ) : null}
+            {teacher.yearsExperience > 0 ? (
+              <p className="tnum mt-3 text-sm text-ink-muted">
+                {faNumber(teacher.yearsExperience)} سال سابقه‌ی تدریس
+              </p>
+            ) : null}
+          </div>
+
+          {/**
+           * سازهایی که تدریس می‌کند، با همان طرحِ خطیِ صفحه‌ی ساز —
+           * پیش از خواندن یک کلمه معلوم است این استاد اهل چیست.
+           */}
+          <div className="flex gap-3">
+            {[
+              ...new Map(
+                teacher.offerings.map((offering) => [
+                  offering.instrumentSlug,
+                  offering.instrumentName,
+                ]),
+              ),
+            ]
+              .slice(0, 3)
+              .map(([instrumentSlug]) => (
+                <div
+                  key={instrumentSlug}
+                  className="rounded-lg border border-border bg-surface-sunken p-2"
+                >
+                  <InstrumentDrawing
+                    slug={instrumentSlug}
+                    className="h-16 w-16 text-accent sm:h-20 sm:w-20"
+                  />
+                </div>
+              ))}
+          </div>
+        </header>
 
         {teacher.bio ? (
-          <section className="mt-10 max-w-2xl">
+          <section className="mt-12 max-w-2xl">
             <h2 className="text-2xl font-bold">درباره‌ی استاد</h2>
-            <p className="mt-4 whitespace-pre-line">{teacher.bio}</p>
+            <p className="mt-4 leading-9 whitespace-pre-line text-ink-soft">
+              {teacher.bio}
+            </p>
           </section>
         ) : null}
 
@@ -102,11 +138,19 @@ export default async function TeacherPage({ params }: PageProps) {
             <ul className="mt-6 grid gap-4 sm:grid-cols-2">
               {teacher.offerings.map((offering) => (
                 <li key={offering.id} className="card">
-                  <h3 className="font-bold">{offering.instrumentName}</h3>
-                  <p className="mt-2 text-sm text-ink-muted">
+                  <InstrumentSignature
+                    slug={offering.instrumentSlug}
+                    className="w-20 text-accent-dim"
+                  />
+                  <h3 className="mt-3 font-display text-2xl leading-tight">
+                    {offering.instrumentName}
+                  </h3>
+                  <p className="tnum mt-2 text-sm text-ink-muted">
                     {formatDuration(offering.durationMinutes)}
                   </p>
-                  <p className="mt-1">{formatToman(offering.price)} تومان</p>
+                  <p className="tnum mt-1 text-lg">
+                    {formatToman(offering.price)} تومان
+                  </p>
 
                   {/*
                     ساز و استاد هر دو در آدرس می‌روند تا کسی که از

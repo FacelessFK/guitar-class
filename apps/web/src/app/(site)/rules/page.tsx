@@ -39,10 +39,20 @@ const CANCELLATION_POLICY: readonly { situation: string; outcome: string }[] = [
   },
 ];
 
+/**
+ * صفحه‌ی قوانین روی **برگه‌ی کاغذی** می‌نشیند، نه روی زمینه‌ی تیره.
+ *
+ * این صفحه در اختلاف سند محسوب می‌شود و از اول تا آخر خوانده می‌شود؛
+ * متن بلندِ فارسی روی لاکِ چوب همان چیزی است که خواننده رهایش می‌کند.
+ * `.sheet` فقط نقش‌ها را عوض می‌کند، پس جدول و بجِ داخلش بدون هیچ
+ * تغییری روشن می‌شوند.
+ */
 export default function RulesPage() {
   return (
-    <article className="mx-auto max-w-3xl px-5 py-16">
-      <h1 className="text-3xl font-bold sm:text-4xl">قوانین و سیاست لغو</h1>
+    <article className="sheet mx-auto my-12 max-w-3xl rounded-lg border border-border px-5 py-10 sm:px-10">
+      <h1 className="font-display text-3xl leading-[1.5] sm:text-4xl">
+        قوانین و سیاست لغو
+      </h1>
 
       <section className="mt-12">
         <h2 className="text-2xl font-bold">رزرو و پرداخت</h2>
