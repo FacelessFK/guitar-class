@@ -64,6 +64,13 @@
       "when": 1786610808344,
       "tag": "0008_verified_attendance",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786624069627,
+      "tag": "0009_password_login",
+      "breakpoints": true
     }
   ]
 }

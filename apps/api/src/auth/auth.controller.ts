@@ -14,14 +14,21 @@ import {
 import type { Request, Response } from "express";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { toLocalPhone } from "@music/shared";
+import { PASSWORD_POLICY, toLocalPhone } from "@music/shared";
 
 import { db } from "../db/client.js";
 import { users } from "../db/schema/index.js";
 import { zodPipe } from "../common/validation.pipe.js";
 import { CurrentUser } from "../common/current-user.decorator.js";
 import { Public, type AuthenticatedRequest } from "./auth.guard.js";
-import { AuthError, requestLoginCode, refreshSession, verifyLoginCode } from "./auth.service.js";
+import {
+  AuthError,
+  loginWithPassword,
+  refreshSession,
+  registerWithPassword,
+  requestLoginCode,
+  verifyLoginCode,
+} from "./auth.service.js";
 import {
   clearRefreshCookie,
   readRefreshCookie,
@@ -53,6 +60,34 @@ const verifyCodeSchema = z.object({
   code: z.string().regex(/^\d{6}$/, "کد باید شش رقم باشد"),
   /** فقط برای کاربر تازه لازم است */
   fullName: z.string().trim().min(2, "نام باید حداقل دو حرف باشد").max(120).optional(),
+});
+
+/**
+ * ثبت‌نام با رمز عبور.
+ *
+ * قاعده‌ی طول از `@music/shared` می‌آید تا فرم و API یک چیز بگویند —
+ * وگرنه کاربر رمزی می‌سازد که فرم پذیرفته و سرور رد می‌کند.
+ */
+const registerSchema = z.object({
+  phone: z.string().min(1, "شماره‌ی موبایل لازم است").max(20),
+  fullName: z.string().trim().min(2, "نام باید حداقل دو حرف باشد").max(120),
+  password: z
+    .string()
+    .min(PASSWORD_POLICY.MIN_LENGTH, `رمز عبور باید حداقل ${PASSWORD_POLICY.MIN_LENGTH} کاراکتر باشد`)
+    .max(PASSWORD_POLICY.MAX_LENGTH),
+});
+
+/**
+ * ورود با رمز.
+ *
+ * ⚠️ اینجا **قاعده‌ی طول اعمال نمی‌شود** و عمدی است. اگر می‌شد، پاسخِ
+ * «رمز کوتاه است» به مهاجم می‌گفت رمزِ حدس‌زده حتی به فرم هم نرسیده —
+ * و مهم‌تر، رمزهای ساخته‌شده پیش از سخت‌تر شدن قاعده دیگر نمی‌توانستند
+ * وارد شوند. ورود فقط یک سؤال دارد: این رمز درست است یا نه.
+ */
+const passwordLoginSchema = z.object({
+  phone: z.string().min(1, "شماره‌ی موبایل لازم است").max(20),
+  password: z.string().min(1, "رمز عبور لازم است").max(PASSWORD_POLICY.MAX_LENGTH),
 });
 
 /**
@@ -123,6 +158,58 @@ export class AuthController {
     @Headers("user-agent") userAgent?: string,
   ) {
     const result = await verifyLoginCode({ ...body, userAgent });
+
+    setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
+
+    return {
+      accessToken: result.accessToken,
+      expiresIn: result.expiresIn,
+      user: {
+        ...result.user,
+        phone: toLocalPhone(result.user.phone),
+      },
+    };
+  }
+
+  /**
+   * ثبت‌نام با شماره و رمز عبور.
+   *
+   * راه دوم است، نه جایگزینِ کد پیامکی. پاسخش دقیقاً همان شکلِ
+   * `otp/verify` است — همان توکن دسترسی و همان کوکی تازه‌سازی — تا
+   * فرانت بعد از ورود هیچ فرقی بین دو مسیر نبیند.
+   */
+  @Public()
+  @Post("register")
+  @HttpCode(HttpStatus.CREATED)
+  async register(
+    @Body(zodPipe(registerSchema)) body: z.infer<typeof registerSchema>,
+    @Res({ passthrough: true }) response: Response,
+    @Headers("user-agent") userAgent?: string,
+  ) {
+    const result = await registerWithPassword({ ...body, userAgent });
+
+    setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
+
+    return {
+      accessToken: result.accessToken,
+      expiresIn: result.expiresIn,
+      user: {
+        ...result.user,
+        phone: toLocalPhone(result.user.phone),
+      },
+    };
+  }
+
+  /** ورود با شماره و رمز عبور. */
+  @Public()
+  @Post("login")
+  @HttpCode(HttpStatus.OK)
+  async login(
+    @Body(zodPipe(passwordLoginSchema)) body: z.infer<typeof passwordLoginSchema>,
+    @Res({ passthrough: true }) response: Response,
+    @Headers("user-agent") userAgent?: string,
+  ) {
+    const result = await loginWithPassword({ ...body, userAgent });
 
     setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
 

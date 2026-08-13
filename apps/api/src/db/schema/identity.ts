@@ -8,8 +8,8 @@ import { teacherProfiles } from "./catalog.js";
 /**
  * کاربر.
  *
- * ایمیل و پسورد نداریم — ورود فقط با شماره‌ی موبایل و کد پیامکی، چون
- * کاربر ایرانی ایمیلش را چک نمی‌کند.
+ * ایمیل نداریم — کاربر ایرانی ایمیلش را چک نمی‌کند. هویت، شماره‌ی
+ * موبایل است و ورود دو راه دارد: کد پیامکی، یا رمز عبور.
  *
  * نقش جدا ذخیره نمی‌شود: «استاد بودن» با وجود رکورد در `teacher_profiles`
  * مشخص می‌شود. یک کاربر می‌تواند هم‌زمان هنرجو و استاد باشد.
@@ -21,6 +21,16 @@ export const users = pgTable(
     phone: varchar({ length: 15 }).notNull().unique(),
     fullName: varchar("full_name", { length: 120 }).notNull(),
     avatarUrl: varchar("avatar_url", { length: 500 }),
+    /**
+     * رمز عبور، هش‌شده — و **تهی‌پذیر**.
+     *
+     * ورود با کد پیامکی هنوز مسیر اصلی است و حسابی که از آن راه ساخته
+     * شده رمزی ندارد. تهی بودن این ستون یعنی «این حساب رمز ندارد»، نه
+     * «رمزش خالی است»؛ ورود با رمز برای چنین حسابی رد می‌شود.
+     *
+     * خودِ هش و قالبش در `auth/password.ts` است.
+     */
+    passwordHash: varchar("password_hash", { length: 200 }),
     isAdmin: boolean("is_admin").notNull().default(false),
     status: userStatus().notNull().default("ACTIVE"),
 

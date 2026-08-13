@@ -22,6 +22,14 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   TOO_MANY_ATTEMPTS: HttpStatus.TOO_MANY_REQUESTS,
   INVALID_CODE: HttpStatus.UNAUTHORIZED,
   NO_ACTIVE_CODE: HttpStatus.UNAUTHORIZED,
+  /**
+   * شماره یا رمز غلط — یک کد برای هر چهار حالت (شماره‌ی نامعتبر،
+   * حسابِ ناموجود، رمزِ غلط، حسابِ بدون رمز). تفکیکشان یعنی می‌شود با
+   * پیمایش شماره‌ها فهمید چه کسی در پلتفرم حساب دارد.
+   */
+  INVALID_CREDENTIALS: HttpStatus.UNAUTHORIZED,
+  WEAK_PASSWORD: HttpStatus.BAD_REQUEST,
+  PHONE_ALREADY_REGISTERED: HttpStatus.CONFLICT,
   INVALID_REFRESH_TOKEN: HttpStatus.UNAUTHORIZED,
   // کوکی تازه‌سازی اصلاً نیامده — از نظر کاربر همان «نشست تمام شد» است
   NO_REFRESH_TOKEN: HttpStatus.UNAUTHORIZED,

@@ -4,4 +4,5 @@ export * from "./interval";
 export * from "./availability";
 export * from "./classroom";
 export * from "./phone";
+export * from "./password";
 export * from "./money";
