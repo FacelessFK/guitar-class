@@ -144,20 +144,49 @@ ssh SERVER 'cd /home/fardin/music-platform/app && docker compose logs api --tail
 
 ## گواهی TLS
 
-دامنه هنوز گواهی معتبر ندارد و مرورگر هشدار می‌دهد. HTTP-01 روی این
-سرور کار نمی‌کند (بالا را ببینید)، پس:
+گواهی Let's Encrypt برای `hyggemode.com`، `www` و `chat` صادر و نصب شده
+(تا ۱۱ نوامبر ۲۰۲۶). صدور روی **ماشین توسعه** انجام می‌شود، نه سرور:
+سرور نه به Let's Encrypt می‌رسد (خروجی بسته) و نه اعتبارسنجِ آن به
+سرور (ورودی از بیرون ایران بسته)، پس HTTP-01 از هر دو طرف ناممکن است.
+
+تمدید — هر ~۶۰ روز، همان مسیر گواهی `class`:
 
 ```bash
+# ۱. مقدارهای TXT را می‌گیرد و متوقف می‌شود
 ~/.acme.sh/acme.sh --issue --dns -d hyggemode.com -d www.hyggemode.com \
   -d chat.hyggemode.com --server letsencrypt \
   --yes-I-know-dns-manual-mode-enough-go-ahead-please
+
+# ۲. سه رکورد TXT در پنل آروان (نام‌های نسبی):
+#    _acme-challenge  ·  _acme-challenge.www  ·  _acme-challenge.chat
+#    انتشارشان را پیش از قدم بعد بررسی کنید — تلاش ناموفق سهمیه
+#    می‌سوزاند (پنج شکست در ساعت برای هر نام):
+#    dig +short TXT _acme-challenge.hyggemode.com @1.1.1.1
+
+# ۳. تمام کردن صدور
+~/.acme.sh/acme.sh --renew --dns -d hyggemode.com -d www.hyggemode.com \
+  -d chat.hyggemode.com --server letsencrypt \
+  --yes-I-know-dns-manual-mode-enough-go-ahead-please
+
+# ۴. نصب
+scp ~/.acme.sh/hyggemode.com_ecc/fullchain.cer \
+    SERVER:/etc/nginx/ssl/music/fullchain.pem
+scp ~/.acme.sh/hyggemode.com_ecc/hyggemode.com.key \
+    SERVER:/etc/nginx/ssl/music/privkey.pem
+ssh SERVER 'chmod 600 /etc/nginx/ssl/music/privkey.pem && \
+            nginx -t && systemctl reload nginx'
 ```
 
-رکورد TXT چاپ‌شده در پنل آروان گذاشته می‌شود، بعد `--renew` با همان
-پرچم‌ها، و در آخر:
+⚠️ **رکورد A صریح برای `www` و `chat` لازم است و حذف نشود.** به محض
+اینکه `_acme-challenge.www.hyggemode.com` ساخته شود، نام
+`www.hyggemode.com` در درخت DNS «موجود» می‌شود و وایلدکارد
+`*.hyggemode.com` دیگر پوششش نمی‌دهد — همان چیزی که یک بار سرِ
+`class.hyggemode.com` اتفاق افتاد و به شکل «گواهی صادر شد ولی دامنه
+resolve نمی‌شود» دیده شد (سند معماری، بخش ۶.۲.۲). خودِ دامنه‌ی اصلی
+این مشکل را ندارد؛ وایلدکارد اصلاً apex را پوشش نمی‌دهد.
 
-```bash
-scp fullchain.cer SERVER:/etc/nginx/ssl/music/fullchain.pem
-scp hyggemode.com.key SERVER:/etc/nginx/ssl/music/privkey.pem
-ssh SERVER 'nginx -t && systemctl reload nginx'
-```
+ℹ️ **`chat` از آروان‌کلاد رد می‌شود، نه مستقیم.** رکوردش با «ابر» روشن
+ساخته شده، پس TLS را آروان تمام می‌کند و گواهیِ ما روی آن نام عملاً
+استفاده نمی‌شود. کار می‌کند، ولی راکت‌چت وب‌سوکت‌محور است؛ اگر روزی
+قطع و وصل شد، اولین چیزی که باید امتحان شود خاموش کردن ابر برای همین
+رکورد است تا مستقیم به سرور بیاید.
