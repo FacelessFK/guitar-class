@@ -8,6 +8,7 @@ import {
   assertNotProduction,
   checkEnvironment,
   devLoginCodeEnabled,
+  registrableDomain,
   type EnvRecord,
 } from "./env.js";
 
@@ -38,6 +39,7 @@ function productionEnv(overrides: EnvRecord = {}): EnvRecord {
     JITSI_XMPP_DOMAIN: "meet.jitsi",
     JITSI_APP_SECRET: "jitsi-secret",
     JITSI_WEBHOOK_SECRET: "hook-secret",
+    PAYMENT_AMOUNT_UNIT: "RIAL",
     ...overrides,
   };
 }
@@ -114,6 +116,72 @@ describe("JWT_SECRET", () => {
   it("کوتاه‌تر از ۳۲ کاراکتر در هر محیطی رد می‌شود", () => {
     expect(offenders(productionEnv({ JWT_SECRET: "short" }))).toEqual(["JWT_SECRET"]);
     expect(offenders(developmentEnv({ JWT_SECRET: "short" }))).toEqual(["JWT_SECRET"]);
+  });
+});
+
+/**
+ * دو خرابی‌ای که در کد دیده نمی‌شوند و فقط با پول و کاربر واقعی ظاهر
+ * می‌شوند. هر دو اینجا به خطای بوت تبدیل شده‌اند.
+ */
+describe("هم‌دامنه بودن API و فرانت", () => {
+  it("زیردامنه مشکلی ندارد", () => {
+    expect(
+      checkEnvironment(
+        productionEnv({
+          WEB_ORIGIN: "https://example.com",
+          PAYMENT_CALLBACK_URL: "https://api.example.com/api/payments/callback",
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("دامنه‌ی کاملاً متفاوت رد می‌شود", () => {
+    const [issue] = checkEnvironment(
+      productionEnv({
+        WEB_ORIGIN: "https://example.com",
+        PAYMENT_CALLBACK_URL: "https://api.example.net/api/payments/callback",
+      }),
+    );
+
+    expect(issue?.variable).toBe("WEB_ORIGIN");
+    // پیام باید نشانه‌ی بیرونیِ خرابی را بگوید، نه فقط قاعده را
+    expect(issue?.problem).toContain("بیرون می‌افتند");
+  });
+
+  it("پسوند دوسطحی مثل co.ir را یک دامنه می‌شمارد", () => {
+    expect(registrableDomain("api.shop.co.ir")).toBe("shop.co.ir");
+    expect(registrableDomain("shop.co.ir")).toBe("shop.co.ir");
+    expect(registrableDomain("api.example.com")).toBe("example.com");
+    expect(registrableDomain("example.com")).toBe("example.com");
+  });
+
+  it("API_ORIGIN بر حدس از روی آدرس بازگشت پرداخت می‌چربد", () => {
+    const env = productionEnv({
+      WEB_ORIGIN: "https://example.com",
+      PAYMENT_CALLBACK_URL: "https://gateway-proxy.example.net/api/payments/callback",
+      API_ORIGIN: "https://api.example.com",
+    });
+
+    expect(offenders(env)).toEqual([]);
+  });
+});
+
+describe("PAYMENT_AMOUNT_UNIT", () => {
+  it("در تولید اجباری است", () => {
+    expect(offenders(productionEnv({ PAYMENT_AMOUNT_UNIT: undefined }))).toEqual([
+      "PAYMENT_AMOUNT_UNIT",
+    ]);
+  });
+
+  it("مقدار نامعتبر رد می‌شود", () => {
+    const [issue] = checkEnvironment(productionEnv({ PAYMENT_AMOUNT_UNIT: "rial" }));
+
+    expect(issue?.variable).toBe("PAYMENT_AMOUNT_UNIT");
+    expect(issue?.problem).toContain("verify:payment");
+  });
+
+  it("تومان هم پذیرفته است", () => {
+    expect(offenders(productionEnv({ PAYMENT_AMOUNT_UNIT: "TOMAN" }))).toEqual([]);
   });
 });
 

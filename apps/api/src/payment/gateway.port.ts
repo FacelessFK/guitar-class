@@ -127,6 +127,47 @@ export class FakePaymentGateway implements PaymentGateway {
 const ZARINPAL_LIVE = "https://payment.zarinpal.com";
 const ZARINPAL_SANDBOX = "https://sandbox.zarinpal.com";
 
+/**
+ * واحدی که **حساب پذیرندگی** با آن کار می‌کند.
+ *
+ * همه‌ی مبالغ داخل سیستم ریال‌اند و این تنها جایی است که ممکن است چیز
+ * دیگری برود. مستندات v4 ریال می‌گوید، ولی حساب‌های پذیرندگی واقعی
+ * می‌توانند روی تومان تنظیم باشند و آن وقت **هر** پرداختی کد `-50`
+ * می‌گیرد: مبلغی که در تأیید می‌فرستیم با آنچه واقعاً پرداخت شده ده
+ * برابر فرق دارد.
+ *
+ * چرا متغیر محیطی و نه ثابتِ کد: این را نمی‌شود پیش از یک تراکنش واقعی
+ * دانست (کد `-50` فقط در **تأیید** ظاهر می‌شود، یعنی بعد از اینکه پول
+ * از حساب کاربر رفته). وقتی معلوم شد، رفعش باید یک مقدار در `.env` باشد
+ * نه یک دیپلوی با تغییر کد — چون آن لحظه، هر پرداختِ در جریان دارد
+ * شکست می‌خورد.
+ *
+ * `pnpm verify:payment` همین را با کمترین مبلغ ممکن می‌سنجد.
+ */
+export type AmountUnit = "RIAL" | "TOMAN";
+
+export const AMOUNT_UNITS: readonly AmountUnit[] = ["RIAL", "TOMAN"];
+
+/**
+ * ریال → واحد حساب پذیرنده.
+ *
+ * مبلغی که به تومان بخش‌پذیر نیست پرتاب می‌کند و گِرد نمی‌شود. گِرد
+ * کردنِ بی‌صدا یعنی مبلغ ارسالی با مبلغ سفارش فرق کند، و آن دقیقاً همان
+ * `-50` است — با این تفاوت که دیگر نمی‌شود از روی لاگ فهمید چرا.
+ */
+export function toGatewayAmount(rials: bigint, unit: AmountUnit): number {
+  if (unit === "RIAL") return Number(rials);
+
+  if (rials % 10n !== 0n) {
+    throw new Error(
+      `مبلغ ${rials} ریال به تومان بخش‌پذیر نیست و حساب پذیرندگی روی تومان تنظیم شده است. ` +
+        "قیمت‌ها باید مضرب ۱۰ ریال باشند.",
+    );
+  }
+
+  return Number(rials / 10n);
+}
+
 /** کد ۱۰۰ یعنی موفق، ۱۰۱ یعنی قبلاً تأیید شده. */
 const ZARINPAL_OK = 100;
 const ZARINPAL_ALREADY_VERIFIED = 101;
@@ -162,10 +203,12 @@ interface ZarinpalEnvelope {
  * ⚠️ هنوز روی حساب واقعی اجرا نشده — مرچنت‌آی‌دی نداریم. دو چیز باید
  * پیش از اولین فروش با یک تراکنش واقعی تأیید شود:
  *
- *   ۱. **واحد مبلغ.** اینجا ریال فرستاده می‌شود، مطابق مستندات v4. اگر
- *      حساب پذیرندگی روی تومان تنظیم شده باشد، مبلغ‌ها ده برابر کوچک
- *      می‌شوند و — چون تأیید مبلغ را مقایسه می‌کند — پرداخت رد می‌شود
- *      نه اینکه بی‌صدا اشتباه ثبت شود. این حالتِ شکست عمداً پرسر و صداست.
+ *   ۱. **واحد مبلغ.** پیش‌فرض ریال است، مطابق مستندات v4. اگر حساب
+ *      پذیرندگی روی تومان تنظیم شده باشد، هر پرداختی کد `-50` می‌گیرد —
+ *      پرداخت رد می‌شود نه اینکه بی‌صدا اشتباه ثبت شود، و این حالتِ
+ *      شکست عمداً پرسر و صداست. رفعش `PAYMENT_AMOUNT_UNIT="TOMAN"` است،
+ *      بدون تغییر کد. با `pnpm verify:payment` پیش از اولین فروش
+ *      معلومش کنید.
  *   ۲. نام دقیق فیلدها در پاسخ خطا، که بین نسخه‌ها فرق کرده است.
  */
 export class ZarinpalGateway implements PaymentGateway {
@@ -176,6 +219,11 @@ export class ZarinpalGateway implements PaymentGateway {
   constructor(
     private readonly merchantId: string,
     sandbox = false,
+    /**
+     * واحد حساب پذیرندگی. پیش‌فرض ریال است، مطابق مستندات v4 — ولی
+     * فرضی است که تا اولین تراکنش واقعی اثبات نشده.
+     */
+    private readonly unit: AmountUnit = "RIAL",
   ) {
     this.baseUrl = sandbox ? ZARINPAL_SANDBOX : ZARINPAL_LIVE;
   }
@@ -248,7 +296,7 @@ export class ZarinpalGateway implements PaymentGateway {
 
   async request(input: PaymentRequestInput): Promise<PaymentRequestResult> {
     const envelope = await this.post("request.json", {
-      amount: Number(input.amount),
+      amount: toGatewayAmount(input.amount, this.unit),
       description: input.description,
       callback_url: input.callbackUrl,
       metadata: input.mobile ? { mobile: input.mobile } : undefined,
@@ -293,8 +341,15 @@ export class ZarinpalGateway implements PaymentGateway {
    * سیستم دیگر سراغش نمی‌رود.
    */
   async verify(input: VerificationInput): Promise<VerificationResult> {
+    /**
+     * همان تبدیلی که در `request` انجام شد.
+     *
+     * اگر این دو از هم بیفتند، درگاه کد `-50` می‌دهد و پول کاربر رفته
+     * ولی سفارش تأیید نشده. برای همین یک تابع مشترک است، نه دو جای
+     * جدا که باید هماهنگ بمانند.
+     */
     const envelope = await this.post("verify.json", {
-      amount: Number(input.amount),
+      amount: toGatewayAmount(input.amount, this.unit),
       authority: input.authority,
     });
 
@@ -349,9 +404,10 @@ export function createPaymentGateway(): PaymentGateway {
   const merchantId = process.env.PAYMENT_MERCHANT_ID;
   const isProduction = process.env.NODE_ENV === "production";
   const sandbox = process.env.PAYMENT_SANDBOX === "true";
+  const unit = process.env.PAYMENT_AMOUNT_UNIT === "TOMAN" ? "TOMAN" : "RIAL";
 
   if (merchantId) {
-    return new ZarinpalGateway(merchantId, sandbox);
+    return new ZarinpalGateway(merchantId, sandbox, unit);
   }
 
   if (isProduction) {

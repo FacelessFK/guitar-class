@@ -138,6 +138,70 @@ const publicUrl: Rule["validate"] = (value) => {
 };
 
 /**
+ * دامنه‌ی ثبت‌شده (eTLD+1) — تقریبی و عمداً کوچک.
+ *
+ * فهرست کامل پسوندهای عمومی هزاران سطر است و آوردنش برای یک بررسیِ
+ * بوت، هزینه‌ای است که فایده‌اش را ندارد. اینجا فقط پسوندهای دوسطحی‌ای
+ * آمده‌اند که این پروژه واقعاً با آن‌ها روبه‌رو می‌شود. اشتباهش هم به
+ * سمت امن می‌افتد: حداکثر دو دامنه‌ی متفاوت را «یکی» می‌بیند، یعنی
+ * هشدارِ نابه‌جا نمی‌دهد.
+ */
+/**
+ * مقادیر مجاز `PAYMENT_AMOUNT_UNIT`.
+ *
+ * عمداً از `payment/gateway.port.ts` import نمی‌شود: این فایل پیش از
+ * ساخته شدن اپ اجرا می‌شود و نباید هیچ ماژولی را که نست یا دیتابیس
+ * می‌شناسد بالا بیاورد، وگرنه خطا پیش از رسیدن به پیام درست پرتاب
+ * می‌شود. دو مقدار است و هر تغییری باید هر دو جا انجام شود.
+ */
+const AMOUNT_UNITS = ["RIAL", "TOMAN"];
+
+const TWO_LEVEL_SUFFIXES = [
+  "co.ir",
+  "ac.ir",
+  "org.ir",
+  "net.ir",
+  "gov.ir",
+  "id.ir",
+  "sch.ir",
+  "co.uk",
+  "org.uk",
+  "com.au",
+];
+
+export function registrableDomain(hostname: string): string {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  const labels = host.split(".");
+
+  if (labels.length <= 2) return host;
+
+  const lastTwo = labels.slice(-2).join(".");
+  const take = TWO_LEVEL_SUFFIXES.includes(lastTwo) ? 3 : 2;
+
+  return labels.slice(-take).join(".");
+}
+
+/**
+ * مبدأ عمومی خودِ API.
+ *
+ * `PAYMENT_CALLBACK_URL` روی همین API است (`/api/payments/callback`)، پس
+ * دامنه‌اش را از آن می‌شود فهمید و یک متغیر تازه لازم نیست. اگر روزی
+ * جایی جز API سرو شد، `API_ORIGIN` صریح می‌چربد.
+ */
+function apiOrigin(env: EnvRecord): string | null {
+  const explicit = env.API_ORIGIN?.trim();
+  const source = explicit || env.PAYMENT_CALLBACK_URL?.trim();
+
+  if (!source) return null;
+
+  try {
+    return new URL(source).hostname;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * لازم در **هر** محیط.
  *
  * این سه بدون جایگزین‌اند: نه آداپتور توسعه‌ای دارند و نه پیش‌فرض
@@ -196,7 +260,56 @@ const PRODUCTION_REQUIRED: readonly Rule[] = [
   {
     variable: "WEB_ORIGIN",
     why: "هم مبدأ مجاز CORS است و هم مقصد ریدایرکت پس از پرداخت.",
-    validate: publicUrl,
+    /**
+     * علاوه بر شکل آدرس، **هم‌دامنه بودن با API** هم اینجا سنجیده
+     * می‌شود.
+     *
+     * توکن تازه‌سازی در کوکی `SameSite=Lax` می‌رود. اگر API روی دامنه‌ی
+     * ثبت‌شده‌ی دیگری باشد، مرورگر آن کوکی را روی درخواست تمدید نشست
+     * **نمی‌فرستد** — بی‌هیچ خطایی، در هیچ لاگی. چیزی که دیده می‌شود
+     * این است: «کاربرها مدام بیرون می‌افتند»، آن هم فقط بعد از انقضای
+     * توکن پانزده‌دقیقه‌ای، یعنی نه در تست دستی بلافاصله پس از استقرار.
+     *
+     * تنها راه گرفتنش پیش از کاربر واقعی، همین مقایسه است. زیردامنه و
+     * پورت متفاوت مشکلی ندارند و رد نمی‌شوند.
+     */
+    validate: (value, env) => {
+      const shape = publicUrl(value, env);
+      if (shape) return shape;
+
+      const api = apiOrigin(env);
+      if (!api) return null;
+
+      const web = new URL(value).hostname;
+
+      if (registrableDomain(api) === registrableDomain(web)) return null;
+
+      return (
+        `دامنه‌ی ثبت‌شده‌اش «${registrableDomain(web)}» است ولی API روی «${registrableDomain(api)}» ` +
+        "است. کوکی تازه‌سازی SameSite=Lax است و بین دو دامنه فرستاده نمی‌شود، " +
+        "پس تمدید نشست بی‌صدا شکست می‌خورد و به شکل «کاربرها مدام بیرون می‌افتند» دیده می‌شود. " +
+        "زیردامنه (api.example.com کنار example.com) مشکلی ندارد. " +
+        "اگر آدرس بازگشت پرداخت عمداً روی دامنه‌ی دیگری است، دامنه‌ی واقعی API را در API_ORIGIN بگذارید."
+      );
+    },
+  },
+  {
+    variable: "PAYMENT_AMOUNT_UNIT",
+    why:
+      "واحد حساب پذیرندگی زرین‌پال. اشتباهش یعنی هر پرداختی کد -50 می‌گیرد — " +
+      "و چون این کد فقط در تأیید ظاهر می‌شود، اولین باری که دیده می‌شود اولین فروش است.",
+    /**
+     * چرا در تولید **اجباری** است با اینکه پیش‌فرض معقولی دارد:
+     *
+     * این تنها چیزی در کل پیکربندی است که کد نمی‌تواند حدسش را بسنجد.
+     * یک پیش‌فرضِ خاموش یعنی کسی هرگز به آن فکر نکند تا لحظه‌ای که پول
+     * واقعی در جریان است. اجباری بودنش آن فکر را به زمان استقرار
+     * می‌آورد، جایی که هزینه‌اش یک دستور `pnpm verify:payment` است.
+     */
+    validate: (value) =>
+      AMOUNT_UNITS.includes(value)
+        ? null
+        : `باید یکی از ${AMOUNT_UNITS.join(" یا ")} باشد، نه «${value}». با «pnpm verify:payment» معلومش کنید.`,
   },
   {
     variable: "S3_ENDPOINT",

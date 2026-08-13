@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ZarinpalGateway } from "./gateway.port.js";
+import { ZarinpalGateway, toGatewayAmount } from "./gateway.port.js";
 
 /**
  * آداپتور زرین‌پال در برابر شکل واقعی پاسخ‌ها.
@@ -195,5 +195,47 @@ describe("سندباکس", () => {
 
     expect(sandboxUrl).toContain("sandbox");
     expect(liveUrl).not.toContain("sandbox");
+  });
+});
+
+/**
+ * واحد مبلغ — تنها چیزی در این آداپتور که با هیچ تستی قابل اثبات نیست
+ * و فقط یک تراکنش واقعی معلومش می‌کند.
+ *
+ * چیزی که اینجا اثبات می‌شود این است که وقتی **معلوم شد**، عوض کردنش
+ * یک مقدار در `.env` است و هر دو درخواست (پرداخت و تأیید) با هم عوض
+ * می‌شوند. اگر این دو از هم بیفتند، درگاه کد -50 می‌دهد: پول کاربر رفته
+ * و سفارش تأیید نشده.
+ */
+describe("واحد مبلغ حساب پذیرندگی", () => {
+  const toman = () => new ZarinpalGateway("merchant-id", true, "TOMAN");
+
+  it("در حالت تومان، مبلغ ریالی تقسیم بر ده می‌رود", async () => {
+    fetchMock.mockResolvedValue(ok({ code: 100, authority: AUTHORITY }));
+
+    await toman().request({
+      orderId: "order-1",
+      amount: 3_000_000n,
+      description: "جلسه‌ی گیتار",
+      callbackUrl: "https://api.example.com/api/payments/callback",
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).amount).toBe(300_000);
+  });
+
+  it("تأیید همان تبدیل را می‌کند، نه تبدیل دیگری", async () => {
+    fetchMock.mockResolvedValue(ok({ code: 100, ref_id: 42 }));
+
+    await toman().verify({ authority: AUTHORITY, amount: 3_000_000n });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).amount).toBe(300_000);
+  });
+
+  it("مبلغ بخش‌ناپذیر گِرد نمی‌شود، پرتاب می‌کند", () => {
+    // گِرد کردن بی‌صدا یعنی همان -50، ولی بدون هیچ سرنخی در لاگ
+    expect(() => toGatewayAmount(3_000_005n, "TOMAN")).toThrow(/بخش‌پذیر نیست/);
+    expect(toGatewayAmount(3_000_005n, "RIAL")).toBe(3_000_005);
   });
 });
