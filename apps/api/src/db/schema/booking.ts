@@ -131,6 +131,25 @@ export const bookings = pgTable(
     teacherJoinedAt: tstz("teacher_joined_at"),
     studentJoinedAt: tstz("student_joined_at"),
 
+    /**
+     * همان دو ستون بالا، ولی از زبان **سرور جیتسی**.
+     *
+     * هوک prosody این‌ها را می‌نویسد و هویتِ توی رویداد از ادعای
+     * `context.user.id` همان توکنی می‌آید که خودمان امضا کرده‌ایم و
+     * prosody اعتبارش را سنجیده. چون سرور با `ENABLE_GUESTS=0` بالا
+     * آمده، هیچ‌کس بدون آن توکن داخل اتاق نیست — پس این ستون‌ها را،
+     * برخلاف دو تای بالا، نمی‌شود با یک `curl` پر کرد.
+     *
+     * جدا نگه داشته شده‌اند نه جایگزین، چون دو چیز متفاوت می‌گویند:
+     * آن‌ها «مرورگر گفت آمدم» و این‌ها «سرور دید که آمد». اختلافشان
+     * خودش داده است — یعنی یا هوک خوابیده یا کسی خودش را حاضر جا زده.
+     *
+     * تصمیم مالی (بازپرداخت عدم حضور استاد) فقط روی این‌ها گرفته
+     * می‌شود؛ `docs/architecture.md` بخش ۶.۵.
+     */
+    teacherVerifiedAt: tstz("teacher_verified_at"),
+    studentVerifiedAt: tstz("student_verified_at"),
+
     cancelledAt: tstz("cancelled_at"),
     cancelledById: uuid("cancelled_by_id").references(() => users.id),
     cancellationReason: text("cancellation_reason"),

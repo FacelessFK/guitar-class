@@ -127,9 +127,47 @@ export const SessionReviewReason = {
   NO_SHOW_TEACHER: "NO_SHOW_TEACHER",
   /** هیچ‌کدام نیامدند — تکلیف جلسه روشن نیست */
   NO_SHOW: "NO_SHOW",
+  /**
+   * حضور فقط گزارشِ کلاینت است و سرور جیتسی تأییدش نکرده.
+   *
+   * یعنی یا هوک سمت سرور نصب/سالم نیست، یا کسی خودش را حاضر جا زده — و
+   * از بیرون این دو از هم قابل تفکیک نیستند. تنها جایی که این دلیل ساخته
+   * می‌شود آنجاست که تفاوتشان **پول** است: عدم حضور استاد بازپرداخت
+   * می‌نویسد. پس به‌جای حدس زدن، پول جابه‌جا نمی‌شود و پرونده روی میز
+   * ادمین می‌رود.
+   */
+  ATTENDANCE_UNVERIFIED: "ATTENDANCE_UNVERIFIED",
 } as const;
 export type SessionReviewReason =
   (typeof SessionReviewReason)[keyof typeof SessionReviewReason];
+
+/**
+ * رویداد حضور در اتاق.
+ *
+ * دو منبع دارد و هر دو همین دو مقدار را می‌فرستند: مرورگر (از IFrame
+ * API) و سرور جیتسی (از هوک prosody). نام‌های خود جیتسی
+ * (`videoConferenceJoined`، `muc-occupant-left`، …) عمداً وارد دامنه
+ * نمی‌شوند تا ارتقای جیتسی به تغییر اسکیمای دیتابیس منجر نشود.
+ */
+export const AttendanceEvent = {
+  JOINED: "JOINED",
+  LEFT: "LEFT",
+} as const;
+export type AttendanceEvent = (typeof AttendanceEvent)[keyof typeof AttendanceEvent];
+
+/**
+ * چه کسی گفته که فلانی در اتاق بود.
+ *
+ * تمام ارزش این ستون در همین تفکیک است: `CLIENT` حرفِ مرورگرِ خودِ
+ * کاربر است و جعلش یک درخواست `curl` فاصله دارد؛ `SERVER_HOOK` را
+ * prosody بعد از بررسی امضای توکنی که ما صادر کرده‌ایم فرستاده. تصمیم
+ * مالی فقط روی دومی گرفته می‌شود.
+ */
+export const AttendanceSource = {
+  CLIENT: "CLIENT",
+  SERVER_HOOK: "SERVER_HOOK",
+} as const;
+export type AttendanceSource = (typeof AttendanceSource)[keyof typeof AttendanceSource];
 
 export const SessionReviewStatus = {
   OPEN: "OPEN",

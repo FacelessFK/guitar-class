@@ -37,6 +37,7 @@ function productionEnv(overrides: EnvRecord = {}): EnvRecord {
     JITSI_AUDIENCE: "jitsi",
     JITSI_XMPP_DOMAIN: "meet.jitsi",
     JITSI_APP_SECRET: "jitsi-secret",
+    JITSI_WEBHOOK_SECRET: "hook-secret",
     ...overrides,
   };
 }

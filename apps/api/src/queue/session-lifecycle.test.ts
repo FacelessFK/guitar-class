@@ -12,6 +12,7 @@ import {
 } from "../db/schema/index.js";
 import { cancelBooking, createSingleBooking } from "../booking/booking.service.js";
 import { recordAttendance } from "../classroom/classroom.service.js";
+import { recordHookAttendance } from "../classroom/hook.service.js";
 import { FakePaymentGateway } from "../payment/gateway.port.js";
 import { settleOrder, startCheckout } from "../payment/payment.service.js";
 import { setSmsSender, type SmsSender } from "../notification/sms.port.js";
@@ -109,9 +110,37 @@ async function confirmedBooking(hour = 17) {
   return booking;
 }
 
-/** ورود یکی از دو طرف به اتاق، از همان مسیر واقعیِ اندپوینت حضور. */
+/**
+ * ورودِ **ادعاشده** — همان مسیری که مرورگر کاربر صدا می‌زند.
+ *
+ * این داده جعل‌پذیر است و از وقتی بازپرداخت به آن بند شد، اثر مالی هم
+ * داشت. حالا دیگر به‌تنهایی پول جابه‌جا نمی‌کند؛ تست‌هایی که دنبال
+ * بازپرداخت‌اند باید `joinVerified` صدا بزنند.
+ */
 async function join(bookingId: string, userId: string, at: Date): Promise<void> {
   await recordAttendance({ bookingId, userId, event: "JOINED", now: at });
+}
+
+/**
+ * ورودِ **تأییدشده** — همان چیزی که هوک prosody می‌فرستد.
+ *
+ * عمداً از مسیر واقعی سرویس هوک می‌رود نه با `UPDATE` مستقیم روی ستون:
+ * چیزی که باید اثبات شود این است که رویدادِ سرور، تصمیم مالی را عوض
+ * می‌کند — و اگر تست خودش ستون را پر کند، آن زنجیره اصلاً آزموده نمی‌شود.
+ */
+async function joinVerified(
+  booking: { id: string; roomId: string },
+  userId: string,
+  at: Date,
+): Promise<void> {
+  await recordHookAttendance({
+    roomName: booking.roomId,
+    userId,
+    event: "JOINED",
+    reportedAt: at,
+    occupantJid: `${booking.roomId}@conference.meet.jitsi/${userId.slice(0, 8)}`,
+    now: at,
+  });
 }
 
 async function statusOf(bookingId: string): Promise<string> {
@@ -177,7 +206,7 @@ describe("بستن خودکار جلسه", () => {
 
   it("فقط هنرجو آمد → NO_SHOW_TEACHER و جلسه برمی‌گردد", async () => {
     const booking = await confirmedBooking();
-    await join(booking.id, fixture.studentId, booking.scheduledAt);
+    await joinVerified(booking, fixture.studentId, booking.scheduledAt);
 
     const result = await runSessionClose(afterGrace(booking));
 
@@ -258,7 +287,7 @@ describe("بستن خودکار جلسه", () => {
    */
   it("اجرای دوباره‌ی جارو سطر مالی دوم نمی‌نویسد", async () => {
     const booking = await confirmedBooking();
-    await join(booking.id, fixture.studentId, booking.scheduledAt);
+    await joinVerified(booking, fixture.studentId, booking.scheduledAt);
 
     const first = await runSessionClose(afterGrace(booking));
     const second = await runSessionClose(afterGrace(booking));
@@ -346,7 +375,7 @@ async function reviewsOf(bookingId: string) {
 describe("صف بررسی جلسه‌های برگزارنشده", () => {
   it("عدم حضور استاد پرونده باز می‌کند", async () => {
     const booking = await confirmedBooking();
-    await join(booking.id, fixture.studentId, booking.scheduledAt);
+    await joinVerified(booking, fixture.studentId, booking.scheduledAt);
 
     const result = await runSessionClose(afterGrace(booking));
 
@@ -411,7 +440,7 @@ describe("صف بررسی جلسه‌های برگزارنشده", () => {
 
   it("هنرجو خبردار می‌شود که استاد نیامد و پول برگشت", async () => {
     const booking = await confirmedBooking();
-    await join(booking.id, fixture.studentId, booking.scheduledAt);
+    await joinVerified(booking, fixture.studentId, booking.scheduledAt);
 
     await runSessionClose(afterGrace(booking));
 
@@ -421,6 +450,138 @@ describe("صف بررسی جلسه‌های برگزارنشده", () => {
 
     expect(review).toBeDefined();
     expect((review!.payload as { message: string }).message).toContain("برگشت");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// حضورِ تأییدشده در برابر حضورِ ادعاشده
+// ---------------------------------------------------------------------------
+
+/**
+ * چیزی که این بخش نگه می‌دارد، تنها جایی است که دروغ گفتن سود مالی
+ * داشت: استادی که در جلسه حاضر نشده، با یک درخواست از مرورگر خودش را
+ * «حاضر» ثبت می‌کرد و نتیجه از `NO_SHOW_TEACHER` (بازپرداخت به هنرجو)
+ * به `NO_SHOW_STUDENT` (سوختن جلسه، پول پیش خودش) تبدیل می‌شد.
+ *
+ * حالا تصمیم مالی فقط روی چیزی گرفته می‌شود که سرور جیتسی دیده باشد.
+ */
+describe("حضور تأییدشده", () => {
+  it("ادعای استاد وقتی سرور فقط هنرجو را دیده، جلسه را نمی‌سوزاند", async () => {
+    const booking = await confirmedBooking();
+
+    // هنرجو واقعاً آمد — سرور دیدش
+    await joinVerified(booking, fixture.studentId, booking.scheduledAt);
+    // استاد نیامد ولی مرورگرش «آمدم» گزارش کرد
+    await join(booking.id, fixture.teacherUserId, booking.scheduledAt);
+
+    const result = await runSessionClose(afterGrace(booking));
+
+    expect(result.noShowTeacher).toBe(1);
+    expect(result.noShowStudent).toBe(0);
+    expect(result.refunded).toBe(1);
+    expect(result.unverified).toBe(0);
+    expect(await statusOf(booking.id)).toBe("NO_SHOW_TEACHER");
+    expect(await refundRowsOf(booking.id)).toHaveLength(1);
+  });
+
+  /**
+   * قرینه‌ی همان قاعده، و دلیل وجود حالت «تأییدنشده».
+   *
+   * وقتی هیچ رویداد سرورتأییدی نرسیده، «هوک نصب نیست» و «هنرجو خودش را
+   * حاضر جا زده تا پول جلسه‌ی نرفته را پس بگیرد» از بیرون یک شکل دارند.
+   * پس نتیجه ثبت می‌شود ولی پول تکان نمی‌خورد.
+   */
+  it("بدون تأیید سرور، عدم حضور استاد بازپرداخت خودکار نمی‌گیرد", async () => {
+    const booking = await confirmedBooking();
+    await join(booking.id, fixture.studentId, booking.scheduledAt);
+
+    const result = await runSessionClose(afterGrace(booking));
+
+    expect(result.noShowTeacher).toBe(1);
+    expect(result.refunded).toBe(0);
+    expect(result.unverified).toBe(1);
+    expect(await refundRowsOf(booking.id)).toHaveLength(0);
+
+    expect(await reviewsOf(booking.id)).toMatchObject([
+      { reason: "ATTENDANCE_UNVERIFIED", status: "OPEN" },
+    ]);
+  });
+
+  /**
+   * نبودنِ هوک نباید به یک صفِ ادمینِ پر از جلسه‌ی سالم ترجمه شود.
+   *
+   * تا وقتی ماژول prosody نصب نشده، **همه‌ی** جلسه‌ها تأییدنشده‌اند. اگر
+   * هر جلسه‌ی تأییدنشده‌ای پرونده می‌ساخت، صف از چیزهایی پر می‌شد که
+   * هیچ تصمیمی نمی‌خواهند و پرونده‌های واقعی زیرشان گم می‌شدند.
+   */
+  it("جلسه‌ی برگزارشده‌ی تأییدنشده نه پرونده می‌سازد نه شمرده می‌شود", async () => {
+    const booking = await confirmedBooking();
+    await join(booking.id, fixture.teacherUserId, booking.scheduledAt);
+    await join(booking.id, fixture.studentId, booking.scheduledAt);
+
+    const result = await runSessionClose(afterGrace(booking));
+
+    expect(result.completed).toBe(1);
+    expect(result.unverified).toBe(0);
+    expect(result.reviewsOpened).toBe(0);
+    expect(await reviewsOf(booking.id)).toEqual([]);
+  });
+
+  /**
+   * رویدادِ سرور علاوه بر ستون تأیید، خودِ جلسه را هم جلو می‌برد.
+   *
+   * وگرنه جلسه‌ای که هر دو طرفش آمده‌اند ولی گزارش مرورگرشان گم شده،
+   * تا لحظه‌ی بسته شدن `CONFIRMED` می‌ماند و در «کلاس‌های پیش رو» به
+   * نظر می‌رسد هنوز شروع نشده.
+   */
+  it("رویداد سرور جلسه را IN_PROGRESS می‌کند", async () => {
+    const booking = await confirmedBooking();
+
+    await joinVerified(booking, fixture.teacherUserId, booking.scheduledAt);
+
+    expect(await statusOf(booking.id)).toBe("IN_PROGRESS");
+  });
+
+  /** تلاش مجدد prosody نباید سطر دوم بسازد — کلید یکتای تحویل. */
+  it("رویداد تکراری دوباره ثبت نمی‌شود", async () => {
+    const booking = await confirmedBooking();
+
+    await joinVerified(booking, fixture.studentId, booking.scheduledAt);
+    const again = await recordHookAttendance({
+      roomName: booking.roomId,
+      userId: fixture.studentId,
+      event: "JOINED",
+      reportedAt: booking.scheduledAt,
+      occupantJid: null,
+      now: new Date(booking.scheduledAt.getTime() + 5_000),
+    });
+
+    expect(again.outcome).toBe("DUPLICATE");
+  });
+
+  it("اتاق ناشناس و کاربر غیرطرفِ رزرو رد می‌شوند", async () => {
+    const booking = await confirmedBooking();
+
+    const unknownRoom = await recordHookAttendance({
+      roomName: "0d1f4e3a-0000-4000-8000-000000000000",
+      userId: fixture.studentId,
+      event: "JOINED",
+      reportedAt: null,
+      occupantJid: null,
+      now: booking.scheduledAt,
+    });
+
+    const outsider = await recordHookAttendance({
+      roomName: booking.roomId,
+      userId: fixture.otherStudentId,
+      event: "JOINED",
+      reportedAt: null,
+      occupantJid: null,
+      now: booking.scheduledAt,
+    });
+
+    expect(unknownRoom.outcome).toBe("UNKNOWN_ROOM");
+    expect(outsider.outcome).toBe("NOT_PARTICIPANT");
   });
 });
 

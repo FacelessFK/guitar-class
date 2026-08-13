@@ -216,6 +216,16 @@ const PRODUCTION_REQUIRED: readonly Rule[] = [
     variable: "JITSI_XMPP_DOMAIN",
     why: "ادعای sub توکن — دامنه‌ی داخلی prosody، نه دامنه‌ی عمومی.",
   },
+  {
+    variable: "JITSI_WEBHOOK_SECRET",
+    why:
+      "بدون آن هوک حضور همه‌ی رویدادها را رد می‌کند و حضور فقط از گزارش مرورگر می‌آید — " +
+      "یعنی استادی که غیبت کرده می‌تواند خودش را حاضر ثبت کند و بازپرداخت هنرجو را به سوختن جلسه تبدیل کند.",
+    validate: (value, env) =>
+      value === env.JITSI_APP_SECRET
+        ? "همان JITSI_APP_SECRET است. آن کلید به هر توکن ورودی که صادر می‌کنیم ربط دارد و نباید نقش دوم بگیرد؛ یکی جدا با «openssl rand -base64 48» بسازید."
+        : null,
+  },
 ];
 
 /**

@@ -25,10 +25,11 @@ import {
   type DateKey,
 } from "@music/shared";
 
-import { alias } from "drizzle-orm/pg-core";
+import { alias, type PgColumn } from "drizzle-orm/pg-core";
 
 import { db, type Database } from "../db/client.js";
 import {
+  attendanceEvents,
   bookings,
   enrollments,
   instruments,
@@ -385,6 +386,15 @@ export interface ClosedSession {
   /** برای پیام لاگ و گزارش ادمین */
   teacherId: string;
   studentId: string;
+  /**
+   * آیا این نتیجه از داده‌ی سرورتأیید درآمده یا از گزارش مرورگر.
+   *
+   * `false` یعنی هیچ رویدادی از هوک جیتسی برای این جلسه نرسیده — که یا
+   * چون هوک نصب/سالم نیست، یا چون کسی که ادعا کرده آمده اصلاً وارد اتاق
+   * نشده. **از بیرون این دو قابل تفکیک نیستند**، و تفاوتشان پول است.
+   * پس هر تصمیم مالی باید این را بخواند.
+   */
+  attendanceVerified: boolean;
 }
 
 /**
@@ -397,6 +407,21 @@ export interface ClosedSession {
  *   • فقط استاد آمد  → `NO_SHOW_STUDENT` (جلسه می‌سوزد)
  *   • فقط هنرجو آمد  → `NO_SHOW_TEACHER` (جلسه برمی‌گردد + بررسی ادمین)
  *   • هیچ‌کس نیامد   → `NO_SHOW`
+ *
+ * **کدام دو ستون، به جلسه بستگی دارد.** اگر هوک سمت سرور جیتسی برای
+ * این جلسه رویدادی فرستاده باشد، `*_verified_at` ملاک است — چیزی که
+ * prosody دیده و کاربر نمی‌تواند بسازد. اگر نفرستاده باشد،
+ * `*_joined_at` یعنی همان گزارش مرورگر که همیشه ملاک بود.
+ *
+ * برنگرداندن به گزارش مرورگر گزینه نبود: روزی که ماژول prosody
+ * نصب نباشد یا بیفتد، «هیچ‌کس تأیید نشده» یعنی **هر** جلسه‌ای
+ * `NO_SHOW` شود و بازپرداخت بخورد. یک خرابیِ بی‌صدا در سرور جیتسی
+ * نباید به پول‌پس‌دادنِ دسته‌جمعی ترجمه شود.
+ *
+ * ولی برگشتن به گزارش مرورگر هم مجانی نیست، چون دقیقاً همان داده‌ی
+ * جعل‌پذیر است. برای همین این تابع فقط تصمیم را می‌گیرد و
+ * `attendanceVerified` را کنارش برمی‌گرداند؛ **اثر مالی روی جلسه‌ی
+ * تأییدنشده را جاب پس‌زمینه نگه می‌دارد** تا ادمین ببیندش.
  *
  * **اثر مالی اینجا نیست.** این تابع فقط تصمیم می‌گیرد، مثل
  * `cancelBooking`. ثبت سطر منفی در دفتر کل کار ماژول پرداخت است و جاب
@@ -415,8 +440,38 @@ export async function closeFinishedSessions(
     now.getTime() - BUSINESS_RULES.NO_SHOW_GRACE_MINUTES * MINUTE_MS,
   );
 
-  const teacherCame = sql`${bookings.teacherJoinedAt} IS NOT NULL`;
-  const studentCame = sql`${bookings.studentJoinedAt} IS NOT NULL`;
+  /**
+   * آیا سرور جیتسی برای این جلسه چیزی گزارش کرده است.
+   *
+   * وجودِ **هر** رویدادِ سرورتأیید کافی است، نه رویدادِ هر دو طرف: اگر
+   * هوک زنده بوده و ورود هنرجو را دیده، ندیدنِ استاد یعنی استاد نیامده
+   * — و همین جمله دقیقاً چیزی است که تا امروز قابل اثبات نبود.
+   */
+  /**
+   * ⚠️ نام جدول‌ها اینجا **دستی** نوشته شده‌اند و نه با درج ستون‌های
+   * Drizzle، چون همین عبارت در `RETURNING` هم استفاده می‌شود.
+   *
+   * Drizzle در `RETURNING` پیشوند جدول را حذف می‌کند (آنجا فقط یک جدول
+   * در کار است)، و آن حذف این شرط را به `"booking_id" = "id"` تبدیل
+   * می‌کرد — یعنی مقایسه‌ی رویداد با کلید خودش، که همیشه نادرست است و
+   * هیچ خطایی هم نمی‌دهد. نتیجه‌اش این بود که `SET` درست تصمیم می‌گرفت
+   * ولی مقداری که برمی‌گشت همیشه «تأییدنشده» بود: جلسه `NO_SHOW_TEACHER`
+   * می‌شد و بازپرداختش انجام نمی‌شد.
+   *
+   * نام مستعار `ae` هم لازم است، وگرنه `id` داخل زیرکوئری به جدول
+   * داخلی می‌چسبد نه به `bookings`.
+   */
+  const hookReported = sql`EXISTS (
+    SELECT 1 FROM "attendance_events" AS ae
+    WHERE ae."booking_id" = "bookings"."id"
+      AND ae."source" = 'SERVER_HOOK'
+  )`;
+
+  const came = (verified: PgColumn, reported: PgColumn) =>
+    sql`(CASE WHEN ${hookReported} THEN ${verified} IS NOT NULL ELSE ${reported} IS NOT NULL END)`;
+
+  const teacherCame = came(bookings.teacherVerifiedAt, bookings.teacherJoinedAt);
+  const studentCame = came(bookings.studentVerifiedAt, bookings.studentJoinedAt);
 
   const closed = await db
     .update(bookings)
@@ -454,6 +509,7 @@ export async function closeFinishedSessions(
       status: bookings.status,
       teacherId: bookings.teacherId,
       studentId: bookings.studentId,
+      attendanceVerified: hookReported.mapWith(Boolean),
     });
 
   return closed as ClosedSession[];

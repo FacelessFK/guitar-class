@@ -941,7 +941,11 @@ export const updatePost = (postId: string, body: Partial<PostBody>) =>
 export const deletePost = (postId: string) =>
   apiFetch<void>(`/admin/posts/${postId}`, { method: "DELETE" });
 
-export type SessionReviewReason = "NO_SHOW_TEACHER" | "NO_SHOW";
+export type SessionReviewReason =
+  | "NO_SHOW_TEACHER"
+  | "NO_SHOW"
+  /** حضور فقط گزارش مرورگر بوده و سرور جیتسی تأییدش نکرده — پول جابه‌جا نشده */
+  | "ATTENDANCE_UNVERIFIED";
 export type SessionReviewStatus = "OPEN" | "RESOLVED";
 
 export interface AdminReview {

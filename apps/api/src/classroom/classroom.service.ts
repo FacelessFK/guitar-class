@@ -9,10 +9,16 @@
  */
 
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { roomState, roomWindow, type Interval } from "@music/shared";
+import {
+  AttendanceSource,
+  roomState,
+  roomWindow,
+  type AttendanceEvent,
+  type Interval,
+} from "@music/shared";
 
 import { db } from "../db/client.js";
-import { bookings, users } from "../db/schema/index.js";
+import { attendanceEvents, bookings, users } from "../db/schema/index.js";
 import {
   BookingNotFoundError,
   NotBookingParticipantError,
@@ -186,8 +192,11 @@ export async function joinClassroom(
  * فرانت `videoConferenceJoined` را به `JOINED` و `participantLeft`
  * یا `readyToClose` را به `LEFT` نگاشت می‌کند. نام‌های جیتسی عمداً وارد
  * دامنه نمی‌شوند تا ارتقای IFrame API به تغییر اسکیمای API منجر نشود.
+ *
+ * تعریفش در `@music/shared` است چون هوک سمت سرور جیتسی و ستون دیتابیس
+ * هم همین دو مقدار را دارند و سه‌جا تعریف شدن یعنی دو جا از هم می‌افتند.
  */
-export type AttendanceEvent = "JOINED" | "LEFT";
+export type { AttendanceEvent };
 
 export interface RecordAttendanceInput {
   bookingId: string;
@@ -226,6 +235,24 @@ export async function recordAttendance(
   const now = input.now ?? new Date();
   const booking = await loadBooking(input.bookingId);
   const { isTeacher } = assertMayEnterRoom(booking, input.userId, now);
+
+  /**
+   * گزارش کلاینت هم در همان دفتری می‌نشیند که هوک سرور در آن می‌نویسد،
+   * با `source` متفاوت.
+   *
+   * چون تصمیم مالی فقط روی سطرهای `SERVER_HOOK` گرفته می‌شود، این سطرها
+   * هیچ اثر مالی ندارند — ولی همان چیزی هستند که «مرورگرش گفت آمدم ولی
+   * سرور ندیدش» را از یک حدس به یک کوئری تبدیل می‌کنند. بدون ثبتشان،
+   * تنها اثر یک ادعای دروغ، ستونی است که مقدارش عوض شده و معلوم نیست
+   * کِی.
+   */
+  await db.insert(attendanceEvents).values({
+    bookingId: booking.id,
+    userId: input.userId,
+    event: input.event,
+    source: AttendanceSource.CLIENT,
+    occurredAt: now,
+  });
 
   if (input.event === "JOINED") {
     // داخل `sql` نگاشتِ ستون اعمال نمی‌شود، پس `Date` خام به درایور

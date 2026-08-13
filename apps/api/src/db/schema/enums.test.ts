@@ -111,6 +111,22 @@ describe("همگامی شمارشی‌های دیتابیس و پکیج مشتر
     );
   });
 
+  it("AttendanceEvent", () => {
+    expectSameValues(
+      "AttendanceEvent",
+      dbEnums.attendanceEvent.enumValues,
+      shared.AttendanceEvent,
+    );
+  });
+
+  it("AttendanceSource", () => {
+    expectSameValues(
+      "AttendanceSource",
+      dbEnums.attendanceSource.enumValues,
+      shared.AttendanceSource,
+    );
+  });
+
   it("SessionReviewStatus", () => {
     expectSameValues(
       "SessionReviewStatus",

@@ -19,6 +19,7 @@ export * from "./identity.js";
 export * from "./catalog.js";
 export * from "./availability.js";
 export * from "./booking.js";
+export * from "./attendance.js";
 export * from "./finance.js";
 export * from "./learning.js";
 export * from "./review.js";

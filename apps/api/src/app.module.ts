@@ -19,6 +19,10 @@ import {
   ClassroomController,
   ClassroomProvider,
 } from "./classroom/classroom.controller.js";
+import {
+  JitsiHookController,
+  JitsiHookProvider,
+} from "./classroom/hook.controller.js";
 import { LearningController, LearningProvider } from "./learning/learning.controller.js";
 import { MediaController, MediaProvider } from "./media/media.controller.js";
 import {
@@ -27,7 +31,11 @@ import {
 } from "./notification/notification.controller.js";
 import { PaymentController, PaymentProvider } from "./payment/payment.controller.js";
 import { TeacherController, TeacherProvider } from "./teacher/teacher.controller.js";
-import { readWorkerStatus, type WorkerStatus } from "./queue/heartbeat.js";
+import {
+  readHookLastEventAt,
+  readWorkerStatus,
+  type WorkerStatus,
+} from "./queue/heartbeat.js";
 
 @Controller("health")
 export class HealthController {
@@ -50,8 +58,9 @@ export class HealthController {
     worker: string;
     workerLastRunAt: string | null;
     sweeps: Record<string, string>;
+    classroomHookLastEventAt: string | null;
   }> {
-    const [database, redisStatus, worker] = await Promise.all([
+    const [database, redisStatus, worker, hookLastEventAt] = await Promise.all([
       db
         .execute(sql`SELECT 1`)
         .then(() => "ok")
@@ -63,6 +72,7 @@ export class HealthController {
       readWorkerStatus().catch(
         (): WorkerStatus => ({ status: "never", lastRunAt: null, sweeps: [] }),
       ),
+      readHookLastEventAt().catch(() => null),
     ]);
 
     const healthy = database === "ok" && redisStatus === "ok" && worker.status === "ok";
@@ -83,6 +93,13 @@ export class HealthController {
       sweeps: Object.fromEntries(
         worker.sweeps.map((entry) => [entry.sweep, entry.status]),
       ),
+      /**
+       * روی `status` اثر ندارد و عمدی است: هوک فقط وقتی حرف می‌زند که
+       * کلاسی برگزار شود، پس سکوتش شب‌ها و روزهای خلوت طبیعی است.
+       * `null` بودنش بعد از اولین کلاس آزمایشی یعنی ماژول prosody نصب
+       * نشده — و آن یعنی حضور همچنان فقط حرفِ مرورگر است.
+       */
+      classroomHookLastEventAt: hookLastEventAt,
     };
   }
 }
@@ -103,6 +120,7 @@ export class HealthController {
     AvailabilityController,
     BookingController,
     ClassroomController,
+    JitsiHookController,
     PaymentController,
     TeacherController,
     AdminController,
@@ -121,6 +139,7 @@ export class HealthController {
     AvailabilityProvider,
     BookingProvider,
     ClassroomProvider,
+    JitsiHookProvider,
     PaymentProvider,
     TeacherProvider,
     {

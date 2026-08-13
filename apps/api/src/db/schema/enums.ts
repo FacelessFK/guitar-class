@@ -83,9 +83,14 @@ export const recordingStatus = pgEnum("recording_status", [
 
 export const postStatus = pgEnum("post_status", ["DRAFT", "PUBLISHED"]);
 
+export const attendanceEvent = pgEnum("attendance_event", ["JOINED", "LEFT"]);
+
+export const attendanceSource = pgEnum("attendance_source", ["CLIENT", "SERVER_HOOK"]);
+
 export const sessionReviewReason = pgEnum("session_review_reason", [
   "NO_SHOW_TEACHER",
   "NO_SHOW",
+  "ATTENDANCE_UNVERIFIED",
 ]);
 
 export const sessionReviewStatus = pgEnum("session_review_status", [

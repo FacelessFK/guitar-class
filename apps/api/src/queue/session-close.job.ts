@@ -45,29 +45,63 @@ export interface SessionCloseResult {
   refunded: number;
   /** پرونده‌هایی که همین اجرا روی میز ادمین باز شدند */
   reviewsOpened: number;
+  /**
+   * جلسه‌هایی که نتیجه‌شان اثر مالی داشت ولی سرور جیتسی تأییدشان نکرده
+   * بود، پس پول جابه‌جا نشد و به ادمین سپرده شدند.
+   *
+   * تا وقتی هوک نصب نشده این عدد با `noShowTeacher` برابر است. بعد از
+   * نصب باید صفر بماند؛ غیرصفر شدنش یعنی یا هوک افتاده یا کسی حضور جعل
+   * کرده.
+   */
+  unverified: number;
 }
 
 /**
- * کدام پایانِ جلسه پرونده‌ی بررسی می‌سازد.
+ * چه چیزی از این جلسه باید روی میز ادمین برود — و آیا پول جابه‌جا شود.
  *
- * عدم حضور هنرجو اینجا نیست و عمدی است: تکلیفش روشن است — جلسه
- * می‌سوزد و پول جابه‌جا نمی‌شود، پس چیزی برای تصمیم گرفتن نمانده.
- * دو حالت دیگر تصمیم لازم دارند: عدم حضور استاد پول را برگردانده و
- * باید با خود استاد حل شود، و «هیچ‌کس نیامد» اصلاً معلوم نیست تقصیر
- * چه کسی بوده.
- */
-const REVIEWABLE: readonly SessionReviewReason[] = ["NO_SHOW_TEACHER", "NO_SHOW"];
-
-/**
- * تنگ‌کننده‌ی نوع، نه فقط بررسی عضویت.
- *
- * `SessionReviewReason` عمداً همان `ClosedSessionStatus` نیست — یکی
+ * `SessionReviewReason` عمداً همان `ClosedSessionStatus` نیست: یکی
  * می‌گوید جلسه چطور تمام شد و دیگری چه چیزی باید بررسی شود. این تابع
- * تنها جایی است که یکی به دیگری تبدیل می‌شود، و اگر روزی حالت تازه‌ای
+ * تنها جایی است که یکی به دیگری تبدیل می‌شود، پس اگر روزی حالت تازه‌ای
  * به چرخه‌ی حیات رزرو اضافه شود، تایپ‌چک همین‌جا می‌ایستد.
+ *
+ * سه قاعده، و هر سه درباره‌ی همان یک چیزند — پول:
+ *
+ *   • **عدم حضور استادِ تأییدشده** → بازپرداخت خودکار و پرونده. سرور
+ *     جیتسی دیده که استاد نیامده؛ این دیگر ادعای کسی نیست.
+ *   • **عدم حضور استادِ تأییدنشده** → پرونده، **بدون** بازپرداخت. یا
+ *     هوک نصب نیست یا هنرجو خودش را حاضر جا زده تا جلسه‌ی نرفته را
+ *     پس بگیرد، و این دو از بیرون یکی به نظر می‌رسند. حدس زدن در این
+ *     نقطه یعنی حدس زدن با پول کسی.
+ *   • **هیچ‌کس نیامد** → پرونده، چون تکلیفش از اول روشن نبوده.
+ *
+ * دو حالت دیگر پرونده نمی‌سازند: `COMPLETED` چیزی برای تصمیم ندارد، و
+ * `NO_SHOW_STUDENT` هم نه — نبودنِ هنرجو را فقط گزارشِ خودِ هنرجو
+ * می‌سازد و استاد نمی‌تواند جایش ادعایش کند، پس تأییدنشده بودنش چیزی
+ * را عوض نمی‌کند. اگر این دو هم پرونده می‌ساختند، تا وقتی هوک نصب نشده
+ * صف ادمین از جلسه‌های سالم پر می‌شد و پرونده‌های واقعی زیرشان گم
+ * می‌شدند.
  */
-const isReviewable = (status: ClosedSessionStatus): status is SessionReviewReason =>
-  REVIEWABLE.includes(status as SessionReviewReason);
+function reviewReasonFor(session: ClosedSession): SessionReviewReason | null {
+  if (session.status === "NO_SHOW") return "NO_SHOW";
+
+  if (session.status === "NO_SHOW_TEACHER") {
+    return session.attendanceVerified ? "NO_SHOW_TEACHER" : "ATTENDANCE_UNVERIFIED";
+  }
+
+  return null;
+}
+
+/** بازپرداخت خودکار فقط روی چیزی که سرور جیتسی تأییدش کرده. */
+const shouldRefund = (session: ClosedSession): boolean =>
+  session.status === "NO_SHOW_TEACHER" && session.attendanceVerified;
+
+/** آنچه هنرجو می‌بیند. به ازای هر دلیل، نه به ازای وضعیت جلسه. */
+const REVIEW_MESSAGE: Record<SessionReviewReason, string> = {
+  NO_SHOW_TEACHER: "استاد در جلسه‌ی شما حاضر نشد. هزینه برگشت خورد و موضوع در حال بررسی است.",
+  NO_SHOW: "جلسه‌ی شما برگزار نشد و موضوع در حال بررسی است.",
+  ATTENDANCE_UNVERIFIED:
+    "برگزاری جلسه‌ی شما تأیید نشد و موضوع در حال بررسی است. نتیجه را به شما اطلاع می‌دهیم.",
+};
 
 const countOf = (sessions: ClosedSession[], status: ClosedSessionStatus): number =>
   sessions.filter((session) => session.status === status).length;
@@ -99,9 +133,10 @@ export async function runSessionClose(
 
   let refunded = 0;
   let reviewsOpened = 0;
+  let unverified = 0;
 
   for (const session of closed) {
-    if (session.status === "NO_SHOW_TEACHER") {
+    if (shouldRefund(session)) {
       const refund = await recordCancellationRefund({
         bookingId: session.id,
         refundable: true,
@@ -114,7 +149,20 @@ export async function runSessionClose(
       );
     }
 
-    if (!isReviewable(session.status)) continue;
+    const reason = reviewReasonFor(session);
+
+    if (reason === "ATTENDANCE_UNVERIFIED") {
+      unverified += 1;
+
+      logger.error(
+        `جلسه‌ی ${session.id} با عدم حضور استاد بسته شد ولی سرور جیتسی حضور هیچ‌کس را تأیید نکرده — ` +
+          "بازپرداخت خودکار انجام نشد و پرونده برای بررسی باز شد. " +
+          "اگر این پیام برای همه‌ی جلسه‌ها می‌آید، ماژول event_sync روی prosody نصب یا سالم نیست " +
+          "(docs/deployment.md بخش ۱۰).",
+      );
+    }
+
+    if (!reason) continue;
 
     /**
      * پرونده پیش از اعلان باز می‌شود و اعلان فقط وقتی می‌رود که پرونده
@@ -128,7 +176,7 @@ export async function runSessionClose(
      */
     const opened = await openSessionReview({
       bookingId: session.id,
-      reason: session.status,
+      reason,
     });
 
     if (!opened) continue;
@@ -138,10 +186,13 @@ export async function runSessionClose(
     await notifyInApp({
       userId: session.studentId,
       type: IN_APP_TYPES.SESSION_UNDER_REVIEW,
-      message:
-        session.status === "NO_SHOW_TEACHER"
-          ? "استاد در جلسه‌ی شما حاضر نشد. هزینه برگشت خورد و موضوع در حال بررسی است."
-          : "جلسه‌ی شما برگزار نشد و موضوع در حال بررسی است.",
+      /**
+       * پیامِ «هزینه برگشت خورد» فقط جایی گفته می‌شود که واقعاً سطر
+       * بازپرداخت نوشته شده باشد. حالت تأییدنشده همان نتیجه را دارد
+       * ولی پولش هنوز جابه‌جا نشده، و وعده‌ی پولی که نیامده بدتر از
+       * سکوت است.
+       */
+      message: REVIEW_MESSAGE[reason],
       href: `/sessions/${session.id}`,
       bookingId: session.id,
     });
@@ -156,6 +207,7 @@ export async function runSessionClose(
     noShow: countOf(closed, "NO_SHOW"),
     refunded,
     reviewsOpened,
+    unverified,
   };
 
   // در حالت عادی هیچ جلسه‌ای بسته نمی‌شود؛ لاگ خالی هر دقیقه فقط
@@ -164,8 +216,9 @@ export async function runSessionClose(
     logger.log(
       `${closed.length} جلسه بسته شد: ${result.completed} برگزارشده، ` +
         `${result.noShowStudent} عدم حضور هنرجو، ${result.noShowTeacher} عدم حضور استاد، ` +
-        `${result.noShow} بدون حضور. ${result.refunded} بازپرداخت ثبت شد و ` +
-        `${result.reviewsOpened} پرونده‌ی بررسی باز شد.`,
+        `${result.noShow} بدون حضور. ${result.refunded} بازپرداخت ثبت شد، ` +
+        `${result.reviewsOpened} پرونده‌ی بررسی باز شد و ${result.unverified} جلسه ` +
+        `به دلیل تأیید نشدن حضور بدون اثر مالی ماند.`,
     );
   }
 

@@ -29,6 +29,21 @@ import { formatJalaliDayMonth, formatTehranTime, formatToman } from "@/lib/forma
 const REASON_LABEL: Record<AdminReview["reason"], string> = {
   NO_SHOW_TEACHER: "استاد حاضر نشد",
   NO_SHOW: "هیچ‌کدام حاضر نشدند",
+  ATTENDANCE_UNVERIFIED: "حضور تأیید نشد — بازپرداخت نشده",
+};
+
+/**
+ * سه دلیل، دو معنی متفاوت برای کسی که رسیدگی می‌کند.
+ *
+ * دو تای اول یعنی «تصمیم گرفته شده، پیگیری کن». سومی یعنی «تصمیمی
+ * گرفته نشده و پول دست‌نخورده مانده تا تو تصمیم بگیری» — و چون تنها
+ * حالتی است که هنوز کاری با پول نشده، باید در فهرست هم متفاوت دیده
+ * شود.
+ */
+const REASON_BADGE: Record<AdminReview["reason"], string> = {
+  NO_SHOW_TEACHER: "badge badge-off",
+  NO_SHOW: "badge badge-wait",
+  ATTENDANCE_UNVERIFIED: "badge badge-wait",
 };
 
 const TABS: Array<{ label: string; value: SessionReviewStatus }> = [
@@ -138,13 +153,7 @@ export default function AdminReviewsPage() {
                     {review.studentName}
                   </p>
                 </div>
-                <span
-                  className={
-                    review.reason === "NO_SHOW_TEACHER"
-                      ? "badge badge-off"
-                      : "badge badge-wait"
-                  }
-                >
+                <span className={REASON_BADGE[review.reason]}>
                   {REASON_LABEL[review.reason]}
                 </span>
               </div>
