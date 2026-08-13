@@ -11,6 +11,7 @@ import { BigIntSerializationInterceptor } from "../common/serialization.intercep
 import { InMemoryObjectStorage, setObjectStorage } from "../media/storage.port.js";
 import { closeDatabase, resetDatabase, resetRedis } from "../test/fixtures.js";
 import { OTP_CONFIG } from "./otp.service.js";
+import { REFRESH_COOKIE } from "./refresh-cookie.js";
 
 /**
  * جریان کامل ورود، از درخواست کد تا تمدید و خروج.
@@ -59,6 +60,32 @@ async function requestCode(phone = PHONE): Promise<string> {
   return response.body.devCode as string;
 }
 
+/**
+ * کوکی تازه‌سازی از هدر `Set-Cookie`.
+ *
+ * توکن دیگر در بدنه نیست، پس تست هم مثل مرورگر باید از هدر برش دارد.
+ * فقط جفتِ `نام=مقدار` برمی‌گردد — همان چیزی که مرورگر پس می‌فرستد.
+ */
+function setCookieHeader(response: { headers: Record<string, unknown> }): string | undefined {
+  // سوپرتست `headers` را `Record<string, string>` تایپ می‌کند، ولی
+  // `set-cookie` تنها هدری است که نود آرایه می‌دهد
+  const header = response.headers["set-cookie"] as string[] | undefined;
+  return header?.find((entry) => entry.startsWith(`${REFRESH_COOKIE}=`));
+}
+
+function refreshCookie(response: { headers: Record<string, unknown> }): string {
+  const cookie = setCookieHeader(response);
+
+  if (!cookie) throw new Error("پاسخ کوکی تازه‌سازی نداشت.");
+
+  return cookie.split(";")[0]!;
+}
+
+/** مقدار خام کوکی — برای مقایسه‌ی چرخش. */
+function cookieValue(cookie: string): string {
+  return cookie.slice(cookie.indexOf("=") + 1);
+}
+
 async function login(phone = PHONE, fullName = "فردین کاظمی") {
   const code = await requestCode(phone);
   const response = await request(server)
@@ -66,10 +93,12 @@ async function login(phone = PHONE, fullName = "فردین کاظمی") {
     .send({ phone, code, fullName })
     .expect(200);
 
-  return response.body as {
-    accessToken: string;
-    refreshToken: string;
-    user: { id: string; phone: string; fullName: string; isNewUser: boolean };
+  return {
+    ...(response.body as {
+      accessToken: string;
+      user: { id: string; phone: string; fullName: string; isNewUser: boolean };
+    }),
+    cookie: refreshCookie(response),
   };
 }
 
@@ -151,7 +180,7 @@ describe("بررسی کد و ورود", () => {
     const result = await login();
 
     expect(result.accessToken).toBeTruthy();
-    expect(result.refreshToken).toBeTruthy();
+    expect(result.cookie).toBeTruthy();
     expect(result.user.isNewUser).toBe(true);
     // شماره به شکل محلی نمایش داده می‌شود، هرچند متعارف ذخیره شده
     expect(result.user.phone).toBe("09121234567");
@@ -465,74 +494,147 @@ describe("ویرایش پروفایل", () => {
   });
 });
 
+describe("کوکی تازه‌سازی", () => {
+  it("توکن تازه‌سازی در بدنه‌ی پاسخ نمی‌آید", async () => {
+    const code = await requestCode();
+    const response = await request(server)
+      .post("/api/auth/otp/verify")
+      .send({ phone: PHONE, code, fullName: "فردین کاظمی" })
+      .expect(200);
+
+    // کل هدف این تغییر: چیزی که XSS بتواند بردارد وجود نداشته باشد
+    expect(response.body.refreshToken).toBeUndefined();
+    expect(JSON.stringify(response.body)).not.toContain(
+      cookieValue(refreshCookie(response)),
+    );
+  });
+
+  it("کوکی httpOnly است و مسیرش به auth محدود", async () => {
+    const code = await requestCode();
+    const response = await request(server)
+      .post("/api/auth/otp/verify")
+      .send({ phone: PHONE, code, fullName: "فردین کاظمی" })
+      .expect(200);
+
+    const header = setCookieHeader(response)!;
+
+    // بدون httpOnly کل این کار بی‌معنی است
+    expect(header).toMatch(/HttpOnly/i);
+    expect(header).toMatch(/Path=\/api\/auth/i);
+    expect(header).toMatch(/SameSite=Lax/i);
+  });
+});
+
 describe("تمدید نشست", () => {
   it("توکن دسترسی تازه می‌دهد", async () => {
     const session = await login();
 
     const response = await request(server)
       .post("/api/auth/refresh")
-      .send({ refreshToken: session.refreshToken })
+      .set("Cookie", session.cookie)
       .expect(200);
 
     expect(response.body.accessToken).toBeTruthy();
     expect(response.body.user.id).toBe(session.user.id);
   });
 
-  it("توکن تازه‌سازی می‌چرخد و قدیمی باطل می‌شود", async () => {
+  it("بدون کوکی، ۴۰۱ می‌دهد", async () => {
+    const response = await request(server).post("/api/auth/refresh").expect(401);
+
+    expect(response.body.code).toBe("NO_REFRESH_TOKEN");
+  });
+
+  it("توکن تازه‌سازی می‌چرخد", async () => {
     const session = await login();
 
     const first = await request(server)
       .post("/api/auth/refresh")
-      .send({ refreshToken: session.refreshToken })
+      .set("Cookie", session.cookie)
       .expect(200);
 
-    // توکن جدید باید متفاوت باشد
-    expect(first.body.refreshToken).not.toBe(session.refreshToken);
+    const rotated = refreshCookie(first);
+    expect(cookieValue(rotated)).not.toBe(cookieValue(session.cookie));
 
-    // استفاده‌ی دوباره از توکن قدیمی باید رد شود — این همان چیزی است
-    // که سرقت توکن را زودتر آشکار می‌کند
-    const reuse = await request(server)
-      .post("/api/auth/refresh")
-      .send({ refreshToken: session.refreshToken })
-      .expect(401);
-
-    expect(reuse.body.code).toBe("INVALID_REFRESH_TOKEN");
-
-    // ولی توکن جدید کار می‌کند
-    await request(server)
-      .post("/api/auth/refresh")
-      .send({ refreshToken: first.body.refreshToken })
-      .expect(200);
+    // کوکی تازه کار می‌کند
+    await request(server).post("/api/auth/refresh").set("Cookie", rotated).expect(200);
   });
 
-  it("توکن ساختگی را رد می‌کند", async () => {
+  it("استفاده‌ی دوباره پس از پنجره‌ی مهلت رد می‌شود", async () => {
+    const session = await login();
+
     await request(server)
       .post("/api/auth/refresh")
-      .send({ refreshToken: "x".repeat(64) })
+      .set("Cookie", session.cookie)
+      .expect(200);
+
+    // پنجره‌ی بازپخش در ردیس است؛ پاک کردنش یعنی «چند ثانیه گذشت»
+    await resetRedis();
+
+    const reuse = await request(server)
+      .post("/api/auth/refresh")
+      .set("Cookie", session.cookie)
+      .expect(401);
+
+    // همان چیزی که سرقت توکن را زودتر آشکار می‌کند
+    expect(reuse.body.code).toBe("INVALID_REFRESH_TOKEN");
+  });
+
+  it("دو تمدید هم‌زمان، هر دو همان توکن را می‌گیرند", async () => {
+    const session = await login();
+
+    /**
+     * همان حالتی که با چرخش توکن، کاربر را بی‌دلیل بیرون می‌انداخت:
+     * دو تب با یک کوکی مشترک، هم‌زمان تمدید می‌کنند.
+     *
+     * انتظار این نیست که یکی شکست بخورد — انتظار این است که هر دو
+     * موفق شوند و **همان** توکن جانشین را بگیرند، وگرنه کوکی نهایی
+     * مرورگر معلوم نیست کدام است.
+     */
+    const [first, second] = await Promise.all([
+      request(server).post("/api/auth/refresh").set("Cookie", session.cookie),
+      request(server).post("/api/auth/refresh").set("Cookie", session.cookie),
+    ]);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(cookieValue(refreshCookie(first))).toBe(cookieValue(refreshCookie(second)));
+  });
+
+  it("کوکی ساختگی را رد می‌کند", async () => {
+    await request(server)
+      .post("/api/auth/refresh")
+      .set("Cookie", `${REFRESH_COOKIE}=${"x".repeat(64)}`)
       .expect(401);
   });
 });
 
 describe("خروج", () => {
-  it("توکن تازه‌سازی را باطل می‌کند", async () => {
+  it("توکن تازه‌سازی را باطل و کوکی را پاک می‌کند", async () => {
     const session = await login();
 
-    await request(server)
+    const response = await request(server)
       .post("/api/auth/logout")
-      .send({ refreshToken: session.refreshToken })
+      .set("Cookie", session.cookie)
       .expect(200);
+
+    // کوکی باید پاک شود، وگرنه مرورگر یک کوکیِ مرده حمل می‌کند
+    expect(setCookieHeader(response)).toBeTruthy();
+
+    await resetRedis();
 
     await request(server)
       .post("/api/auth/refresh")
-      .send({ refreshToken: session.refreshToken })
+      .set("Cookie", session.cookie)
       .expect(401);
   });
 
-  it("برای توکن نامعتبر هم همان پاسخ را می‌دهد", async () => {
+  it("بدون کوکی هم همان پاسخ را می‌دهد", async () => {
     // وگرنه می‌شود با همین اندپوینت اعتبار توکن‌ها را آزمود
+    await request(server).post("/api/auth/logout").expect(200);
+
     await request(server)
       .post("/api/auth/logout")
-      .send({ refreshToken: "y".repeat(64) })
+      .set("Cookie", `${REFRESH_COOKIE}=${"y".repeat(64)}`)
       .expect(200);
   });
 
@@ -546,13 +648,15 @@ describe("خروج", () => {
       .set("authorization", `Bearer ${second.accessToken}`)
       .expect(200);
 
+    await resetRedis();
+
     await request(server)
       .post("/api/auth/refresh")
-      .send({ refreshToken: first.refreshToken })
+      .set("Cookie", first.cookie)
       .expect(401);
     await request(server)
       .post("/api/auth/refresh")
-      .send({ refreshToken: second.refreshToken })
+      .set("Cookie", second.cookie)
       .expect(401);
   });
 });

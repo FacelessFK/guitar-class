@@ -8,7 +8,10 @@ import {
   Injectable,
   Patch,
   Post,
+  Req,
+  Res,
 } from "@nestjs/common";
+import type { Request, Response } from "express";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { toLocalPhone } from "@music/shared";
@@ -18,7 +21,12 @@ import { users } from "../db/schema/index.js";
 import { zodPipe } from "../common/validation.pipe.js";
 import { CurrentUser } from "../common/current-user.decorator.js";
 import { Public, type AuthenticatedRequest } from "./auth.guard.js";
-import { requestLoginCode, refreshSession, verifyLoginCode } from "./auth.service.js";
+import { AuthError, requestLoginCode, refreshSession, verifyLoginCode } from "./auth.service.js";
+import {
+  clearRefreshCookie,
+  readRefreshCookie,
+  setRefreshCookie,
+} from "./refresh-cookie.js";
 import { updateOwnProfile, type ProfileUpdate } from "./profile.service.js";
 import { revokeAllUserTokens, revokeRefreshToken, type AccessTokenPayload } from "./token.service.js";
 import { createSmsSender, type SmsSender } from "../notification/sms.port.js";
@@ -47,9 +55,14 @@ const verifyCodeSchema = z.object({
   fullName: z.string().trim().min(2, "نام باید حداقل دو حرف باشد").max(120).optional(),
 });
 
-const refreshSchema = z.object({
-  refreshToken: z.string().min(20),
-});
+/**
+ * توکن تازه‌سازی دیگر از بدنه نمی‌آید.
+ *
+ * در کوکی `httpOnly` است و مرورگر خودش می‌فرستدش؛ جاوااسکریپت اصلاً
+ * نمی‌بیندش. پس `refresh` و `logout` بدنه‌ی ورودی ندارند و اسکیمای
+ * قبلی حذف شد — نگه داشتنِ یک مسیرِ جایگزین در بدنه یعنی همان توکنی که
+ * از دسترس XSS بیرون بردیم، دوباره در دسترسش باشد.
+ */
 
 /**
  * ویرایش پروفایل.
@@ -94,19 +107,27 @@ export class AuthController {
     };
   }
 
-  /** بررسی کد و ورود. اگر شماره تازه باشد، حساب ساخته می‌شود. */
+  /**
+   * بررسی کد و ورود. اگر شماره تازه باشد، حساب ساخته می‌شود.
+   *
+   * توکن تازه‌سازی در کوکی `httpOnly` می‌رود و **در بدنه نمی‌آید**.
+   * توکن دسترسی در بدنه می‌ماند چون فرانت باید در هدر `Authorization`
+   * حملش کند و عمرش ۱۵ دقیقه است.
+   */
   @Public()
   @Post("otp/verify")
   @HttpCode(HttpStatus.OK)
   async verifyCode(
     @Body(zodPipe(verifyCodeSchema)) body: z.infer<typeof verifyCodeSchema>,
+    @Res({ passthrough: true }) response: Response,
     @Headers("user-agent") userAgent?: string,
   ) {
     const result = await verifyLoginCode({ ...body, userAgent });
 
+    setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
+
     return {
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
       expiresIn: result.expiresIn,
       user: {
         ...result.user,
@@ -119,20 +140,30 @@ export class AuthController {
    * تمدید نشست.
    *
    * توکن تازه‌سازی می‌چرخد: توکن قدیمی همین‌جا باطل می‌شود و یکی جدید
-   * برمی‌گردد. پس هر توکن فقط یک بار قابل استفاده است.
+   * در کوکی می‌نشیند. پس هر توکن فقط یک بار قابل استفاده است — با یک
+   * پنجره‌ی چندثانیه‌ای که در `token.service.ts` توضیح داده شده و
+   * جلوی بیرون افتادنِ تبِ دوم را می‌گیرد.
    */
   @Public()
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
   async refresh(
-    @Body(zodPipe(refreshSchema)) body: z.infer<typeof refreshSchema>,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
     @Headers("user-agent") userAgent?: string,
   ) {
-    const result = await refreshSession(body.refreshToken, userAgent);
+    const token = readRefreshCookie(request);
+
+    if (!token) {
+      throw new AuthError("نشست شما منقضی شده است. دوباره وارد شوید.", "NO_REFRESH_TOKEN");
+    }
+
+    const result = await refreshSession(token, userAgent);
+
+    setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
 
     return {
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
       expiresIn: result.expiresIn,
       user: { ...result.user, phone: toLocalPhone(result.user.phone) },
     };
@@ -143,9 +174,16 @@ export class AuthController {
   @Post("logout")
   @HttpCode(HttpStatus.OK)
   async logout(
-    @Body(zodPipe(refreshSchema)) body: z.infer<typeof refreshSchema>,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<{ message: string }> {
-    await revokeRefreshToken(body.refreshToken);
+    const token = readRefreshCookie(request);
+
+    if (token) await revokeRefreshToken(token);
+
+    // کوکی در هر حالت پاک می‌شود، حتی اگر توکنی نبوده
+    clearRefreshCookie(response);
+
     // چه توکن معتبر بوده و چه نه، پاسخ یکی است — وگرنه می‌شود اعتبار
     // توکن را با همین اندپوینت آزمود
     return { message: "از حساب خارج شدید." };
@@ -156,8 +194,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async logoutAll(
     @CurrentUser() user: AccessTokenPayload,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<{ message: string; revokedSessions: number }> {
     const count = await revokeAllUserTokens(user.userId);
+
+    // این دستگاه هم جزو «همه» است؛ بدون این، کوکیِ باطل‌شده می‌ماند و
+    // اولین تمدید بی‌دلیل یک درخواست شکست‌خورده می‌شود
+    clearRefreshCookie(response);
+
     return { message: "از همه‌ی دستگاه‌ها خارج شدید.", revokedSessions: count };
   }
 

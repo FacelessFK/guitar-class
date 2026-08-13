@@ -61,6 +61,17 @@ function buildUrl(path: string, query?: ApiRequest["query"]): string {
 async function send(url: string, request: ApiRequest, token: string | null) {
   return fetch(url, {
     method: request.method ?? "GET",
+    /**
+     * لازم است تا `Set-Cookie` پاسخِ ورود پذیرفته شود.
+     *
+     * بدون این، `otp/verify` موفق می‌شود ولی مرورگر کوکی تازه‌سازی را
+     * دور می‌ریزد و نشست با اولین رفرشِ صفحه می‌پرد — خرابی‌ای که هیچ
+     * خطایی نمی‌دهد.
+     *
+     * روی بقیه‌ی درخواست‌ها بی‌اثر است: کوکی `path=/api/auth` دارد، پس
+     * مرورگر آن را برای رزرو و پرداخت و آپلود اصلاً نمی‌فرستد.
+     */
+    credentials: "include",
     headers: {
       ...(request.body === undefined ? {} : { "content-type": "application/json" }),
       ...(token ? { authorization: `Bearer ${token}` } : {}),

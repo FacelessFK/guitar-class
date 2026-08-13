@@ -23,6 +23,8 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   INVALID_CODE: HttpStatus.UNAUTHORIZED,
   NO_ACTIVE_CODE: HttpStatus.UNAUTHORIZED,
   INVALID_REFRESH_TOKEN: HttpStatus.UNAUTHORIZED,
+  // کوکی تازه‌سازی اصلاً نیامده — از نظر کاربر همان «نشست تمام شد» است
+  NO_REFRESH_TOKEN: HttpStatus.UNAUTHORIZED,
   ACCOUNT_SUSPENDED: HttpStatus.FORBIDDEN,
   ACCOUNT_UNAVAILABLE: HttpStatus.FORBIDDEN,
 };

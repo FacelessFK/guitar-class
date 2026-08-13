@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "../db/client.js";
 import { refreshTokens } from "../db/schema/index.js";
+import { redis } from "../redis/client.js";
 
 /**
  * توکن‌های نشست.
@@ -131,7 +132,12 @@ export async function rotateRefreshToken(
     .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt)))
     .limit(1);
 
-  if (!existing || existing.expiresAt.getTime() <= Date.now()) {
+  // توکن یا وجود ندارد یا همین لحظه مصرف شده — شاید توسط تب دیگری
+  if (!existing) {
+    return replayRotation(tokenHash);
+  }
+
+  if (existing.expiresAt.getTime() <= Date.now()) {
     return null;
   }
 
@@ -143,16 +149,80 @@ export async function rotateRefreshToken(
 
   // اگر صفر ردیف برگشت یعنی درخواست هم‌زمان دیگری زودتر مصرفش کرده
   if (revoked.length === 0) {
-    return null;
+    return replayRotation(tokenHash);
   }
 
   const next = await issueRefreshToken(existing.userId, userAgent);
 
-  return {
+  const rotated: RotatedTokens = {
     userId: existing.userId,
     refreshToken: next.token,
     refreshExpiresAt: next.expiresAt,
   };
+
+  await rememberRotation(tokenHash, rotated);
+
+  return rotated;
+}
+
+/**
+ * پنجره‌ی کوتاهی که یک توکنِ مصرف‌شده، **همان** جانشین قبلی‌اش را
+ * برمی‌گرداند.
+ *
+ * چرخش توکن با چند تب ذاتاً ناسازگار است: دو تب که با هم تمدید می‌کنند
+ * یک توکن را می‌فرستند، یکی برنده می‌شود و دیگری با توکنِ همین حالا
+ * باطل‌شده می‌ماند — و کاربر بی‌هیچ دلیلی از هر دو تب بیرون می‌افتد.
+ * حالا با کوکی، هر دو تب یک کوکی مشترک دارند و این برخورد **محتمل‌تر**
+ * است، نه کمتر.
+ *
+ * جانشین برای چند ثانیه نگه داشته می‌شود و به تلاش دوم همان مقدار داده
+ * می‌شود. یعنی هر توکن هنوز دقیقاً **یک** جانشین دارد — برخلاف راه
+ * ساده‌تر که به هر تلاش یک توکن تازه می‌داد و با N تب، N نشستِ معتبر
+ * می‌ساخت که هیچ‌کدام مالک مشخصی ندارند.
+ *
+ * ⚠️ بهایش این است که توکن چند ثانیه به شکل خام در ردیس می‌نشیند و
+ * بازپخشِ یک توکنِ دزدیده‌شده در همین پنجره کار می‌کند. پنجره عمداً
+ * کوتاه است، و آنچه مهاجم به دست می‌آورد دقیقاً همان توکنی است که
+ * کاربر هم دارد — نه یک نشست اضافه. تشخیص استفاده‌ی دوباره پس از این
+ * چند ثانیه سر جای خودش است.
+ */
+const ROTATION_REPLAY_SECONDS = 20;
+
+const replayKey = (tokenHash: string): string => `auth:rotated:${tokenHash}`;
+
+async function rememberRotation(tokenHash: string, rotated: RotatedTokens): Promise<void> {
+  await redis.set(
+    replayKey(tokenHash),
+    JSON.stringify({
+      userId: rotated.userId,
+      refreshToken: rotated.refreshToken,
+      refreshExpiresAt: rotated.refreshExpiresAt.toISOString(),
+    }),
+    "EX",
+    ROTATION_REPLAY_SECONDS,
+  );
+}
+
+async function replayRotation(tokenHash: string): Promise<RotatedTokens | null> {
+  const stored = await redis.get(replayKey(tokenHash));
+  if (!stored) return null;
+
+  try {
+    const parsed = JSON.parse(stored) as {
+      userId: string;
+      refreshToken: string;
+      refreshExpiresAt: string;
+    };
+
+    return {
+      userId: parsed.userId,
+      refreshToken: parsed.refreshToken,
+      refreshExpiresAt: new Date(parsed.refreshExpiresAt),
+    };
+  } catch {
+    // مقدار خراب در ردیس نباید ورود را بشکند؛ مثل نبودنش رفتار می‌کنیم
+    return null;
+  }
 }
 
 export async function revokeRefreshToken(token: string): Promise<boolean> {

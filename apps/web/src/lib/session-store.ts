@@ -9,16 +9,21 @@
  * دستی به آن پاس می‌داد و اولین جای فراموش‌شده یک درخواست بی‌توکن
  * می‌شد.
  *
- * ⚠️ **توکن تازه‌سازی در `localStorage` می‌ماند.**
- * انتخاب آگاهانه است، نه بی‌توجهی: API توکن‌ها را در بدنه‌ی JSON
- * برمی‌گرداند و کوکی `httpOnly` ست نمی‌کند، پس نگه‌داری‌شان کار کلاینت
- * است. بهایش این است که یک آسیب‌پذیری XSS می‌تواند نشست را بدزدد.
- * راه امن‌تر — کوکی `httpOnly` روی همین دامنه — به تغییر سمت API نیاز
- * دارد (`Set-Cookie` در `otp/verify` و `refresh`) و در فهرست بدهی‌ها
- * ثبت است. توکن دسترسی فقط در حافظه می‌ماند و هرگز نوشته نمی‌شود.
+ * **هیچ توکنی اینجا ذخیره نمی‌شود.**
+ * توکن تازه‌سازی در کوکی `httpOnly` است که API می‌نشاند و این کد اصلاً
+ * نمی‌بیندش — مرورگر خودش روی درخواست‌های `/auth` می‌فرستدش. توکن
+ * دسترسی فقط در حافظه‌ی همین ماژول می‌ماند و هرگز نوشته نمی‌شود، پس با
+ * بستن برگه می‌رود.
+ *
+ * پیش از این توکن تازه‌سازی در `localStorage` بود و یک آسیب‌پذیری XSS
+ * می‌توانست نشستِ سی‌روزه را بردارد و ببرد. حالا همان XSS حداکثر به یک
+ * توکن دسترسیِ ۱۵ دقیقه‌ای می‌رسد.
+ *
+ * ⚠️ هر درخواستی که به کوکی نیاز دارد باید `credentials: "include"`
+ * داشته باشد؛ `fetch` به‌صورت پیش‌فرض کوکی را بین مبداهای مختلف
+ * نمی‌فرستد. جا افتادنش به شکل «کاربر مدام بیرون می‌افتد» دیده می‌شود،
+ * نه به شکل خطا.
  */
-
-const STORAGE_KEY = "music.session";
 
 const apiBaseUrl = (): string =>
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
@@ -73,10 +78,9 @@ export function getSnapshot(): SessionState {
 /**
  * تصویر سمت سرور.
  *
- * `useSyncExternalStore` در رندر سرور هم صدا زده می‌شود و آنجا نه
- * `localStorage` هست نه توکنی. همیشه «در حال بارگذاری» برمی‌گردد تا
- * HTML سرور و اولین رندر کلاینت یکی باشند و ناهماهنگی هیدریشن پیش
- * نیاید.
+ * `useSyncExternalStore` در رندر سرور هم صدا زده می‌شود و آنجا هیچ
+ * توکنی در دست نیست. همیشه «در حال بارگذاری» برمی‌گردد تا HTML سرور و
+ * اولین رندر کلاینت یکی باشند و ناهماهنگی هیدریشن پیش نیاید.
  */
 const SERVER_STATE: SessionState = { status: "loading", user: null };
 export function getServerSnapshot(): SessionState {
@@ -87,42 +91,25 @@ export function getServerSnapshot(): SessionState {
 // توکن‌ها
 // ---------------------------------------------------------------------------
 
-function readRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null && "refreshToken" in parsed) {
-      const token = (parsed as { refreshToken: unknown }).refreshToken;
-      return typeof token === "string" ? token : null;
-    }
-    return null;
-  } catch {
-    // مقدار خراب در استوریج نباید کل اپ را بشکند؛ مثل نبودن نشست
-    // رفتار می‌کنیم و کاربر دوباره وارد می‌شود
-    return null;
-  }
-}
-
-function writeRefreshToken(token: string | null): void {
-  if (typeof window === "undefined") return;
-
-  if (token === null) {
-    window.localStorage.removeItem(STORAGE_KEY);
-    return;
-  }
-
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ refreshToken: token }));
-}
-
 export function getAccessToken(): string | null {
   return accessToken;
 }
 
+/**
+ * آیا ارزشش را دارد که تمدید را امتحان کنیم؟
+ *
+ * کوکی `httpOnly` است و از جاوااسکریپت خوانده نمی‌شود، پس برخلاف قبل
+ * نمی‌شود **قطعی** جواب داد. این تابع فقط می‌گوید «نشستی می‌شناسیم یا
+ * تازگی داشتیم» — و هزینه‌ی اشتباهش یک درخواست تمدیدِ ۴۰۱ است، نه
+ * چیزی بیشتر.
+ *
+ * بعد از یک تمدید ناموفق `false` می‌شود تا هر ۴۰۱ بعدی یک درخواست
+ * محکوم‌به‌شکست اضافه نکند.
+ */
+let mayHaveSession = true;
+
 export function hasRefreshToken(): boolean {
-  return readRefreshToken() !== null;
+  return mayHaveSession;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,14 +124,21 @@ export function hasRefreshToken(): boolean {
  */
 interface TokenResponse {
   accessToken: string;
-  refreshToken: string;
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+/**
+ * `credentials: "include"` روی هر سه‌ی این درخواست‌هاست.
+ *
+ * بدون آن مرورگر کوکی تازه‌سازی را نمی‌فرستد و `Set-Cookie` پاسخ را هم
+ * نمی‌پذیرد — یعنی ورود ظاهراً موفق می‌شود ولی نشست با اولین رفرشِ صفحه
+ * می‌پرد.
+ */
+async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${apiBaseUrl()}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    credentials: "include",
+    headers: body === undefined ? {} : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
 
   const payload: unknown = await response.json().catch(() => null);
@@ -178,32 +172,29 @@ export function refreshSession(): Promise<string | null> {
 }
 
 async function performRefresh(): Promise<string | null> {
-  const token = readRefreshToken();
-
-  if (!token) {
-    clearSession();
-    return null;
-  }
-
   try {
-    const result = await postJson<TokenResponse>("/auth/refresh", {
-      refreshToken: token,
-    });
+    // کوکی را مرورگر می‌فرستد؛ بدنه‌ای لازم نیست
+    const result = await postJson<TokenResponse>("/auth/refresh");
 
     accessToken = result.accessToken;
-    writeRefreshToken(result.refreshToken);
+    mayHaveSession = true;
     return result.accessToken;
   } catch {
-    // توکن تازه‌سازی باطل یا منقضی است — تنها پاسخ درست، ورود دوباره
+    // کوکی نیست، باطل شده، یا منقضی — تنها پاسخ درست، ورود دوباره
     clearSession();
     return null;
   }
 }
 
-/** پس از ورود موفق: توکن‌ها را می‌نشاند و پروفایل را می‌خواند. */
+/**
+ * پس از ورود موفق.
+ *
+ * توکن تازه‌سازی همراه پاسخِ همین ورود به شکل کوکی نشسته و کاری با آن
+ * نداریم؛ فقط توکن دسترسی را نگه می‌داریم.
+ */
 export async function startSession(tokens: TokenResponse): Promise<void> {
   accessToken = tokens.accessToken;
-  writeRefreshToken(tokens.refreshToken);
+  mayHaveSession = true;
   await loadUser();
 }
 
@@ -225,11 +216,15 @@ export async function bootstrapSession(): Promise<void> {
   if (bootstrapped) return;
   bootstrapped = true;
 
-  if (!readRefreshToken()) {
-    setState({ status: "anonymous", user: null });
-    return;
-  }
-
+  /**
+   * همیشه یک تمدید امتحان می‌شود، حتی برای بازدیدکننده‌ی واردنشده.
+   *
+   * پیش از این می‌شد از روی `localStorage` فهمید نشستی هست یا نه و
+   * درخواست را صرفه‌جویی کرد. کوکی `httpOnly` خوانده نمی‌شود، پس تنها
+   * راه پرسیدن، پرسیدن از API است. بهایش یک درخواستِ ۴۰۱ در اولین
+   * بارگذاری برای کاربر واردنشده است — و همان یک بار، چون
+   * `bootstrapped` جلوی تکرارش را می‌گیرد.
+   */
   const token = await refreshSession();
 
   if (!token) {
@@ -283,20 +278,17 @@ export async function loadUser(): Promise<void> {
  * محدود است.
  */
 export async function endSession(): Promise<void> {
-  const token = readRefreshToken();
-
   clearSession();
 
-  if (token) {
-    await postJson("/auth/logout", { refreshToken: token }).catch(() => undefined);
-  }
+  // پاک کردن کوکی فقط از سمت سرور ممکن است — `httpOnly` است
+  await postJson("/auth/logout").catch(() => undefined);
 }
 
 export function clearSession(): void {
   accessToken = null;
-  writeRefreshToken(null);
   // نشست تمام شده و وضعیت قطعی است؛ راه‌اندازی دوباره فقط یک تمدید
   // محکوم‌به‌شکست اضافه می‌کند
+  mayHaveSession = false;
   bootstrapped = true;
   setState({ status: "anonymous", user: null });
 }

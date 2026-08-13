@@ -118,7 +118,9 @@ function LoginForm() {
     setError(null);
 
     try {
-      const tokens = await apiFetch<{ accessToken: string; refreshToken: string }>(
+      // توکن تازه‌سازی در بدنه نمی‌آید؛ API آن را در کوکی httpOnly
+      // می‌نشاند و جاوااسکریپت اصلاً نمی‌بیندش
+      const tokens = await apiFetch<{ accessToken: string }>(
         "/auth/otp/verify",
         {
           method: "POST",

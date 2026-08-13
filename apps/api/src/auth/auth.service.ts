@@ -75,6 +75,8 @@ export async function requestLoginCode(
 export interface LoginResult {
   accessToken: string;
   refreshToken: string;
+  /** برای عمر کوکی — کنترلر توکن را در `Set-Cookie` می‌نشاند */
+  refreshExpiresAt: Date;
   expiresIn: number;
   user: {
     id: string;
@@ -158,6 +160,7 @@ export async function verifyLoginCode(input: VerifyCodeInput): Promise<LoginResu
   return {
     accessToken,
     refreshToken: refresh.token,
+    refreshExpiresAt: refresh.expiresAt,
     expiresIn: 15 * 60,
     user: {
       id: user.id,
@@ -254,6 +257,7 @@ export async function refreshSession(
   return {
     accessToken,
     refreshToken: rotated.refreshToken,
+    refreshExpiresAt: rotated.refreshExpiresAt,
     expiresIn: 15 * 60,
     user: {
       id: user.id,
