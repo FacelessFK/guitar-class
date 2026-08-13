@@ -5,6 +5,7 @@ import { db } from "../db/client.js";
 import { users } from "../db/schema/index.js";
 import { OTP_CONFIG, consumeOtp, requestOtp, verifyOtp } from "./otp.service.js";
 import { issueAccessToken, issueRefreshToken, rotateRefreshToken } from "./token.service.js";
+import { devLoginCodeEnabled } from "../config/env.js";
 import type { SmsSender } from "../notification/sms.port.js";
 
 export class AuthError extends Error {
@@ -21,7 +22,15 @@ export class AuthError extends Error {
 export interface RequestCodeResult {
   /** فاصله‌ی لازم تا امکان درخواست دوباره — فرانت شمارش معکوس نشان می‌دهد */
   retryAfterSeconds: number;
-  /** فقط در حالت توسعه پر می‌شود؛ در تولید همیشه `undefined` است */
+  /**
+   * کد ورود در پاسخ.
+   *
+   * فقط وقتی پر می‌شود که `ALLOW_DEV_LOGIN_CODE=true` **صریحاً** تنظیم
+   * شده باشد. تفصیلش در `config/env.ts` است؛ خلاصه‌اش این است که شرط
+   * قبلی (`NODE_ENV !== "production"`) پیش‌فرضش باز بود و یک متغیر
+   * فراموش‌شده در استقرار، این اندپوینتِ عمومی را به راه ورود به هر
+   * حسابی — از جمله ادمین — تبدیل می‌کرد.
+   */
   devCode?: string;
 }
 
@@ -57,8 +66,9 @@ export async function requestLoginCode(
 
   return {
     retryAfterSeconds: outcome.retryAfterSeconds,
-    // در توسعه کد در پاسخ هم می‌آید تا کار با API بدون خواندن لاگ ممکن باشد
-    devCode: process.env.NODE_ENV === "production" ? undefined : outcome.code,
+    // با پرچم صریح، کد در پاسخ هم می‌آید تا کار با API بدون خواندن لاگ
+    // ممکن باشد. بدون پرچم — که پیش‌فرض است — نمی‌آید.
+    devCode: devLoginCodeEnabled() ? outcome.code : undefined,
   };
 }
 

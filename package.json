@@ -13,6 +13,8 @@
     "dev:worker": "pnpm --filter @music/api dev:worker",
     "db:migrate": "pnpm --filter @music/api db:migrate",
     "db:seed": "pnpm --filter @music/api db:seed",
+    "db:seed:catalog": "pnpm --filter @music/api db:seed:catalog",
+    "db:admin": "pnpm --filter @music/api db:admin",
     "dev:web": "pnpm --filter @music/web dev",
     "db:studio": "pnpm --filter @music/api db:studio",
     "verify:storage": "pnpm --filter @music/api verify:storage",

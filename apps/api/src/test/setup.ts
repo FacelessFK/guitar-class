@@ -26,3 +26,13 @@ assertTestDatabase(databaseUrl);
 
 process.env.DATABASE_URL = databaseUrl;
 process.env.REDIS_URL = testRedisUrl();
+
+/**
+ * کد ورود در پاسخ `otp/request` — برای تست لازم است.
+ *
+ * تست‌های ورود کد را از پاسخ برمی‌دارند و بدون این پرچم باید ردیس را
+ * ماک می‌کردند. پرچم صریح است چون پیش‌فرضش بسته است؛ همین‌جا روشن
+ * کردنش عمدی و محدود به پروسه‌ی ویتست است — که خودش روی دیتابیس
+ * `_test` قفل شده.
+ */
+process.env.ALLOW_DEV_LOGIN_CODE = "true";

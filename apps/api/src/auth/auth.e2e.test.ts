@@ -95,6 +95,32 @@ describe("درخواست کد ورود", () => {
       .expect(200);
   });
 
+  it("بدون پرچم صریح، کد را در پاسخ برنمی‌گرداند", async () => {
+    /**
+     * همان در پشتی، از بیرون.
+     *
+     * تست‌های دیگر این پرچم را روشن می‌خواهند (`test/setup.ts`)، پس
+     * اینجا موقتاً خاموشش می‌کنیم. مهم است که این تست از **پاسخ HTTP**
+     * بپرسد نه از تابع: چیزی که به دست مهاجم می‌رسد همین بدنه است، و
+     * تستی که فقط `devLoginCodeEnabled()` را بسنجد، اگر روزی کنترلر
+     * کد را از جای دیگری در پاسخ بگذارد ساکت می‌ماند.
+     */
+    const previous = process.env.ALLOW_DEV_LOGIN_CODE;
+    delete process.env.ALLOW_DEV_LOGIN_CODE;
+
+    try {
+      const response = await request(server)
+        .post("/api/auth/otp/request")
+        .send({ phone: PHONE })
+        .expect(200);
+
+      expect(response.body.devCode).toBeUndefined();
+      expect(JSON.stringify(response.body)).not.toMatch(/\d{6}/);
+    } finally {
+      process.env.ALLOW_DEV_LOGIN_CODE = previous;
+    }
+  });
+
   it("درخواست دوباره‌ی زودهنگام را ۴۲۹ می‌دهد", async () => {
     await requestCode();
 

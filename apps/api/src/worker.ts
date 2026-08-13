@@ -11,6 +11,7 @@ import {
 } from "./queue/queues.js";
 import { createMaintenanceWorker } from "./queue/worker.js";
 import { EXPIRE_HOLDS_INTERVAL_MS } from "./queue/maintenance.job.js";
+import { assertEnvironment } from "./config/env.js";
 
 /**
  * پروسه‌ی وُرکر — جدا از API.
@@ -21,6 +22,17 @@ import { EXPIRE_HOLDS_INTERVAL_MS } from "./queue/maintenance.job.js";
  */
 async function bootstrap(): Promise<void> {
   const logger = new Logger("Worker");
+
+  /**
+   * وُرکر همان بررسی API را می‌کند، نه کمتر.
+   *
+   * پروسه‌ی جداست و متغیرهایش را جدا می‌گیرد، پس می‌شود API را درست
+   * پیکربندی کرد و وُرکر را نه. جاروی یادآوری پیامک می‌فرستد و جاروی
+   * نگه‌داری از باکت پاک می‌کند — هر دو دقیقاً همان تنظیماتی را
+   * می‌خواهند که اینجا سنجیده می‌شود، و شکستشان بی‌صداست چون هیچ
+   * درخواستی پشتشان نیست.
+   */
+  assertEnvironment();
 
   await registerSchedulers();
   const worker = createMaintenanceWorker();

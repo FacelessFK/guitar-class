@@ -7,8 +7,19 @@ import { AppModule } from "./app.module.js";
 import { AuthExceptionFilter } from "./common/auth-exception.filter.js";
 import { DomainExceptionFilter } from "./common/domain-exception.filter.js";
 import { BigIntSerializationInterceptor } from "./common/serialization.interceptor.js";
+import { assertEnvironment } from "./config/env.js";
 
 async function bootstrap(): Promise<void> {
+  /**
+   * پیش از ساختن اپ.
+   *
+   * `NestFactory.create` ماژول‌ها را می‌سازد و کارخانه‌های پیامک، درگاه و
+   * ذخیره‌سازی همان‌جا اجرا می‌شوند — یعنی خطای «SMS_API_KEY نیست» در
+   * میان ردِ پشته‌ی تزریق وابستگی نست گم می‌شود. اینجا، پیامْ اولین و
+   * تنها چیزی است که در لاگ می‌آید.
+   */
+  assertEnvironment();
+
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
   app.setGlobalPrefix("api");
