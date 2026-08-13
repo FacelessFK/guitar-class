@@ -66,7 +66,7 @@ export default function AdminBookingsPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12">
-      <h1 className="text-2xl font-bold">رزروها</h1>
+      <h1 className="font-display text-2xl leading-snug">رزروها</h1>
 
       <div className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((filter) => (

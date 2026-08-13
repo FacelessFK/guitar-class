@@ -105,7 +105,7 @@ export default function AdminReviewsPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-12">
-      <h1 className="text-2xl font-bold">صف بررسی</h1>
+      <h1 className="font-display text-2xl leading-snug">صف بررسی</h1>
       <p className="mt-3 text-sm text-ink-muted">
         جلسه‌هایی که برگزار نشدند. هزینه‌ی «استاد حاضر نشد» خودکار به هنرجو
         برگشته است؛ آنچه اینجا می‌ماند تصمیم درباره‌ی خودِ استاد است.

@@ -69,7 +69,7 @@ export default function AdminPayoutsPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-12">
-      <h1 className="text-2xl font-bold">تسویه</h1>
+      <h1 className="font-display text-2xl leading-snug">تسویه</h1>
       <p className="mt-3 text-sm text-ink-muted">
         تسویه در این فاز دستی است. مبلغ را بیرون از سیستم منتقل کنید و بعد
         اینجا «پرداخت شد» بزنید. ثبت تسویه‌ی تازه از{" "}

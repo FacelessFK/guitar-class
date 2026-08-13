@@ -47,7 +47,7 @@ export default function SessionPage() {
 
       {booking ? (
         <header className="mt-4">
-          <h1 className="text-2xl font-bold">
+          <h1 className="font-display text-2xl leading-snug">
             {booking.instrumentName} با {booking.counterpartName}
           </h1>
           <p className="mt-2 text-sm text-ink-muted">

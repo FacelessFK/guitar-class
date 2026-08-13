@@ -78,7 +78,7 @@ export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">کلاس‌های من</h1>
+        <h1 className="font-display text-2xl leading-snug">کلاس‌های من</h1>
         <Link href="/dashboard/book" className="btn-primary">
           رزرو کلاس تازه
         </Link>

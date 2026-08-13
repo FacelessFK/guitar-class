@@ -239,7 +239,7 @@ function BookingFlow() {
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
-      <h1 className="text-2xl font-bold">رزرو کلاس</h1>
+      <h1 className="font-display text-2xl leading-snug">رزرو کلاس</h1>
 
       <Step number={1} title="ساز">
         {instruments === null ? (

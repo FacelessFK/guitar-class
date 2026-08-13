@@ -86,7 +86,7 @@ export default function AdminInstrumentsPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-12">
-      <h1 className="text-2xl font-bold">سازها</h1>
+      <h1 className="font-display text-2xl leading-snug">سازها</h1>
 
       {error ? <p className="alert-error mt-6">{error}</p> : null}
 

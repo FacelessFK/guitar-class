@@ -59,7 +59,7 @@ export default function AvailabilityPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
-      <h1 className="text-2xl font-bold">برنامه‌ی من</h1>
+      <h1 className="font-display text-2xl leading-snug">برنامه‌ی من</h1>
       <p className="mt-2 text-sm text-ink-muted">
         ساعت‌هایی که اینجا تعریف می‌کنید، همان ساعت‌هایی است که هنرجو می‌تواند
         رزرو کند. همه به وقت تهران است.
@@ -157,7 +157,10 @@ function WeeklyRules({
           بگیرد.
         </p>
       ) : (
-        <ul className="mt-4 space-y-2">
+        <>
+        <WeekShape rules={rules} />
+
+        <ul className="mt-6 space-y-2">
           {rules.map((rule) => (
             <li
               key={rule.id}
@@ -180,6 +183,7 @@ function WeeklyRules({
             </li>
           ))}
         </ul>
+        </>
       )}
 
       <form
@@ -215,6 +219,85 @@ function WeeklyRules({
         </button>
       </form>
     </section>
+  );
+}
+
+/**
+ * شکلِ هفته — نمای بصریِ همان قوانینی که پایین‌تر فهرست شده‌اند.
+ *
+ * فهرست می‌گوید «شنبه، ۱۶:۰۰ تا ۲۰:۰۰» و درست هم می‌گوید، ولی جوابِ
+ * سؤالی را که استاد واقعاً دارد نمی‌دهد: هفته‌ام چه شکلی است؟ کجا
+ * سنگین است و کجا خالی؟ اینجا **ارتفاع از طولِ بازه می‌آید**، پس یک
+ * بازه‌ی چهارساعته چهار برابرِ یک‌ساعته دیده می‌شود بدون اینکه عددی
+ * خوانده شود.
+ *
+ * `aria-hidden` است و عمداً: همین داده دقیقاً پایین‌تر به‌صورت متن و
+ * با دکمه‌ی حذف آمده، و آن فهرست سطحِ قابل‌استفاده است. تکرارش برای
+ * صفحه‌خوان فقط نویز است.
+ */
+function WeekShape({ rules }: { rules: ScheduleRule[] }) {
+  const dayStart = Math.min(...rules.map((rule) => rule.startMinute));
+  const dayEnd = Math.max(...rules.map((rule) => rule.endMinute));
+
+  /** به ساعتِ کامل گرد می‌شود تا خط‌های ساعت روی عدد گرد بیفتند */
+  const from = Math.floor(dayStart / 60) * 60;
+  const to = Math.ceil(dayEnd / 60) * 60;
+  const span = Math.max(60, to - from);
+
+  const pixelsPerMinute = 0.4;
+  const height = span * pixelsPerMinute;
+
+  const hours = Array.from(
+    { length: Math.floor(span / 60) + 1 },
+    (_, index) => from + index * 60,
+  );
+
+  return (
+    <div className="mt-4 flex gap-2" aria-hidden="true">
+      <div className="relative flex-none" style={{ height, width: "2.5rem" }}>
+        {hours.map((minute) => (
+          <span
+            key={minute}
+            className="tnum absolute text-[0.625rem] text-ink-muted"
+            style={{ top: (minute - from) * pixelsPerMinute - 6 }}
+          >
+            {faDigits(formatMinutes(minute))}
+          </span>
+        ))}
+      </div>
+
+      <div className="grid flex-1 grid-cols-7 gap-1">
+        {WEEKDAY_NAMES_FA.map((name, weekday) => (
+          <div key={name}>
+            <div className="relative rounded-sm bg-surface-sunken" style={{ height }}>
+              {hours.slice(1, -1).map((minute) => (
+                <span
+                  key={minute}
+                  className="absolute inset-x-0 h-px bg-border"
+                  style={{ top: (minute - from) * pixelsPerMinute }}
+                />
+              ))}
+
+              {rules
+                .filter((rule) => rule.weekday === weekday)
+                .map((rule) => (
+                  <span
+                    key={rule.id}
+                    /** همان زبانِ خانه‌های تخته‌ی رزرو، تا یک چیز خوانده شود */
+                    className="absolute inset-x-0 rounded-sm border border-accent-dim bg-accent-dim/40"
+                    style={{
+                      top: (rule.startMinute - from) * pixelsPerMinute,
+                      height: (rule.endMinute - rule.startMinute) * pixelsPerMinute,
+                    }}
+                  />
+                ))}
+            </div>
+
+            <p className="mt-1.5 text-center text-[0.625rem] text-ink-muted">{name}</p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

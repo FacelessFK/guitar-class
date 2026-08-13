@@ -30,7 +30,7 @@ export default function EarningsPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
-      <h1 className="text-2xl font-bold">درآمد</h1>
+      <h1 className="font-display text-2xl leading-snug">درآمد</h1>
 
       {error ? <p className="alert-error mt-6">{error}</p> : null}
 
@@ -89,9 +89,9 @@ export default function EarningsPage() {
                       درآمد قابل تشخیص باشد، حتی چاپ‌شده یا سیاه‌وسفید.
                     */}
                     <span
-                      className={
+                      className={`tnum ${
                         entry.net.startsWith("-") ? "text-ink-muted" : "font-medium"
-                      }
+                      }`}
                     >
                       {signedToman(entry.net)} تومان
                     </span>
@@ -116,10 +116,13 @@ function Total({
   emphasis?: boolean;
 }) {
   return (
-    <div className="card">
+    <div className={`card ${emphasis ? "border-accent" : ""}`}>
       <p className="text-sm text-ink-muted">{label}</p>
-      <p className={`mt-2 ${emphasis ? "text-xl font-bold" : "text-lg"}`}>
-        {signedToman(amount)} <span className="text-sm font-normal">تومان</span>
+      <p
+        className={`tnum mt-2 ${emphasis ? "text-2xl font-bold text-accent" : "text-lg"}`}
+      >
+        {signedToman(amount)}{" "}
+        <span className="text-sm font-normal text-ink-muted">تومان</span>
       </p>
     </div>
   );

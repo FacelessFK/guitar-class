@@ -26,19 +26,24 @@ export function AdminNav() {
 
   return (
     <nav className="border-b border-border">
-      <ul className="mx-auto flex max-w-5xl flex-wrap gap-6 px-5 text-sm">
+      {/**
+       * هشت تب روی موبایل در سه سطر می‌پیچید و نوار ناوبری را به یک
+       * بلوک تبدیل می‌کرد. حالا یک سطر می‌ماند و داخل خودش اسکرول
+       * می‌شود — همان رفتاری که سربرگ اصلی و پنل استاد هم دارند.
+       */}
+      <ul className="scroll-strip mx-auto flex max-w-5xl gap-6 px-5 text-sm">
         {TABS.map((tab) => {
           const active =
             tab.href === "/admin" ? pathname === "/admin" : pathname.startsWith(tab.href);
 
           return (
-            <li key={tab.href}>
+            <li key={tab.href} className="flex-none">
               <Link
                 href={tab.href}
                 className={
                   active
-                    ? "-mb-px block border-b-2 border-accent py-3 font-medium text-accent"
-                    : "block py-3 text-ink-muted"
+                    ? "-mb-px block border-b-2 border-accent py-3 font-medium whitespace-nowrap text-accent"
+                    : "block py-3 whitespace-nowrap text-ink-muted transition-colors hover:text-ink"
                 }
               >
                 {tab.label}

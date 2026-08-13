@@ -88,7 +88,7 @@ export default function AdminPostsPage() {
   return (
     <div className="mx-auto max-w-4xl px-5 py-12">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">بلاگ</h1>
+        <h1 className="font-display text-2xl leading-snug">بلاگ</h1>
         <Link href="/admin/posts/new" className="btn-primary">
           نوشته‌ی تازه
         </Link>

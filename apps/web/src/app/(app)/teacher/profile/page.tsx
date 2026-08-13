@@ -120,7 +120,7 @@ export default function TeacherProfilePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
-      <h1 className="text-2xl font-bold">پروفایل من</h1>
+      <h1 className="font-display text-2xl leading-snug">پروفایل من</h1>
       <p className="mt-3 text-sm text-ink-muted">
         این‌ها همان چیزهایی هستند که بازدیدکننده در صفحه‌ی عمومی شما می‌بیند.
       </p>

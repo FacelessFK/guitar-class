@@ -100,8 +100,8 @@ function RegisterForm() {
   }
 
   return (
-    <div className="w-full max-w-sm">
-      <h1 className="text-2xl font-bold">ساخت حساب</h1>
+    <div>
+      <h1 className="font-display text-2xl leading-snug">ساخت حساب</h1>
       <p className="mt-2 text-sm text-ink-muted">
         با شماره‌ی موبایل و یک رمز عبور ثبت‌نام کنید.
       </p>

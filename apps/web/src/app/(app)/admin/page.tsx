@@ -25,7 +25,7 @@ export default function AdminHomePage() {
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12">
-      <h1 className="text-2xl font-bold">نمای کلی</h1>
+      <h1 className="font-display text-2xl leading-snug">نمای کلی</h1>
 
       {error ? <p className="alert-error mt-6">{error}</p> : null}
 
@@ -84,8 +84,8 @@ function Stat({
   return (
     <div className="card">
       <p className="text-sm text-ink-muted">{label}</p>
-      <p className="mt-2 text-xl font-bold">{value}</p>
-      {hint ? <p className="mt-2 text-xs text-ink-muted">{hint}</p> : null}
+      <p className="tnum mt-2 text-2xl font-bold">{value}</p>
+      {hint ? <p className="mt-2 text-xs leading-6 text-ink-muted">{hint}</p> : null}
     </div>
   );
 }

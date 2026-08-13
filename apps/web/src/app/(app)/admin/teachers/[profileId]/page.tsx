@@ -76,7 +76,7 @@ export default function AdminTeacherPage() {
 
       <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">{teacher.fullName}</h1>
+          <h1 className="font-display text-2xl leading-snug">{teacher.fullName}</h1>
           <p className="mt-1 text-sm text-ink-muted">{teacher.headline}</p>
           <p className="mt-1 text-sm text-ink-muted" dir="ltr">
             {teacher.phone}

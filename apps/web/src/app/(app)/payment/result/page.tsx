@@ -89,7 +89,7 @@ function Outcome({ status }: { status: string | null }) {
     case "paid":
       return (
         <>
-          <h1 className="text-2xl font-bold">پرداخت انجام شد</h1>
+          <h1 className="font-display text-2xl leading-snug">پرداخت انجام شد</h1>
           <p className="mt-3 text-ink-muted">
             کلاس شما قطعی شد. یک روز و یک ساعت پیش از شروع، پیامک یادآوری
             می‌فرستیم.
@@ -100,7 +100,7 @@ function Outcome({ status }: { status: string | null }) {
     case "paid_unmatched":
       return (
         <>
-          <h1 className="text-2xl font-bold">پرداخت شد، ولی ساعت از دست رفت</h1>
+          <h1 className="font-display text-2xl leading-snug">پرداخت شد، ولی ساعت از دست رفت</h1>
           <p className="mt-3 text-ink-muted">
             مبلغ از حساب شما کم شد اما مهلت نگه‌داشتن آن ساعت دقیقاً در همان
             فاصله تمام شد و ساعت آزاد شد. این مبلغ به شما برگردانده می‌شود؛
@@ -112,7 +112,7 @@ function Outcome({ status }: { status: string | null }) {
     case "failed":
       return (
         <>
-          <h1 className="text-2xl font-bold">پرداخت ناموفق بود</h1>
+          <h1 className="font-display text-2xl leading-snug">پرداخت ناموفق بود</h1>
           <p className="mt-3 text-ink-muted">
             مبلغی از حساب شما کم نشده است. تا وقتی مهلت رزرو تمام نشده،
             می‌توانید از فهرست کلاس‌ها دوباره پرداخت کنید.
@@ -123,7 +123,7 @@ function Outcome({ status }: { status: string | null }) {
     default:
       return (
         <>
-          <h1 className="text-2xl font-bold">نتیجه‌ی پرداخت مشخص نشد</h1>
+          <h1 className="font-display text-2xl leading-snug">نتیجه‌ی پرداخت مشخص نشد</h1>
           <p className="mt-3 text-ink-muted">
             اگر مبلغی از حساب شما کم شده، تا ساعاتی دیگر به‌صورت خودکار
             برمی‌گردد. وضعیت رزرو را در فهرست کلاس‌ها ببینید.

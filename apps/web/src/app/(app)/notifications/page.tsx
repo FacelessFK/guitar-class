@@ -53,7 +53,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-12">
-      <h1 className="text-2xl font-bold">اعلان‌ها</h1>
+      <h1 className="font-display text-2xl leading-snug">اعلان‌ها</h1>
 
       {error ? <p className="alert-error mt-6">{error}</p> : null}
 

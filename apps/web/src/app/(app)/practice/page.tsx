@@ -48,7 +48,7 @@ export default function PracticePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
-      <h1 className="text-2xl font-bold">تمرین‌ها</h1>
+      <h1 className="font-display text-2xl leading-snug">تمرین‌ها</h1>
 
       {error ? <p className="alert-error mt-6">{error}</p> : null}
 

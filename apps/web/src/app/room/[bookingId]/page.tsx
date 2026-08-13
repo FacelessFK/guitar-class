@@ -136,7 +136,7 @@ function Checklist({
 
   return (
     <div className="mx-auto max-w-lg px-5 py-16">
-      <h1 className="text-2xl font-bold">پیش از ورود به کلاس</h1>
+      <h1 className="font-display text-2xl leading-snug">پیش از ورود به کلاس</h1>
 
       {booking ? (
         <p className="mt-2 text-sm text-ink-muted">
@@ -295,7 +295,7 @@ function Notice({
 }) {
   return (
     <div className="mx-auto max-w-lg px-5 py-16 text-center">
-      <h1 className="text-2xl font-bold">{title}</h1>
+      <h1 className="font-display text-2xl leading-snug">{title}</h1>
       <p className="mt-3 text-ink-muted">{body}</p>
 
       {booking ? (

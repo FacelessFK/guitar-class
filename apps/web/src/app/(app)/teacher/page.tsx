@@ -53,7 +53,7 @@ export default function TeacherHomePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
-      <h1 className="text-2xl font-bold">پنل استاد</h1>
+      <h1 className="font-display text-2xl leading-snug">پنل استاد</h1>
 
       {error ? <p className="alert-error mt-6">{error}</p> : null}
 

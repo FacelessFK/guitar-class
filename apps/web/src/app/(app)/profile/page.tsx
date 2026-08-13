@@ -69,7 +69,7 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-lg px-5 py-12">
-      <h1 className="text-2xl font-bold">پروفایل من</h1>
+      <h1 className="font-display text-2xl leading-snug">پروفایل من</h1>
 
       {error ? <p className="alert-error mt-6">{error}</p> : null}
       {saved && !error ? <p className="alert-info mt-6">ذخیره شد.</p> : null}

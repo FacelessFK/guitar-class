@@ -34,7 +34,7 @@ export default function BecomeTeacherPage() {
   if (user?.teacherProfileId) {
     return (
       <div className="mx-auto max-w-2xl px-5 py-12">
-        <h1 className="text-2xl font-bold">تدریس در پلتفرم</h1>
+        <h1 className="font-display text-2xl leading-snug">تدریس در پلتفرم</h1>
         <p className="alert-info mt-6">
           شما از قبل پروفایل استاد دارید. وضعیت و اطلاعاتش در پنل استاد است.
         </p>
@@ -67,7 +67,7 @@ export default function BecomeTeacherPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-5 py-12">
-      <h1 className="text-2xl font-bold">تدریس در پلتفرم</h1>
+      <h1 className="font-display text-2xl leading-snug">تدریس در پلتفرم</h1>
 
       <p className="mt-4 text-sm text-ink-muted">
         درخواستتان را ثبت کنید تا بررسی شود. پس از تأیید، قیمت و مدت کلاس با شما
