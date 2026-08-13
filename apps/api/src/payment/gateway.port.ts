@@ -131,6 +131,26 @@ const ZARINPAL_SANDBOX = "https://sandbox.zarinpal.com";
 const ZARINPAL_OK = 100;
 const ZARINPAL_ALREADY_VERIFIED = 101;
 
+/**
+ * کدهایی که **قطعاً** یعنی پرداخت انجام نشده.
+ *
+ * فهرست عمداً کوتاه و بسته است. هر کدی که اینجا نباشد «نمی‌دانم» حساب
+ * می‌شود و سفارش را `PENDING` می‌گذارد، چون اشتباه در این جهت قابل
+ * جبران است و در جهت دیگر نه.
+ *
+ * ⚠️ `-50` همان تله‌ای است که در توضیح کلاس آمده: اگر حساب پذیرندگی
+ * روی تومان تنظیم باشد و ما ریال بفرستیم، **هر** پرداختی این کد را
+ * می‌گیرد. پیامش صریح است تا کسی که لاگ را می‌خواند سراغ واحد مبلغ
+ * برود، نه دنبال اشکال در کارت کاربر.
+ */
+const DEFINITIVE_FAILURES: Readonly<Record<number, string>> = {
+  [-33]: "مبلغ تراکنش با مبلغ پرداخت‌شده همخوانی ندارد.",
+  [-50]: "مبلغ تأیید با مبلغ پرداخت‌شده یکی نیست — واحد مبلغ حساب پذیرندگی (ریال یا تومان) را بررسی کنید.",
+  [-51]: "پرداخت ناموفق بود یا کاربر آن را نیمه‌کاره رها کرد.",
+  [-53]: "این تراکنش متعلق به پذیرنده‌ی دیگری است.",
+  [-54]: "شناسه‌ی پرداخت نامعتبر است.",
+};
+
 interface ZarinpalEnvelope {
   data?: { code?: number; authority?: string; ref_id?: number; card_pan?: string } | unknown[];
   errors?: { code?: number; message?: string } | unknown[];
@@ -160,19 +180,43 @@ export class ZarinpalGateway implements PaymentGateway {
     this.baseUrl = sandbox ? ZARINPAL_SANDBOX : ZARINPAL_LIVE;
   }
 
+  /**
+   * پاسخ خوانده می‌شود حتی وقتی کد HTTP خطاست.
+   *
+   * زرین‌پال خطاهای دامنه‌ای را با کد ۴۰۰ **و** بدنه‌ی JSON برمی‌گرداند و
+   * علت واقعی فقط در همان بدنه است. بررسی `response.ok` پیش از خواندن
+   * بدنه، «مبلغ نمی‌خواند» و «کاربر پرداخت را رها کرد» را به یک خطای
+   * بی‌شکلِ «۴۰۰» تبدیل می‌کرد.
+   *
+   * فقط دو چیز اینجا پرتاب می‌شود و هر دو یعنی «نمی‌دانیم چه شد»:
+   * نرسیدن به درگاه، و پاسخی که JSON نیست. تفاوتشان با «قطعاً ناموفق»
+   * در `verify` حیاتی است — `settleOrder` برای اولی سفارش را دست‌نخورده
+   * `PENDING` می‌گذارد و برای دومی `FAILED` می‌کند.
+   */
   private async post(path: string, body: Record<string, unknown>): Promise<ZarinpalEnvelope> {
-    const response = await fetch(`${this.baseUrl}/pg/v4/payment/${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ merchant_id: this.merchantId, ...body }),
-      signal: AbortSignal.timeout(20_000),
-    });
+    let response: Response;
 
-    if (!response.ok) {
-      throw new Error(`درگاه زرین‌پال با کد ${response.status} پاسخ داد.`);
+    try {
+      response = await fetch(`${this.baseUrl}/pg/v4/payment/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ merchant_id: this.merchantId, ...body }),
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`ارتباط با زرین‌پال برقرار نشد (${path}): ${reason}`);
     }
 
-    return (await response.json()) as ZarinpalEnvelope;
+    const envelope = (await response.json().catch(() => null)) as ZarinpalEnvelope | null;
+
+    if (!envelope) {
+      throw new Error(
+        `پاسخ زرین‌پال قابل خواندن نبود (${path}، HTTP ${response.status}).`,
+      );
+    }
+
+    return envelope;
   }
 
   /** `data` وقتی خطا باشد آرایه‌ی خالی برمی‌گردد، نه شیء. */
@@ -183,6 +227,18 @@ export class ZarinpalGateway implements PaymentGateway {
     card_pan?: string;
   } {
     return Array.isArray(envelope.data) ? {} : (envelope.data ?? {});
+  }
+
+  /**
+   * کد خطا در `errors` می‌نشیند، نه در `data`.
+   *
+   * وقتی درخواست خطا بخورد، `data` آرایه‌ی خالی است و هرچه هست در
+   * `errors` است. نگاه کردن فقط به `data.code` یعنی هیچ خطایی هرگز
+   * تشخیص داده نشود و همه به یک «پاسخ نامشخص» تبدیل شوند.
+   */
+  private static errorCode(envelope: ZarinpalEnvelope): number | undefined {
+    if (Array.isArray(envelope.errors)) return undefined;
+    return envelope.errors?.code;
   }
 
   private static errorMessage(envelope: ZarinpalEnvelope): string {
@@ -199,8 +255,21 @@ export class ZarinpalGateway implements PaymentGateway {
     });
 
     const data = ZarinpalGateway.payload(envelope);
+
+    /**
+     * اینجا پرتاب کردن بی‌خطر است — هنوز هیچ پولی جابه‌جا نشده.
+     *
+     * کد خطا در پیام می‌آید چون خطاهای این مرحله تقریباً همیشه
+     * پیکربندی‌اند (`-9` اعتبارسنجی، `-10` ترمینال نامعتبر، `-11`
+     * ترمینال غیرفعال) و بدون کد، پیام فارسی درگاه به تنهایی معلوم
+     * نمی‌کند کدام‌یک.
+     */
     if (data.code !== ZARINPAL_OK || !data.authority) {
-      throw new Error(ZarinpalGateway.errorMessage(envelope));
+      const code = data.code ?? ZarinpalGateway.errorCode(envelope);
+      throw new Error(
+        `زرین‌پال درخواست پرداخت را نپذیرفت (${code ?? "?"}): ` +
+          ZarinpalGateway.errorMessage(envelope),
+      );
     }
 
     return {
@@ -209,6 +278,20 @@ export class ZarinpalGateway implements PaymentGateway {
     };
   }
 
+  /**
+   * تأیید — تنها جایی که اشتباهش پول است.
+   *
+   * `FAILED` برگرداندن یعنی `settleOrder` سفارش را برای همیشه ناموفق
+   * علامت می‌زند. پس فقط وقتی برمی‌گردد که زرین‌پال **صریحاً** گفته
+   * باشد پرداخت انجام نشده. هر چیز دیگری — کد ناشناخته، پاسخ بی‌شکل،
+   * `ref_id` غایب — پرتاب می‌شود تا سفارش `PENDING` بماند و قابل بررسی
+   * باشد.
+   *
+   * جهت این پیش‌فرض عمدی است: سفارشِ `PENDING` که باید ناموفق می‌شد،
+   * خودش با جاروی مهلت پاک می‌شود؛ ولی سفارشِ `FAILED` که واقعاً پرداخت
+   * شده بود، یعنی پول گرفته شده و جلسه‌ای قطعی نشده — و هیچ چیزی در
+   * سیستم دیگر سراغش نمی‌رود.
+   */
   async verify(input: VerificationInput): Promise<VerificationResult> {
     const envelope = await this.post("verify.json", {
       amount: Number(input.amount),
@@ -229,9 +312,25 @@ export class ZarinpalGateway implements PaymentGateway {
       return { status: "ALREADY_VERIFIED", refId: String(data.ref_id) };
     }
 
-    const reason = ZarinpalGateway.errorMessage(envelope);
-    this.logger.warn(`تأیید پرداخت ${input.authority} ناموفق بود: ${reason}`);
-    return { status: "FAILED", reason };
+    const code = ZarinpalGateway.errorCode(envelope);
+    const reason = code !== undefined ? DEFINITIVE_FAILURES[code] : undefined;
+
+    if (reason) {
+      this.logger.warn(`تأیید پرداخت ${input.authority} ناموفق بود (${code}): ${reason}`);
+      return { status: "FAILED", reason };
+    }
+
+    /**
+     * اینجا یعنی نمی‌دانیم.
+     *
+     * شامل حالتی که کد ۱۰۰ آمده ولی `ref_id` نیامده — که «موفق» است
+     * بدون شناسه‌ای برای ثبت، و بدترین چیزی که می‌شود کرد این است که
+     * ناموفق حسابش کنیم.
+     */
+    throw new Error(
+      `پاسخ زرین‌پال برای ${input.authority} شناخته نشد ` +
+        `(code=${data.code ?? code ?? "?"}): ${ZarinpalGateway.errorMessage(envelope)}`,
+    );
   }
 }
 
