@@ -26,3 +26,7 @@ apps/api/prisma/*.db-journal
 
 # فایل‌های موقت Playwright MCP
 .playwright-mcp/
+
+# ابزار محلی — پیکربندی و قفل مهارت‌ها، مال ماشین است نه مخزن
+.claude/
+skills-lock.json
