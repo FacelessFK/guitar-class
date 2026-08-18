@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { errorMessage } from "@/lib/api-client";
@@ -9,6 +10,7 @@ import {
   type TeacherProfile,
 } from "@/lib/app-api";
 import { formatDuration, formatToman } from "@/lib/format";
+import { useSession } from "@/lib/session";
 
 /**
  * پروفایل استاد — همان چیزی که در صفحه‌ی عمومی دیده می‌شود.
@@ -23,6 +25,15 @@ import { formatDuration, formatToman } from "@/lib/format";
  * چه چیزی به اسمش فروخته می‌شود.
  */
 export default function TeacherProfilePage() {
+  /**
+   * عکس روی `users` می‌نشیند، نه روی پروفایل استاد.
+   *
+   * برای همین در `TeacherProfile` نیست و از نشست خوانده می‌شود: عکس
+   * پروفایلِ هر کاربر است و استاد هم آن را در همان `/profile` عوض
+   * می‌کند. دو تا کردنش یعنی دو عکس که می‌توانند با هم نخوانند.
+   */
+  const { user } = useSession();
+
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
   const [form, setForm] = useState({
     headline: "",
@@ -124,6 +135,24 @@ export default function TeacherProfilePage() {
       <p className="mt-3 text-sm text-ink-muted">
         این‌ها همان چیزهایی هستند که بازدیدکننده در صفحه‌ی عمومی شما می‌بیند.
       </p>
+
+      {/*
+        عکس در این فرم نیست ولی نبودنش اینجا اعلام می‌شود.
+
+        فرم، پروفایل *عمومی* استاد است و عکس هم دقیقاً همان‌جا دیده
+        می‌شود — در کاتالوگ کنار قیمت، و بالای صفحه‌ی شخصی. تنها جایی که
+        عوض می‌شود `/profile` است؛ استادی که فقط این صفحه را می‌بیند
+        هیچ‌وقت نمی‌فهمد جای عکسش خالی است.
+      */}
+      {user && !user.avatarUrl ? (
+        <p className="alert-info mt-6">
+          هنوز عکس پروفایل ندارید. در کاتالوگ و صفحه‌ی عمومی‌تان به‌جای عکس،
+          حرف اول نامتان نشان داده می‌شود.{" "}
+          <Link href="/profile" className="font-medium text-accent-strong underline">
+            افزودن عکس
+          </Link>
+        </p>
+      ) : null}
 
       {error ? <p className="alert-error mt-6">{error}</p> : null}
       {saved ? <p className="alert-info mt-6">تغییرات ذخیره شد.</p> : null}

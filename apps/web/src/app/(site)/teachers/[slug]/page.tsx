@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BUSINESS_RULES } from "@music/shared";
 
+import { Avatar } from "@/components/avatar";
 import { TeacherAvailability } from "@/components/teacher-availability";
 import {
   getTeachers,
@@ -227,18 +228,13 @@ function Hero({ teacher, instruments }: { teacher: Teacher; instruments: string[
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-surface-muted">
       <div className="grid gap-6 sm:grid-cols-[13rem_1fr] sm:items-center">
-        {teacher.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- نشانی از باکت می‌آید و دامنه‌اش با محیط عوض می‌شود
-          <img
-            src={teacher.avatarUrl}
-            alt={`عکس ${teacher.fullName}`}
-            className="h-full min-h-56 w-full object-cover"
-          />
-        ) : (
-          <div className="flex min-h-56 items-center justify-center bg-accent-soft text-sm text-ink-muted">
-            بدون عکس
-          </div>
-        )}
+        <Avatar
+          name={teacher.fullName}
+          url={teacher.avatarUrl}
+          alt={`عکس ${teacher.fullName}`}
+          className="h-full min-h-56 w-full"
+          textClassName="text-5xl"
+        />
 
         <div className="px-6 pb-6 sm:px-0 sm:pe-6 sm:pb-0">
           <h1 className="text-3xl font-bold">{teacher.fullName}</h1>

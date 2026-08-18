@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+import { Avatar } from "@/components/avatar";
 import { NotificationBell } from "@/components/notification-bell";
 import { useSession } from "@/lib/session";
 
@@ -85,14 +86,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   : "flex items-center gap-2 text-ink-muted"
               }
             >
-              {user?.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- نشانی از باکت می‌آید و دامنه‌اش با محیط عوض می‌شود؛ next/image پیکربندی دامنه می‌خواهد
-                <img
-                  src={user.avatarUrl}
-                  alt=""
-                  className="size-7 rounded-full object-cover"
-                />
-              ) : null}
+              <Avatar
+                name={user?.fullName ?? ""}
+                url={user?.avatarUrl}
+                className="size-7 shrink-0 rounded-full"
+                textClassName="text-xs"
+              />
               {user?.fullName}
             </Link>
             <button

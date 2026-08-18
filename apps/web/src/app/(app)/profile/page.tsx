@@ -2,8 +2,10 @@
 
 import { useRef, useState } from "react";
 
+import { Avatar } from "@/components/avatar";
 import { errorMessage } from "@/lib/api-client";
 import { updateOwnProfile, uploadFile } from "@/lib/app-api";
+import { prepareAvatar } from "@/lib/image";
 import { useSession } from "@/lib/session";
 import { loadUser } from "@/lib/session-store";
 
@@ -53,7 +55,9 @@ export default function ProfilePage() {
     setSaved(false);
 
     try {
-      const objectKey = await uploadFile(file, "AVATAR");
+      // عکس پیش از رفتن کوچک می‌شود، نه بعدش: چیزی که آپلود می‌شود
+      // همان چیزی است که کاربر منتظرش می‌ماند
+      const objectKey = await uploadFile(await prepareAvatar(file), "AVATAR");
       await updateOwnProfile({ avatarObjectKey: objectKey });
       await loadUser();
       setSaved(true);
@@ -78,18 +82,13 @@ export default function ProfilePage() {
         <h2 className="font-medium">عکس پروفایل</h2>
 
         <div className="mt-4 flex items-center gap-4">
-          {user?.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- نشانی از باکت می‌آید و دامنه‌اش با محیط عوض می‌شود
-            <img
-              src={user.avatarUrl}
-              alt="عکس پروفایل شما"
-              className="size-16 rounded-full object-cover"
-            />
-          ) : (
-            <div className="flex size-16 items-center justify-center rounded-full bg-surface-muted text-sm text-ink-muted">
-              بدون عکس
-            </div>
-          )}
+          <Avatar
+            name={user?.fullName ?? ""}
+            url={user?.avatarUrl}
+            alt="عکس پروفایل شما"
+            className="size-16 shrink-0 rounded-full"
+            textClassName="text-lg"
+          />
 
           <div className="flex-1">
             <input
@@ -102,7 +101,8 @@ export default function ProfilePage() {
               onChange={(event) => void handleAvatar(event)}
             />
             <p className="mt-2 text-xs text-ink-muted">
-              تصویر، حداکثر ۵ مگابایت.
+              تصویر مربع بهتر است؛ وسط عکس به‌صورت خودکار برش می‌خورد و
+              کوچک می‌شود.
             </p>
           </div>
         </div>
