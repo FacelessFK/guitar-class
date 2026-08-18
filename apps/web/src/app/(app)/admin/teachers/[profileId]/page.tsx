@@ -673,7 +673,7 @@ function ProfileSection({ teacher }: { teacher: AdminTeacherDetail }) {
                 href={teacher.introVideoUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="text-accent underline"
+                className="text-accent-strong underline"
               >
                 {teacher.introVideoUrl}
               </a>

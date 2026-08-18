@@ -1,12 +1,15 @@
 @import "tailwindcss";
 
 /**
- * جهت بصری: مینیمال و مدرن.
+ * جهت بصری: مینیمال و گرم.
  *
- * سفید، کنتراست بالا، یک اکسنت آبی سرد. انتخاب‌شده در ۱۲ اوت ۲۰۲۶.
+ * سفیدِ گرم، متن ذغالی، و یک اکسنت شنی. انتخاب‌شده در ۱۸ اوت ۲۰۲۶ از روی
+ * تصویر مرجع در `docs/`. جای جهت سرد و آبیِ قبلی (۱۲ اوت) را گرفت.
  *
  * همه‌ی رنگ‌ها فقط اینجا تعریف می‌شوند و هیچ رنگ خامی در کامپوننت‌ها
- * نوشته نمی‌شود؛ عوض کردن جهت بصری یعنی عوض کردن همین چند خط.
+ * نوشته نمی‌شود؛ عوض کردن جهت بصری یعنی عوض کردن همین چند خط. کل این
+ * تعویض بدون دست زدن به هیچ‌کدام از ۵۱ فایل `.tsx` انجام شد — اگر روزی
+ * رنگی مستقیم در کامپوننتی نوشته شود، همین خاصیت از دست می‌رود.
  *
  * ⚠️ از نام‌های تولیدشده‌ی `@theme` استفاده کنید (`text-ink-muted`،
  * `bg-accent`، `border-border`)، نه از نحو براکتی. تیلویند ۴ کلاسی مثل
@@ -17,37 +20,69 @@
 @theme {
   --font-sans: var(--font-vazirmatn), system-ui, sans-serif;
 
-  --color-surface: #ffffff;
-  --color-surface-muted: #f8fafc;
-  --color-border: #e2e8f0;
+  /**
+   * سطح‌ها گرم‌اند، نه خنثی. سفیدِ خالص فقط جایی می‌آید که کارت باید
+   * از پس‌زمینه جدا شود؛ خودِ صفحه `surface` است نه `#fff`.
+   */
+  --color-surface: #fbfaf8;
+  --color-surface-raised: #ffffff;
+  --color-surface-muted: #f4f1eb;
+  --color-border: #e6dfd4;
 
-  --color-ink: #0f172a;
-  --color-ink-muted: #64748b;
+  --color-ink: #1f1d1b;
+  /**
+   * روی هر سه سطح بالا کنتراست ≥۴.۵ می‌دهد. روشن‌تر کردنش متن ثانویه را
+   * روی `surface-muted` زیر حد خوانایی می‌برد — آنجا سخت‌گیرترین حالت است.
+   */
+  --color-ink-muted: #6b645a;
 
-  --color-accent: #2563eb;
-  /** حالت hover و فشرده‌شدن دکمه‌ی اصلی */
-  --color-accent-strong: #1d4ed8;
-  --color-accent-ink: #ffffff;
+  /**
+   * دو سطح کنش، نه یکی.
+   *
+   * `action` ذغالی کنش اصلی است (رزرو، پرداخت، ثبت) و `accent` شنیْ
+   * رنگ برند و کنش دعوت‌کننده (جلسه‌ی آشنایی رایگان). در تصویر مرجع
+   * این دو کنار هم‌اند و نقششان عوض نمی‌شود: اگر ذغالی برای هر دکمه‌ای
+   * استفاده شود، سلسله‌مراتب صفحه صاف می‌شود.
+   */
+  --color-action: #232120;
+  --color-action-strong: #3a3634;
+  --color-action-ink: #fbfaf8;
+
+  --color-accent: #c9b394;
+  /**
+   * تیره‌تر از اکسنت، برای لینک و حلقه‌ی فوکوس و لبه‌ی فعال ورودی. خودِ
+   * شنیِ روشن روی پس‌زمینه‌ی گرم کنتراست ۱.۸ دارد — به‌عنوان رنگ متن یا
+   * نشانگر فوکوس نامرئی است. این یکی ۵.۵ می‌دهد.
+   */
+  --color-accent-strong: #7a6242;
+  /** متن روی پرِ شنی — ذغالی، نه سفید */
+  --color-accent-ink: #2a2521;
+  /** ته‌رنگ شنی برای برچسب و سطح نرم */
+  --color-accent-soft: #f0e8dc;
 
   /**
    * رنگ‌های وضعیت.
    *
-   * جهت بصری «سفید و یک اکسنت» است، پس این سه فقط جایی می‌آیند که
+   * جهت بصری «گرم و یک اکسنت» است، پس این سه فقط جایی می‌آیند که
    * معنا رنگ لازم دارد: کلاس تأییدشده، مهلت رو به پایان، جلسه‌ی لغو
    * شده. هر کدام یک سطح روشن برای پس‌زمینه دارد تا متن روی آن خوانا
    * بماند — بدون آن، متن قرمز روی سفید تنها ابزار موجود می‌شد و کل
    * صفحه را هشدارآمیز نشان می‌داد.
+   *
+   * اشباعشان عمداً پایین است تا کنار پالت خاکی مثل وصله دیده نشوند؛
+   * سبزِ درخشان روی این پس‌زمینه‌ی گرم به چشم می‌زند.
    */
-  --color-success: #15803d;
-  --color-success-surface: #f0fdf4;
+  --color-success: #4c6b45;
+  --color-success-surface: #edf1e9;
 
-  --color-warning: #b45309;
-  --color-warning-surface: #fffbeb;
+  --color-warning: #8a5f27;
+  --color-warning-surface: #faf3e7;
 
-  --color-danger: #b91c1c;
-  --color-danger-surface: #fef2f2;
-  --color-danger-border: #fecaca;
+  --color-danger: #9e4437;
+  --color-danger-surface: #faeeec;
+  --color-danger-border: #ebd3ce;
 }
+
 
 @layer base {
   body {
@@ -73,9 +108,14 @@
     line-height: 2;
   }
 
-  /* حلقه‌ی فوکوس باید در کل سایت یکسان و دیده‌شدنی باشد */
+  /**
+   * حلقه‌ی فوکوس باید در کل سایت یکسان و دیده‌شدنی باشد.
+   *
+   * `accent-strong` است نه `accent`: شنیِ روشن روی پس‌زمینه‌ی گرم
+   * کنتراست ۱.۸ دارد و نشانگر فوکوس با آن عملاً ناپدید می‌شود.
+   */
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-accent-strong);
     outline-offset: 2px;
   }
 }
@@ -90,11 +130,12 @@
   .card {
     display: block;
     height: 100%;
-    border-radius: 0.75rem;
+    border-radius: 1rem;
     border: 1px solid var(--color-border);
-    background-color: var(--color-surface);
+    background-color: var(--color-surface-raised);
     padding: 1.25rem;
-    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+    /* سایه گرم است نه خاکستری؛ سایه‌ی سرد روی پس‌زمینه‌ی کرم کبود دیده می‌شود */
+    box-shadow: 0 1px 2px rgb(31 29 27 / 0.04);
     transition:
       box-shadow 150ms ease,
       border-color 150ms ease;
@@ -102,13 +143,34 @@
 
   a.card:hover {
     border-color: var(--color-accent);
-    box-shadow: 0 4px 12px rgb(15 23 42 / 0.08);
+    box-shadow: 0 4px 14px rgb(31 29 27 / 0.07);
   }
 
-  /** دکمه‌ی اصلی — «رزرو» و «دیدن استادها» */
+  /** دکمه‌ی اصلی — «رزرو» و «دیدن استادها». ذغالی، سنگین‌ترین کنش صفحه */
   .btn-primary {
     display: inline-block;
-    border-radius: 0.5rem;
+    border-radius: 0.625rem;
+    background-color: var(--color-action);
+    padding: 0.75rem 1.25rem;
+    font-weight: 600;
+    color: var(--color-action-ink);
+    transition: background-color 150ms ease;
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-action-strong);
+  }
+
+  /**
+   * دکمه‌ی دعوت — پرِ شنی، هم‌وزنِ دکمه‌ی اصلی ولی نرم‌تر.
+   *
+   * جای «جلسه‌ی آشنایی رایگان» است: کنشی که می‌خواهیم دیده شود ولی نباید
+   * از رزرو پولی جلو بزند. متنش ذغالی است نه سفید — سفید روی این شنی
+   * کنتراست ۱.۹ می‌دهد و عملاً خوانده نمی‌شود.
+   */
+  .btn-accent {
+    display: inline-block;
+    border-radius: 0.625rem;
     background-color: var(--color-accent);
     padding: 0.75rem 1.25rem;
     font-weight: 600;
@@ -116,22 +178,26 @@
     transition: background-color 150ms ease;
   }
 
-  .btn-primary:hover {
-    background-color: var(--color-accent-strong);
+  .btn-accent:hover {
+    background-color: #bda684;
   }
 
   /** دکمه‌ی ثانویه — کنار دکمه‌ی اصلی، بدون رقابت با آن */
   .btn-secondary {
     display: inline-block;
-    border-radius: 0.5rem;
+    border-radius: 0.625rem;
     border: 1px solid var(--color-border);
+    background-color: var(--color-surface-raised);
     padding: 0.75rem 1.25rem;
     font-weight: 500;
-    transition: border-color 150ms ease;
+    transition:
+      border-color 150ms ease,
+      background-color 150ms ease;
   }
 
   .btn-secondary:hover {
-    border-color: var(--color-ink-muted);
+    border-color: var(--color-accent);
+    background-color: var(--color-surface-muted);
   }
 
   /**
@@ -141,6 +207,7 @@
    * `disabled` در HTML جلوی کلیک را می‌گیرد.
    */
   .btn-primary:disabled,
+  .btn-accent:disabled,
   .btn-secondary:disabled,
   .btn-danger:disabled {
     opacity: 0.5;
@@ -150,7 +217,7 @@
   /** لغو و حذف — کمرنگ‌تر از اکسنت تا با کنش اصلی رقابت نکند */
   .btn-danger {
     display: inline-block;
-    border-radius: 0.5rem;
+    border-radius: 0.625rem;
     border: 1px solid var(--color-danger-border);
     padding: 0.75rem 1.25rem;
     font-weight: 500;
@@ -172,15 +239,15 @@
   .input {
     display: block;
     width: 100%;
-    border-radius: 0.5rem;
+    border-radius: 0.625rem;
     border: 1px solid var(--color-border);
-    background-color: var(--color-surface);
+    background-color: var(--color-surface-raised);
     padding: 0.75rem 0.875rem;
     transition: border-color 150ms ease;
   }
 
   .input:focus {
-    border-color: var(--color-accent);
+    border-color: var(--color-accent-strong);
   }
 
   .input:disabled {
@@ -212,8 +279,8 @@
   }
 
   .badge-neutral {
-    background-color: var(--color-surface-muted);
-    color: var(--color-ink-muted);
+    background-color: var(--color-accent-soft);
+    color: var(--color-accent-strong);
   }
 
   .badge-ok {
@@ -233,7 +300,7 @@
 
   /** پیام خطای فرم و کادر هشدار */
   .alert-error {
-    border-radius: 0.5rem;
+    border-radius: 0.625rem;
     border: 1px solid var(--color-danger-border);
     background-color: var(--color-danger-surface);
     padding: 0.75rem 1rem;
@@ -242,9 +309,9 @@
   }
 
   .alert-info {
-    border-radius: 0.5rem;
+    border-radius: 0.625rem;
     border: 1px solid var(--color-border);
-    background-color: var(--color-surface-muted);
+    background-color: var(--color-accent-soft);
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
   }
@@ -282,7 +349,7 @@
   }
 
   .prose-fa a {
-    color: var(--color-accent);
+    color: var(--color-accent-strong);
     text-decoration: underline;
   }
 

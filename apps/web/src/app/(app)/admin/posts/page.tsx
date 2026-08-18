@@ -141,7 +141,7 @@ export default function AdminPostsPage() {
               <p className="mt-3 text-sm text-ink-muted">{post.excerpt}</p>
 
               <div className="mt-4 flex flex-wrap items-center gap-4 text-sm">
-                <Link href={`/admin/posts/${post.id}`} className="text-accent underline">
+                <Link href={`/admin/posts/${post.id}`} className="text-accent-strong underline">
                   ویرایش
                 </Link>
 

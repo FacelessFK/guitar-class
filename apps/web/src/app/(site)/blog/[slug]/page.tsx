@@ -103,7 +103,7 @@ export default async function BlogPostPage({ params }: PageProps) {
             می‌خواهید {post.instrumentName} یاد بگیرید؟{" "}
             <Link
               href={`/instruments/${post.instrumentSlug}`}
-              className="text-accent underline"
+              className="text-accent-strong underline"
             >
               کلاس آنلاین {post.instrumentName}
             </Link>{" "}
@@ -117,7 +117,7 @@ export default async function BlogPostPage({ params }: PageProps) {
             <ul className="mt-4 space-y-3">
               {related.map((item: PostSummary) => (
                 <li key={item.id}>
-                  <Link href={`/blog/${item.slug}`} className="text-accent underline">
+                  <Link href={`/blog/${item.slug}`} className="text-accent-strong underline">
                     {item.title}
                   </Link>
                 </li>

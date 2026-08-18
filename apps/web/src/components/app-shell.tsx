@@ -81,7 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               href="/profile"
               className={
                 pathname.startsWith("/profile")
-                  ? "flex items-center gap-2 font-medium text-accent"
+                  ? "flex items-center gap-2 font-medium text-accent-strong"
                   : "flex items-center gap-2 text-ink-muted"
               }
             >
@@ -136,7 +136,7 @@ function NavLink({
     <li>
       <Link
         href={href}
-        className={active ? "font-medium text-accent" : "text-ink-muted"}
+        className={active ? "font-medium text-accent-strong" : "text-ink-muted"}
       >
         {children}
       </Link>

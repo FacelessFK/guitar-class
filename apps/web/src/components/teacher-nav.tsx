@@ -32,7 +32,7 @@ export function TeacherNav() {
                 href={tab.href}
                 className={
                   active
-                    ? "-mb-px block border-b-2 border-accent py-3 font-medium text-accent"
+                    ? "-mb-px block border-b-2 border-accent py-3 font-medium text-accent-strong"
                     : "block py-3 text-ink-muted"
                 }
               >

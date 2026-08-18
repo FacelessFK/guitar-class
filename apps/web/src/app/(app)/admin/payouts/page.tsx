@@ -73,7 +73,7 @@ export default function AdminPayoutsPage() {
       <p className="mt-3 text-sm text-ink-muted">
         تسویه در این فاز دستی است. مبلغ را بیرون از سیستم منتقل کنید و بعد
         اینجا «پرداخت شد» بزنید. ثبت تسویه‌ی تازه از{" "}
-        <Link href="/admin/teachers" className="text-accent underline">
+        <Link href="/admin/teachers" className="text-accent-strong underline">
           پرونده‌ی استاد
         </Link>{" "}
         انجام می‌شود، جایی که مانده‌اش دیده می‌شود.

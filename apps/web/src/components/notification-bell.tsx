@@ -58,7 +58,7 @@ export function NotificationBell() {
   return (
     <Link
       href="/notifications"
-      className={`relative ${active ? "font-medium text-accent" : "text-ink-muted"}`}
+      className={`relative ${active ? "font-medium text-accent-strong" : "text-ink-muted"}`}
       aria-label={
         unread > 0 ? `اعلان‌ها، ${unread} مورد نخوانده` : "اعلان‌ها"
       }

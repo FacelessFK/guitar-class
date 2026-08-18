@@ -89,7 +89,7 @@ export function BookingCard({
       {SESSION_FILE_STATUSES.includes(booking.status) ? (
         <Link
           href={`/sessions/${booking.id}`}
-          className="mt-4 inline-block text-sm text-accent underline"
+          className="mt-4 inline-block text-sm text-accent-strong underline"
         >
           نکات جلسه و تمرین‌ها
         </Link>

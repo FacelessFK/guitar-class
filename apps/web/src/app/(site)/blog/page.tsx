@@ -56,7 +56,7 @@ function PostCard({ post }: { post: PostSummary }) {
   return (
     <article>
       <h2 className="text-xl font-bold">
-        <Link href={`/blog/${post.slug}`} className="hover:text-accent">
+        <Link href={`/blog/${post.slug}`} className="hover:text-accent-strong">
           {post.title}
         </Link>
       </h2>
@@ -79,7 +79,7 @@ function PostCard({ post }: { post: PostSummary }) {
             {" · "}
             <Link
               href={`/instruments/${post.instrumentSlug}`}
-              className="text-accent underline"
+              className="text-accent-strong underline"
             >
               {post.instrumentName}
             </Link>

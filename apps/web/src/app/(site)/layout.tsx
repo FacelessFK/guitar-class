@@ -39,7 +39,7 @@ function SiteHeader() {
             <Link href="/rules">قوانین</Link>
           </li>
           <li>
-            <Link href="/dashboard" className="font-medium text-accent">
+            <Link href="/dashboard" className="font-medium text-accent-strong">
               ورود
             </Link>
           </li>

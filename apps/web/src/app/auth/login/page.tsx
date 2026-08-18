@@ -208,7 +208,7 @@ function LoginForm() {
             type="button"
             className={
               mode === value
-                ? "rounded-lg border border-accent bg-accent/10 px-3 py-1.5 text-accent"
+                ? "rounded-lg border border-accent bg-accent/10 px-3 py-1.5 text-accent-strong"
                 : "rounded-lg border border-border px-3 py-1.5 text-ink-muted"
             }
             onClick={() => {

@@ -349,7 +349,7 @@ function AssignmentCard({
                 href={attachment.url}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="text-accent underline"
+                className="text-accent-strong underline"
               >
                 {attachment.name}
               </a>
