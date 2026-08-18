@@ -48,16 +48,33 @@ async function findTeacher(slug: string): Promise<Teacher | null> {
  * شیء است نه رشته: مسیرهای تایپ‌شده‌ی Next رشته‌ی ساخته‌شده در زمان اجرا
  * را نمی‌پذیرند و بیلد را رد می‌کنند.
  */
-function bookHref(teacher: Teacher, offering: TeacherOffering): BookHref {
+function bookHref(
+  teacher: Teacher,
+  offering: TeacherOffering,
+  type?: BookType,
+): BookHref {
   return {
     pathname: "/dashboard/book",
-    query: { instrument: offering.instrumentSlug, teacher: teacher.slug },
+    query: {
+      instrument: offering.instrumentSlug,
+      teacher: teacher.slug,
+      ...(type ? { type } : {}),
+    },
   };
 }
 
+/**
+ * نوع جلسه هم می‌تواند همراه برود، ولی **اختیاری است**.
+ *
+ * دکمه‌ای که روی «پکیج ماهانه» زده شده باید کاربر را روی همان بسته
+ * بگذارد نه اول فهرست. جریان رزرو مقدار نامعتبر یا معارفه‌ی مصرف‌شده
+ * را بی‌صدا نادیده می‌گیرد، پس این آدرس هیچ‌وقت به بن‌بست نمی‌رسد.
+ */
+type BookType = "trial" | "single" | "package";
+
 export type BookHref = {
   pathname: "/dashboard/book";
-  query: { instrument: string; teacher: string };
+  query: { instrument: string; teacher: string; type?: BookType };
 };
 
 function instrumentNames(teacher: Teacher): string[] {
@@ -175,10 +192,16 @@ export default async function TeacherPage({ params }: PageProps) {
               </p>
 
               <div className="mt-6 space-y-3 border-t border-border pt-6">
-                <Link href={bookHref(teacher, primary)} className="btn-accent block text-center">
+                <Link
+                  href={bookHref(teacher, primary, "trial")}
+                  className="btn-accent block text-center"
+                >
                   رزرو جلسه‌ی آشنایی رایگان
                 </Link>
-                <Link href={bookHref(teacher, primary)} className="btn-primary block text-center">
+                <Link
+                  href={bookHref(teacher, primary, "single")}
+                  className="btn-primary block text-center"
+                >
                   رزرو کلاس
                 </Link>
                 <p className="text-center text-xs text-ink-muted">
@@ -336,7 +359,7 @@ function Packages({ teacher }: { teacher: Teacher }) {
                   title="تک جلسه"
                   meta={`۱ جلسه × ${formatDuration(offering.durationMinutes)}`}
                   price={offering.price}
-                  href={bookHref(teacher, offering)}
+                  href={bookHref(teacher, offering, "single")}
                   cta="انتخاب"
                 />
                 <PackageCard
@@ -345,7 +368,7 @@ function Packages({ teacher }: { teacher: Teacher }) {
                     offering.durationMinutes,
                   )} — یک روز و ساعت ثابت هفتگی`}
                   price={packagePrice}
-                  href={bookHref(teacher, offering)}
+                  href={bookHref(teacher, offering, "package")}
                   cta="انتخاب بسته"
                 />
               </div>

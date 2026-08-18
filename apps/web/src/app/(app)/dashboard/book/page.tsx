@@ -62,7 +62,7 @@ const WINDOW_DAYS = 14;
 function BookingFlow() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useSession();
+  const { user, status } = useSession();
 
   const [instruments, setInstruments] = useState<Instrument[] | null>(null);
   const [teachers, setTeachers] = useState<Teacher[] | null>(null);
@@ -97,14 +97,17 @@ function BookingFlow() {
   /**
    * ورود از صفحه‌ی عمومی استاد.
    *
-   * لینک «رزرو» کنار هر سرویس، هم ساز و هم استاد را همراه می‌آورد، پس
-   * کاربری که از سئو آمده و روی استاد مشخصی تصمیم گرفته، دو مرحله‌ی
-   * اول را دوباره طی نمی‌کند. اگر پارامترها به چیزی نخورند بی‌صدا
-   * نادیده گرفته می‌شوند و جریان از اول شروع می‌شود.
+   * لینک «رزرو» کنار هر سرویس، ساز و استاد و — اگر دکمه‌ی مشخصی زده
+   * شده باشد — نوع جلسه را همراه می‌آورد، پس کاربری که از سئو آمده و
+   * روی استاد و بسته‌ی مشخصی تصمیم گرفته، مراحل اول را دوباره طی
+   * نمی‌کند. اگر پارامترها به چیزی نخورند بی‌صدا نادیده گرفته می‌شوند
+   * و جریان از اول شروع می‌شود.
    */
   const preselectedTeacher = searchParams.get("teacher");
   const preselectedInstrument = searchParams.get("instrument");
+  const preselectedType = readSessionType(searchParams.get("type"));
   const preselectionApplied = useRef(false);
+  const typePreselectionApplied = useRef(false);
 
   useEffect(() => {
     getInstruments()
@@ -150,6 +153,34 @@ function BookingFlow() {
       cancelled = true;
     };
   }, [instrument, preselectedTeacher]);
+
+  /**
+   * نوع جلسه از آدرس — با یک شرط برای معارفه.
+   *
+   * معارفه یک‌بار برای همیشه است و صفحه‌ی عمومی استاد ایستا ساخته
+   * می‌شود، پس آنجا معلوم نیست این کاربر مصرفش کرده یا نه و دکمه‌اش
+   * به همه نشان داده می‌شود. اگر مصرف شده باشد، پیش‌انتخاب انجام
+   * نمی‌شود و کاربر همان گزینه‌ی غیرفعال را با توضیحش می‌بیند — که
+   * بهتر از انتخابِ از پیش‌شده‌ای است که موقع تأیید از سرور خطا
+   * می‌گیرد.
+   *
+   * تا وقتی نشست `loading` است تصمیمی گرفته نمی‌شود: در آن لحظه
+   * «مصرف نشده» و «هنوز نمی‌دانیم» از هم جدا نیستند.
+   */
+  useEffect(() => {
+    if (typePreselectionApplied.current || !preselectedType) return;
+
+    if (preselectedType === "TRIAL") {
+      if (status === "loading") return;
+      if (user?.trialUsed !== false) {
+        typePreselectionApplied.current = true;
+        return;
+      }
+    }
+
+    typePreselectionApplied.current = true;
+    setSessionType(preselectedType);
+  }, [preselectedType, status, user]);
 
   /**
    * هر مرحله، مراحل بعد از خودش را پاک می‌کند.
@@ -328,6 +359,26 @@ function BookingFlow() {
  * این ساز را تدریس نمی‌کند — که نباید پیش بیاید چون فهرست از سرور
  * فیلتر شده می‌آید، ولی نبودنش نباید به خطای زمان اجرا تبدیل شود.
  */
+/**
+ * نگاشت پارامتر آدرس به نوع جلسه.
+ *
+ * مقدارهای آدرس عمداً کوچک‌اند و شمارشی داخلی بزرگ؛ این تابع تنها
+ * جای اتصالشان است. هر چیز دیگری `null` می‌شود و پیش‌انتخابی رخ
+ * نمی‌دهد.
+ */
+function readSessionType(value: string | null): SessionType | null {
+  switch (value) {
+    case "trial":
+      return "TRIAL";
+    case "single":
+      return "SINGLE";
+    case "package":
+      return "PACKAGE";
+    default:
+      return null;
+  }
+}
+
 function findOffering(teacher: Teacher | null, instrument: Instrument | null) {
   if (!teacher || !instrument) return null;
   return (
