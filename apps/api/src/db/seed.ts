@@ -42,6 +42,16 @@ interface TeacherSeed {
   headline: string;
   bio: string;
   yearsExperience: number;
+  /**
+   * عکس نمونه از `public` فرانت، نه از باکت.
+   *
+   * عکس استاد واقعی آپلود می‌شود و نشانی‌اش از S3 می‌آید؛ این یکی فقط
+   * برای این است که صفحه‌ی استاد در توسعه با عکس دیده شود و چیدمانش
+   * قابل قضاوت باشد. عکسِ یک آدم واقعی است، پس روی هیچ استاد واقعی و
+   * به‌عنوان عکس پیش‌فرضِ استادهای بی‌عکس گذاشته نمی‌شود — هنرجو آن را
+   * چهره‌ی همان استاد می‌خواند.
+   */
+  avatarUrl?: string;
   offerings: { instrumentSlug: string; priceRial: bigint; durationMinutes: number }[];
 }
 
@@ -53,6 +63,7 @@ const TEACHERS: readonly TeacherSeed[] = [
     headline: "مدرس گیتار کلاسیک و پاپ",
     bio: "این یک پروفایل نمونه برای توسعه است و باید پیش از انتشار با اطلاعات استاد واقعی جایگزین شود.",
     yearsExperience: 8,
+    avatarUrl: "/teachers/sample-guitar-teacher.jpg",
     offerings: [
       { instrumentSlug: "classical-guitar", priceRial: 3_000_000n, durationMinutes: 45 },
       { instrumentSlug: "pop-guitar", priceRial: 2_500_000n, durationMinutes: 45 },
@@ -75,11 +86,15 @@ async function seedTeachers(): Promise<void> {
   for (const teacher of TEACHERS) {
     const [user] = await db
       .insert(users)
-      .values({ phone: teacher.phone, fullName: teacher.fullName })
+      .values({
+        phone: teacher.phone,
+        fullName: teacher.fullName,
+        avatarUrl: teacher.avatarUrl ?? null,
+      })
       .onConflictDoUpdate({
         target: users.phone,
         // بدون یک `set`، درج تکراری هیچ سطری برنمی‌گرداند و id لازم را نداریم
-        set: { fullName: sql`excluded.full_name` },
+        set: { fullName: sql`excluded.full_name`, avatarUrl: sql`excluded.avatar_url` },
       })
       .returning({ id: users.id });
 
