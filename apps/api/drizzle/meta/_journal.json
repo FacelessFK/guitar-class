@@ -78,6 +78,13 @@
       "when": 1786631921172,
       "tag": "0010_student_credit",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1787079950633,
+      "tag": "0011_charming_ironclad",
+      "breakpoints": true
     }
   ]
 }

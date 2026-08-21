@@ -4,13 +4,23 @@ import { notFound } from "next/navigation";
 import { BUSINESS_RULES } from "@music/shared";
 
 import { Avatar } from "@/components/avatar";
+import { Stars } from "@/components/stars";
 import { TeacherAvailability } from "@/components/teacher-availability";
 import {
+  getTeacherReviews,
   getTeachers,
   type Teacher,
   type TeacherOffering,
+  type TeacherReview,
 } from "@/lib/api";
-import { faNumber, formatDuration, formatToman, lowestPrice } from "@/lib/format";
+import {
+  faDigits,
+  faNumber,
+  formatDuration,
+  formatRelativeFa,
+  formatToman,
+  lowestPrice,
+} from "@/lib/format";
 
 /**
  * ⚠️ عدد باید **عینی** نوشته شود.
@@ -111,6 +121,17 @@ export default async function TeacherPage({ params }: PageProps) {
 
   if (!teacher) notFound();
 
+  /**
+   * نظرها جدا از کارت استاد فچ می‌شوند و **شکستشان صفحه را نمی‌اندازد**:
+   * اگر اندپوینت نظر پاسخ ندهد، صفحه‌ی استاد باید همچنان با بقیه‌ی
+   * محتوایش ساخته شود. کارت استاد بحرانی است (بدونش `notFound`)، نظرها
+   * تزئینی.
+   */
+  const reviews = await getTeacherReviews(slug).catch(() => ({
+    reviews: [],
+    total: 0,
+  }));
+
   const instruments = instrumentNames(teacher);
   const cheapest = lowestPrice(teacher.offerings.map((offering) => offering.price));
 
@@ -129,7 +150,14 @@ export default async function TeacherPage({ params }: PageProps) {
       <PersonJsonLd teacher={teacher} />
 
       <article className="mx-auto max-w-6xl px-5 py-10">
-        <div className="grid gap-8 lg:grid-cols-[1fr_20rem] lg:items-start">
+        {/*
+          `items-start` در همه‌ی عرض‌ها، نه فقط `lg`: بدون آن، زیر
+          بریک‌پوینت `lg` گرید ستون را کش می‌آورد و چون کارتِ «درباره‌ی
+          استاد» یک `.card` با `height: 100%` است، ارتفاعش به کلِ ستون
+          می‌چسبد و بقیه‌ی محتوا از جعبه بیرون می‌زند — فوتر بالای بخش‌های
+          پایینی می‌افتد. `items-start` این کشیدگی را می‌بندد.
+        */}
+        <div className="grid items-start gap-8 lg:grid-cols-[1fr_20rem]">
           <div className="min-w-0">
             <Hero teacher={teacher} instruments={instruments} />
 
@@ -170,6 +198,12 @@ export default async function TeacherPage({ params }: PageProps) {
                 />
               </section>
             ) : null}
+
+            <Reviews
+              reviews={reviews.reviews}
+              total={reviews.total}
+              rating={teacher.rating}
+            />
 
             <Faq />
           </div>
@@ -240,14 +274,37 @@ function Hero({ teacher, instruments }: { teacher: Teacher; instruments: string[
           <h1 className="text-3xl font-bold">{teacher.fullName}</h1>
           <p className="mt-3 text-lg text-ink-muted">{teacher.headline}</p>
 
+          {teacher.rating.average !== null ? (
+            <div className="mt-4 flex items-center gap-2 text-sm">
+              <Stars value={teacher.rating.average} className="text-lg" />
+              <span className="font-bold">{faDigits(teacher.rating.average.toFixed(1))}</span>
+              <span className="text-ink-muted">
+                از ۵ · {faNumber(teacher.rating.count)} نظر
+              </span>
+            </div>
+          ) : null}
+
           <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-4">
             {teacher.yearsExperience > 0 ? (
               <Stat value={faNumber(teacher.yearsExperience)} label="سال سابقه" />
+            ) : null}
+            {teacher.classesTaught > 0 ? (
+              <Stat value={faNumber(teacher.classesTaught)} label="کلاس برگزارشده" />
             ) : null}
             {instruments.length > 0 ? (
               <Stat value={faNumber(instruments.length)} label="ساز" />
             ) : null}
           </dl>
+
+          {/*
+            هر استادی که در این فهرست دیده می‌شود `APPROVED` است و رزرو
+            می‌پذیرد؛ نشان فقط همان را با کلمه می‌گوید. اگر روزی فیلدِ
+            «فعلاً ظرفیت ندارم» اضافه شد، این شرط جای عوض شدن دارد.
+          */}
+          <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-success-surface px-3 py-1 text-sm text-success">
+            <CheckIcon />
+            پذیرش هنرجوی جدید
+          </p>
         </div>
       </div>
     </section>
@@ -464,6 +521,94 @@ function Faq() {
         آمده است.
       </p>
     </section>
+  );
+}
+
+/**
+ * نظرهای هنرجویان.
+ *
+ * وقتی هیچ نظری نیست، بخش پنهان نمی‌شود بلکه یک حالتِ خالیِ صادق نشان
+ * می‌دهد: صفحه‌ای که این بخش را کامل حذف کند، به بازدیدکننده نمی‌گوید
+ * که امتیازدهی وجود دارد و فقط هنوز نظری نیامده.
+ */
+function Reviews({
+  reviews,
+  total,
+  rating,
+}: {
+  reviews: TeacherReview[];
+  total: number;
+  rating: Teacher["rating"];
+}) {
+  return (
+    <section className="mt-12">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-xl font-bold">نظرات هنرجویان</h2>
+        {rating.average !== null ? (
+          <div className="flex items-center gap-2 text-sm">
+            <Stars value={rating.average} className="text-base" />
+            <span className="font-bold">{faDigits(rating.average.toFixed(1))}</span>
+            <span className="text-ink-muted">({faNumber(rating.count)})</span>
+          </div>
+        ) : null}
+      </div>
+
+      {reviews.length === 0 ? (
+        <p className="mt-5 text-ink-muted">
+          هنوز نظری ثبت نشده است. اولین نظر را بعد از کلاس با این استاد بنویسید.
+        </p>
+      ) : (
+        <>
+          <ul className="mt-5 grid gap-4 sm:grid-cols-2">
+            {reviews.map((review) => (
+              <li key={review.id} className="card">
+                <div className="flex items-center gap-3">
+                  <Avatar
+                    name={review.studentName}
+                    url={review.studentAvatarUrl}
+                    className="size-10 shrink-0 rounded-full"
+                    textClassName="text-xs"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{review.studentName}</p>
+                    <Stars value={review.rating} className="text-sm" />
+                  </div>
+                </div>
+                {review.comment ? (
+                  <p className="mt-4 text-sm whitespace-pre-line text-ink-muted">
+                    {review.comment}
+                  </p>
+                ) : null}
+                <p className="mt-4 text-xs text-ink-muted">
+                  {formatRelativeFa(review.createdAt)}
+                </p>
+              </li>
+            ))}
+          </ul>
+
+          {total > reviews.length ? (
+            <p className="mt-5 text-sm text-ink-muted">
+              {faNumber(total)} نظر ثبت شده است.
+            </p>
+          ) : null}
+        </>
+      )}
+    </section>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      className="size-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      aria-hidden="true"
+    >
+      <path d="m5 12 5 5L20 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 

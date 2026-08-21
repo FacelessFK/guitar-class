@@ -1,9 +1,10 @@
-import { relations } from "drizzle-orm";
-import { index, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { check, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
 
 import { createdAt, primaryId, tstz } from "./columns.js";
 import { sessionReviewReason, sessionReviewStatus } from "./enums.js";
 import { users } from "./identity.js";
+import { teacherProfiles } from "./catalog.js";
 import { bookings } from "./booking.js";
 
 /**
@@ -66,5 +67,87 @@ export const sessionReviewsRelations = relations(sessionReviews, ({ one }) => ({
   resolvedBy: one(users, {
     fields: [sessionReviews.resolvedById],
     references: [users.id],
+  }),
+}));
+
+/**
+ * امتیاز و نظرِ هنرجو به استاد.
+ *
+ * جدا از `session_reviews` است و نباید با آن اشتباه شود: آن یکی صفِ
+ * بررسیِ ادمین برای عدم‌حضور است، این یکی نظرِ عمومیِ هنرجو که در صفحه‌ی
+ * استاد دیده می‌شود. هم‌نامیِ کلمه‌ی «review» اتفاقی است.
+ *
+ * نظر روی **یک رزروِ تمام‌شده** بنا می‌شود، نه روی رابطه‌ی کلیِ
+ * هنرجو-استاد: تنها مدرکِ اینکه این هنرجو واقعاً سرِ کلاسِ این استاد
+ * بوده، همان رزرو است. سرویس پیش از درج، `COMPLETED` بودن و مالکیت را
+ * می‌سنجد.
+ */
+export const teacherReviews = pgTable(
+  "teacher_reviews",
+  {
+    id: primaryId(),
+
+    /**
+     * یکتاست، و همین یکتایی ضدِ اسپم و کلِ ایدمپوتنسی است: یک نظر برای
+     * هر جلسه. بدون آن، یک هنرجو می‌توانست یک استاد را با ده نظر پشت سر
+     * هم بالا یا پایین بکشد. تلاش دوم روی همان رزرو به `409` می‌خورد،
+     * نه به سطر دوم.
+     */
+    bookingId: uuid("booking_id")
+      .notNull()
+      .unique()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+
+    /** نویسنده‌ی نظر — برای نمایش نام/عکس و بررسی مالکیت */
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id),
+
+    /**
+     * به `teacher_profiles.id` اشاره می‌کند نه به `users.id` استاد
+     * (برخلاف `bookings.teacher_id`).
+     *
+     * غیرنرمال و عمدی: میانگینِ امتیازِ کاتالوگ روی همین ستون
+     * `GROUP BY` می‌زند و نمی‌خواهد برای هر تجمیع از رزرو به کاربر به
+     * پروفایل برود. سرویس این را هنگام درج، از روی رزرو حساب می‌کند.
+     */
+    teacherProfileId: uuid("teacher_profile_id")
+      .notNull()
+      .references(() => teacherProfiles.id, { onDelete: "cascade" }),
+
+    /** یک تا پنج. قیدِ `CHECK` گاردِ واقعی است، نه اعتبارسنجیِ لایه‌ی وب. */
+    rating: integer().notNull(),
+
+    /** متن اختیاری — ستاره‌ی بی‌کلام هم سیگنال است */
+    comment: text(),
+
+    createdAt: createdAt(),
+  },
+  (table) => [
+    /**
+     * صفحه‌ی استاد «تازه‌ترین نظرها» را می‌خواهد و کاتالوگ میانگین را،
+     * هر دو به تفکیک استاد. ایندکس روی (پروفایل، تاریخ نزولی) هر دو را
+     * می‌پوشاند.
+     */
+    index("teacher_reviews_teacher_idx").on(
+      table.teacherProfileId,
+      table.createdAt.desc(),
+    ),
+    check("teacher_reviews_rating_range", sql`${table.rating} BETWEEN 1 AND 5`),
+  ],
+);
+
+export const teacherReviewsRelations = relations(teacherReviews, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [teacherReviews.bookingId],
+    references: [bookings.id],
+  }),
+  student: one(users, {
+    fields: [teacherReviews.studentId],
+    references: [users.id],
+  }),
+  teacherProfile: one(teacherProfiles, {
+    fields: [teacherReviews.teacherProfileId],
+    references: [teacherProfiles.id],
   }),
 }));

@@ -54,6 +54,12 @@ export interface TeacherOffering {
   instrumentName: string;
 }
 
+export interface TeacherRating {
+  /** میانگین یک تا پنج، به یک رقم اعشار؛ `null` یعنی هنوز نظری نیست */
+  average: number | null;
+  count: number;
+}
+
 export interface Teacher {
   profileId: string;
   slug: string;
@@ -64,6 +70,19 @@ export interface Teacher {
   introVideoUrl: string | null;
   yearsExperience: number;
   offerings: TeacherOffering[];
+  rating: TeacherRating;
+  /** شمار جلسه‌های `COMPLETED` این استاد */
+  classesTaught: number;
+}
+
+export interface TeacherReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  /** ISO — لایه‌ی نمایش به شمسی تبدیلش می‌کند */
+  createdAt: string;
+  studentName: string;
+  studentAvatarUrl: string | null;
 }
 
 /**
@@ -104,6 +123,25 @@ export async function getTeachers(instrumentSlug?: string): Promise<Teacher[]> {
     : "";
   const data = await fetchJson<{ teachers: Teacher[] }>(`/teachers${query}`);
   return data.teachers;
+}
+
+/**
+ * نظرهای یک استاد برای صفحه‌ی عمومی.
+ *
+ * صفحه‌بندی سمت سرور است ولی این صفحه فقط اولین صفحه را نشان می‌دهد؛
+ * `total` می‌گوید چند نظر هست تا «مشاهده‌ی همه» معنا داشته باشد.
+ */
+export async function getTeacherReviews(
+  slug: string,
+  limit = 6,
+): Promise<{ reviews: TeacherReview[]; total: number }> {
+  const data = await fetchJson<{
+    reviews: TeacherReview[];
+    total: number;
+    limit: number;
+    offset: number;
+  }>(`/teachers/${encodeURIComponent(slug)}/reviews?limit=${limit}`);
+  return { reviews: data.reviews, total: data.total };
 }
 
 // ---------------------------------------------------------------------------

@@ -33,16 +33,16 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "کلاس آنلاین موسیقی با استاد خصوصی",
-    template: "%s | کلاس آنلاین موسیقی",
+    default: "هوگه — کلاس آنلاین موسیقی با استاد خصوصی",
+    template: "%s | هوگه",
   },
   description:
-    "کلاس خصوصی آنلاین موسیقی با استادهای تأییدشده. جلسه‌ی معارفه‌ی رایگان، رزرو ساعت دلخواه، و کلاس زنده‌ی یک‌به‌یک.",
+    "هوگه، کلاس خصوصی آنلاین موسیقی با استادهای تأییدشده. جلسه‌ی معارفه‌ی رایگان، رزرو ساعت دلخواه، و کلاس زنده‌ی یک‌به‌یک.",
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     locale: "fa_IR",
-    siteName: "کلاس آنلاین موسیقی",
+    siteName: "هوگه",
   },
   robots: { index: true, follow: true },
 };

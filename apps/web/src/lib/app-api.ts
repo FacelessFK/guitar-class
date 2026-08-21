@@ -175,6 +175,8 @@ export interface BookingDetail extends Booking {
   /** پر بودنش یعنی این جلسه بخشی از یک پکیج است و جدا پرداخت نمی‌شود */
   enrollmentId: string | null;
   sessionIndex: number | null;
+  /** هنرجو می‌تواند به این جلسه امتیاز بدهد: تمام‌شده و هنوز نظر نداده */
+  canReview: boolean;
 }
 
 export interface SlotSelection {
@@ -209,6 +211,18 @@ export const getMyBookings = () =>
 
 export const getBooking = (bookingId: string) =>
   apiFetch<BookingDetail | null>(`/bookings/${bookingId}`);
+
+/**
+ * امتیاز و نظر هنرجو به استاد، بسته به یک جلسه‌ی تمام‌شده.
+ *
+ * `bookingId` می‌رود نه `teacherId`: کدام استاد و آیا این کاربر حق نظر
+ * دارد، سرور از روی خود رزرو تصمیم می‌گیرد.
+ */
+export const submitReview = (body: {
+  bookingId: string;
+  rating: number;
+  comment?: string;
+}) => apiFetch<{ id: string }>("/reviews", { method: "POST", body });
 
 export interface CancellationResult {
   status: BookingStatus;

@@ -24,8 +24,8 @@ function SiteHeader() {
   return (
     <header className="border-b border-border">
       <nav className="mx-auto flex max-w-5xl items-center justify-between gap-6 px-5 py-4">
-        <Link href="/" className="font-bold">
-          کلاس آنلاین موسیقی
+        <Link href="/" className="text-xl font-bold tracking-tight">
+          هوگه
         </Link>
 
         <ul className="flex items-center gap-6 text-sm">
@@ -51,14 +51,37 @@ function SiteHeader() {
 
 function SiteFooter() {
   return (
-    <footer className="border-t border-border text-sm text-ink-muted">
-      <div className="mx-auto max-w-5xl px-5 py-8">
-        <p>
-          کلاس خصوصی آنلاین موسیقی، یک‌به‌یک و زنده. پیش از رزرو،{" "}
-          <Link href="/rules" className="underline">
+    <footer className="mt-16 border-t border-border text-sm text-ink-muted">
+      <div className="mx-auto grid max-w-5xl gap-8 px-5 py-10 sm:grid-cols-[1fr_auto]">
+        <div className="max-w-sm">
+          <p className="text-xl font-bold tracking-tight text-ink">هوگه</p>
+          <p className="mt-3">
+            یادگیری موسیقی به شیوه‌ی حرفه‌ای و دلنشین — کلاس خصوصی آنلاین،
+            یک‌به‌یک و زنده.
+          </p>
+        </div>
+
+        {/*
+          فقط لینک‌هایی که واقعاً وجود دارند. نشانی و شبکه‌های اجتماعی
+          عمداً نیست: هنوز حسابی ساخته نشده و گذاشتنِ لینکِ بی‌مقصد، بدتر
+          از نبودنش است.
+        */}
+        <nav className="flex flex-col gap-2 sm:text-end">
+          <Link href="/teachers" className="hover:text-ink">
+            استادها
+          </Link>
+          <Link href="/blog" className="hover:text-ink">
+            مقاله‌ها
+          </Link>
+          <Link href="/rules" className="hover:text-ink">
             قوانین و سیاست لغو
-          </Link>{" "}
-          را بخوانید.
+          </Link>
+        </nav>
+      </div>
+
+      <div className="border-t border-border">
+        <p className="mx-auto max-w-5xl px-5 py-4 text-xs">
+          © هوگه — تمامی حقوق محفوظ است.
         </p>
       </div>
     </footer>

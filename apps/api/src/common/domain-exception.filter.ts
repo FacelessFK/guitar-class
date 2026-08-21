@@ -61,6 +61,11 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   // درخواست درست است ولی با حالت فعلیِ اجرا نمی‌خواند — مثل بقیه‌ی ۴۰۹ها
   SUBMISSION_HAS_FEEDBACK: HttpStatus.CONFLICT,
 
+  // نظرِ هنرجو به استاد
+  // «جلسه هنوز تمام نشده» و «نظر تکراری» تعارض با حالت فعلی‌اند، پس ۴۰۹
+  SESSION_NOT_REVIEWABLE: HttpStatus.CONFLICT,
+  REVIEW_ALREADY_EXISTS: HttpStatus.CONFLICT,
+
   // رسانه
   UNSUPPORTED_MEDIA: HttpStatus.UNSUPPORTED_MEDIA_TYPE,
   MEDIA_TICKET_INVALID: HttpStatus.CONFLICT,

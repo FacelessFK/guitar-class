@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { ReviewForm } from "@/components/review-form";
 import { SessionLearning } from "@/components/session-learning";
 import { errorMessage } from "@/lib/api-client";
 import { getBooking, type BookingDetail } from "@/lib/app-api";
@@ -61,6 +62,10 @@ export default function SessionPage() {
             {statusDisplay(booking.status, booking.role).label}
           </span>
         </header>
+      ) : null}
+
+      {booking?.canReview ? (
+        <ReviewForm bookingId={bookingId} teacherName={booking.counterpartName} />
       ) : null}
 
       <div className="mt-10">

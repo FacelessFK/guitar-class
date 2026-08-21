@@ -30,8 +30,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="border-b border-border">
         <nav className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div className="flex items-center gap-6">
-            <Link href="/" className="font-bold">
-              کلاس آنلاین موسیقی
+            <Link href="/" className="text-xl font-bold tracking-tight">
+              هوگه
             </Link>
 
             <ul className="flex items-center gap-5 text-sm">

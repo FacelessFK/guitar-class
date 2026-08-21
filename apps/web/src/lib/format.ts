@@ -156,3 +156,24 @@ export function formatCountdown(milliseconds: number): string {
   const seconds = total % 60;
   return faDigits(`${minutes}:${String(seconds).padStart(2, "0")}`);
 }
+
+/**
+ * «۳ هفته پیش» — زمانِ نسبیِ گذشته، به فارسی.
+ *
+ * دانه‌دانگیِ درشت است (روز/هفته/ماه/سال) و عمداً: مصرف‌کننده‌اش صفحه‌ی
+ * استاد است که SSG/ISR با بازتولید ساعتی رندر می‌شود، پس دقتِ دقیقه‌ای
+ * تا بازتولید بعدی کهنه می‌شد. در این دانه‌دانگی، دریفتِ یک‌ساعته دیده
+ * نمی‌شود.
+ */
+export function formatRelativeFa(instant: Date | string): string {
+  const date = typeof instant === "string" ? new Date(instant) : instant;
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+
+  const day = 86_400;
+  if (seconds < day) return "امروز";
+  const days = Math.floor(seconds / day);
+  if (days < 7) return `${faNumber(days)} روز پیش`;
+  if (days < 30) return `${faNumber(Math.floor(days / 7))} هفته پیش`;
+  if (days < 365) return `${faNumber(Math.floor(days / 30))} ماه پیش`;
+  return `${faNumber(Math.floor(days / 365))} سال پیش`;
+}

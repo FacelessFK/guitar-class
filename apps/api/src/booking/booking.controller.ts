@@ -26,6 +26,7 @@ import {
   instruments,
   offerings,
   teacherProfiles,
+  teacherReviews,
   users,
 } from "../db/schema/index.js";
 import {
@@ -132,6 +133,8 @@ interface BookingDetailView extends BookingView {
   enrollmentId: string | null;
   /** جلسه‌ی چندم از پکیج (۱ تا ۴)؛ برای جلسه‌ی مستقل تهی است */
   sessionIndex: number | null;
+  /** هنرجو می‌تواند به این جلسه امتیاز بدهد: تمام‌شده و هنوز نظر نداده */
+  canReview: boolean;
 }
 
 function toBookingView(booking: {
@@ -342,11 +345,18 @@ function detailQuery() {
       teacherName: teacherUser.fullName,
       teacherSlug: teacherProfiles.slug,
       instrumentName: instruments.nameFa,
+      /**
+       * فقط برای دانستنِ «نظر داده شده یا نه» — شناسه‌اش خام برنمی‌گردد.
+       * `leftJoin` است چون بیشترِ رزروها نظری ندارند و نبودنش `null`
+       * می‌ماند، نه حذفِ سطر.
+       */
+      reviewId: teacherReviews.id,
     })
     .from(bookings)
     .innerJoin(studentUser, eq(bookings.studentId, studentUser.id))
     .innerJoin(teacherUser, eq(bookings.teacherId, teacherUser.id))
     .leftJoin(teacherProfiles, eq(teacherProfiles.userId, bookings.teacherId))
+    .leftJoin(teacherReviews, eq(teacherReviews.bookingId, bookings.id))
     .innerJoin(offerings, eq(bookings.offeringId, offerings.id))
     .innerJoin(instruments, eq(offerings.instrumentId, instruments.id));
 }
@@ -364,5 +374,11 @@ function toBookingDetailView(row: DetailRow, userId: string): BookingDetailView 
     instrumentName: row.instrumentName,
     enrollmentId: row.enrollmentId,
     sessionIndex: row.sessionIndex,
+    /**
+     * فقط هنرجو، فقط جلسه‌ی تمام‌شده، و فقط اگر هنوز نظر نداده. همان سه
+     * شرطی که سرویسِ نظر هم می‌سنجد؛ اینجا محاسبه می‌شود تا فرانت فرمِ
+     * نظر را روی جلسه‌ای که واجد شرایط نیست اصلاً نشان ندهد.
+     */
+    canReview: isStudent && row.status === "COMPLETED" && row.reviewId === null,
   };
 }

@@ -22,8 +22,8 @@ export default function AuthLayout({
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-border">
         <div className="mx-auto max-w-5xl px-5 py-4">
-          <Link href="/" className="font-bold">
-            کلاس آنلاین موسیقی
+          <Link href="/" className="text-xl font-bold tracking-tight">
+            هوگه
           </Link>
         </div>
       </header>

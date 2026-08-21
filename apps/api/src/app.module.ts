@@ -30,6 +30,7 @@ import {
   NotificationProvider,
 } from "./notification/notification.controller.js";
 import { PaymentController, PaymentProvider } from "./payment/payment.controller.js";
+import { ReviewController, ReviewProvider } from "./review/review.controller.js";
 import { TeacherController, TeacherProvider } from "./teacher/teacher.controller.js";
 import {
   readHookLastEventAt,
@@ -127,6 +128,7 @@ export class HealthController {
     MediaController,
     LearningController,
     NotificationController,
+    ReviewController,
   ],
   providers: [
     AuthProvider,
@@ -142,6 +144,7 @@ export class HealthController {
     JitsiHookProvider,
     PaymentProvider,
     TeacherProvider,
+    ReviewProvider,
     {
       /**
        * گارد احراز هویت سراسری است و مسیرها باید صریحاً با `@Public()`

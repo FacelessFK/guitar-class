@@ -1,11 +1,13 @@
 import { Controller, Get, Injectable, NotFoundException, Param, Query } from "@nestjs/common";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "../db/client.js";
 import {
+  bookings,
   instruments,
   offerings,
   teacherProfiles,
+  teacherReviews,
   users,
 } from "../db/schema/index.js";
 import { zodPipe } from "../common/validation.pipe.js";
@@ -90,7 +92,67 @@ export class CatalogService {
       }
     }
 
-    return [...byTeacher.values()];
+    const cards = [...byTeacher.values()];
+    await this.attachStats(cards);
+    return cards;
+  }
+
+  /**
+   * میانگینِ امتیاز و شمارِ کلاسِ برگزارشده را روی کارت‌ها می‌نشاند.
+   *
+   * جدا از کوئریِ اصلی و نه `LEFT JOIN`: کوئریِ استادها به‌ازای هر
+   * سرویس یک سطر می‌دهد (فَن‌اوت)، و پیوستنِ تجمیع به آن، امتیاز را در
+   * تعداد سرویس‌ها ضرب می‌کرد. دو تجمیعِ مستقل که با شناسه‌ی پروفایل به
+   * کارت وصل می‌شوند، این دام را ندارند.
+   *
+   * دامنه‌اش به همان پروفایل‌های نتیجه محدود است؛ روی کاتالوگی که با ساز
+   * فیلتر شده، کلِ جدولِ نظر و رزرو خوانده نمی‌شود.
+   */
+  private async attachStats(cards: ReturnType<typeof buildTeacherCard>[]): Promise<void> {
+    if (cards.length === 0) return;
+    const profileIds = cards.map((card) => card.profileId);
+
+    const ratingRows = await db
+      .select({
+        profileId: teacherReviews.teacherProfileId,
+        average: sql<number>`avg(${teacherReviews.rating})::float`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(teacherReviews)
+      .where(inArray(teacherReviews.teacherProfileId, profileIds))
+      .groupBy(teacherReviews.teacherProfileId);
+    const ratingByProfile = new Map(ratingRows.map((row) => [row.profileId, row]));
+
+    /**
+     * شمارِ کلاس از `bookings` می‌آید که `teacher_id`اش `users.id` است،
+     * پس به `teacher_profiles` روی `user_id` پیوند می‌خورد تا با شناسه‌ی
+     * پروفایلِ کارت بخواند. فقط `COMPLETED` — «کلاسِ برگزارشده» یعنی
+     * جلسه‌ای که واقعاً تمام شده، نه رزروِ باز یا لغوشده.
+     */
+    const classRows = await db
+      .select({
+        profileId: teacherProfiles.id,
+        taught: sql<number>`count(*)::int`,
+      })
+      .from(bookings)
+      .innerJoin(teacherProfiles, eq(teacherProfiles.userId, bookings.teacherId))
+      .where(
+        and(
+          eq(bookings.status, "COMPLETED"),
+          inArray(teacherProfiles.id, profileIds),
+        ),
+      )
+      .groupBy(teacherProfiles.id);
+    const taughtByProfile = new Map(classRows.map((row) => [row.profileId, row.taught]));
+
+    for (const card of cards) {
+      const rating = ratingByProfile.get(card.profileId);
+      // میانگین به یک رقم اعشار گرد می‌شود؛ همان چیزی که «۴.۹» را می‌سازد
+      card.rating = rating
+        ? { average: Math.round(rating.average * 10) / 10, count: rating.count }
+        : { average: null, count: 0 };
+      card.classesTaught = taughtByProfile.get(card.profileId) ?? 0;
+    }
   }
 
   async getTeacher(slug: string) {
@@ -128,6 +190,12 @@ function buildTeacherCard(
     introVideoUrl: row.introVideoUrl,
     yearsExperience: row.yearsExperience,
     offerings: [offering],
+    /**
+     * مقدارِ پیش‌فرض؛ `attachStats` بعداً روی همین می‌نشیند. جدا نوشتنش
+     * اینجا لازم است تا تایپِ استنتاج‌شده‌ی کارت این فیلدها را داشته باشد.
+     */
+    rating: { average: null as number | null, count: 0 },
+    classesTaught: 0,
   };
 }
 
