@@ -19,6 +19,7 @@
     "db:studio": "pnpm --filter @music/api db:studio",
     "verify:storage": "pnpm --filter @music/api verify:storage",
     "verify:payment": "pnpm --filter @music/api verify:payment",
+    "verify:sms": "pnpm --filter @music/api verify:sms",
     "db:generate": "pnpm --filter @music/api db:generate",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",

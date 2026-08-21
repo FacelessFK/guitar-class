@@ -18,6 +18,7 @@
     "db:check": "drizzle-kit check",
     "verify:storage": "node --env-file-if-exists=../../.env --import @swc-node/register/esm-register src/media/verify-storage.ts",
     "verify:payment": "node --env-file-if-exists=../../.env --import @swc-node/register/esm-register src/payment/verify-payment.ts",
+    "verify:sms": "node --env-file-if-exists=../../.env --import @swc-node/register/esm-register src/notification/verify-sms.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "build": "tsc -p tsconfig.build.json"

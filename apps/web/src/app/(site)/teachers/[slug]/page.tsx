@@ -157,8 +157,15 @@ export default async function TeacherPage({ params }: PageProps) {
           می‌چسبد و بقیه‌ی محتوا از جعبه بیرون می‌زند — فوتر بالای بخش‌های
           پایینی می‌افتد. `items-start` این کشیدگی را می‌بندد.
         */}
-        <div className="grid items-start gap-8 lg:grid-cols-[1fr_20rem]">
-          <div className="min-w-0">
+        {/*
+          کارت رزرو سمت راست، محتوا سمت چپ — مثل ماکآپ. در RTL ستون اولِ
+          گرید سمت راست است، پس `aside` با `lg:order-1` آنجا می‌نشیند و
+          محتوا با `lg:order-2` سمت چپ. ترتیبِ DOM (اول محتوا، بعد رزرو)
+          برای موبایل دست‌نخورده می‌ماند تا آنجا هیرو اول دیده شود، نه
+          کارت قیمت.
+        */}
+        <div className="grid items-start gap-8 lg:grid-cols-[20rem_1fr]">
+          <div className="min-w-0 lg:order-2">
             <Hero teacher={teacher} instruments={instruments} />
 
             {teacher.bio ? (
@@ -217,7 +224,7 @@ export default async function TeacherPage({ params }: PageProps) {
              * می‌شود. یوتیلیتی تیلویند بعد از لایه‌ی `components` می‌آید،
              * پس بر آن قید غالب است.
              */
-            <aside className="card h-fit lg:sticky lg:top-8">
+            <aside className="card h-fit lg:order-1 lg:sticky lg:top-8">
               <p className="text-center text-sm text-ink-muted">قیمت هر جلسه</p>
               <p className="mt-1 text-center text-4xl font-bold">
                 {formatToman(cheapest ?? primary.price)}
@@ -261,38 +268,54 @@ export default async function TeacherPage({ params }: PageProps) {
 function Hero({ teacher, instruments }: { teacher: Teacher; instruments: string[] }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-surface-muted">
-      <div className="grid gap-6 sm:grid-cols-[13rem_1fr] sm:items-center">
-        <Avatar
-          name={teacher.fullName}
-          url={teacher.avatarUrl}
-          alt={`عکس ${teacher.fullName}`}
-          className="h-full min-h-56 w-full"
-          textClassName="text-5xl"
-        />
-
-        <div className="px-6 pb-6 sm:px-0 sm:pe-6 sm:pb-0">
+      {/*
+        عکس سمت چپ، متن سمت راست — مثل ماکآپ. `flex-row` در RTL فرزندِ
+        اول (متن) را راست و دومی (عکس) را چپ می‌گذارد. روی موبایل
+        `flex-col-reverse` عکس را بالا می‌آورد. عکس با `self-stretch`
+        کلِ ارتفاع ردیف را می‌گیرد، پس تمام‌قد است نه یک ستون کوتاه.
+      */}
+      <div className="flex flex-col-reverse sm:min-h-72 sm:flex-row">
+        <div className="flex flex-1 flex-col justify-center px-6 py-6 sm:px-8">
           <h1 className="text-3xl font-bold">{teacher.fullName}</h1>
           <p className="mt-3 text-lg text-ink-muted">{teacher.headline}</p>
 
           {teacher.rating.average !== null ? (
-            <div className="mt-4 flex items-center gap-2 text-sm">
-              <Stars value={teacher.rating.average} className="text-lg" />
-              <span className="font-bold">{faDigits(teacher.rating.average.toFixed(1))}</span>
+            <div className="mt-4 flex items-center gap-3 text-sm">
+              <span className="flex items-center gap-1.5">
+                <Stars value={teacher.rating.average} className="text-lg" />
+                <span className="font-bold">
+                  {faDigits(teacher.rating.average.toFixed(1))}
+                </span>
+                <span className="text-ink-muted">از ۵</span>
+              </span>
+              <span className="text-border">|</span>
               <span className="text-ink-muted">
-                از ۵ · {faNumber(teacher.rating.count)} نظر
+                {faNumber(teacher.rating.count)} نظر
               </span>
             </div>
           ) : null}
 
           <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-4">
             {teacher.yearsExperience > 0 ? (
-              <Stat value={faNumber(teacher.yearsExperience)} label="سال سابقه" />
+              <Stat
+                value={faNumber(teacher.yearsExperience)}
+                label="سال سابقه"
+                icon={<PersonIcon />}
+              />
             ) : null}
             {teacher.classesTaught > 0 ? (
-              <Stat value={faNumber(teacher.classesTaught)} label="کلاس برگزارشده" />
+              <Stat
+                value={faNumber(teacher.classesTaught)}
+                label="کلاس برگزارشده"
+                icon={<CalendarIcon />}
+              />
             ) : null}
             {instruments.length > 0 ? (
-              <Stat value={faNumber(instruments.length)} label="ساز" />
+              <Stat
+                value={faNumber(instruments.length)}
+                label="ساز"
+                icon={<NoteIcon />}
+              />
             ) : null}
           </dl>
 
@@ -301,21 +324,44 @@ function Hero({ teacher, instruments }: { teacher: Teacher; instruments: string[
             می‌پذیرد؛ نشان فقط همان را با کلمه می‌گوید. اگر روزی فیلدِ
             «فعلاً ظرفیت ندارم» اضافه شد، این شرط جای عوض شدن دارد.
           */}
-          <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-success-surface px-3 py-1 text-sm text-success">
+          <p className="mt-6 inline-flex items-center gap-2 self-start rounded-full bg-success-surface px-3 py-1 text-sm text-success">
             <CheckIcon />
             پذیرش هنرجوی جدید
           </p>
         </div>
+
+        <Avatar
+          name={teacher.fullName}
+          url={teacher.avatarUrl}
+          alt={`عکس ${teacher.fullName}`}
+          className="h-60 w-full shrink-0 sm:h-auto sm:w-64 sm:self-stretch"
+          textClassName="text-5xl"
+        />
       </div>
     </section>
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({
+  value,
+  label,
+  icon,
+}: {
+  value: string;
+  label: string;
+  icon?: React.ReactNode;
+}) {
   return (
-    <div>
-      <dd className="text-2xl font-bold">{value}</dd>
-      <dt className="text-sm text-ink-muted">{label}</dt>
+    <div className="flex items-center gap-2.5">
+      {icon ? (
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
+          {icon}
+        </span>
+      ) : null}
+      <div>
+        <dd className="text-2xl font-bold leading-none">{value}</dd>
+        <dt className="mt-1 text-sm text-ink-muted">{label}</dt>
+      </div>
     </div>
   );
 }
@@ -594,6 +640,24 @@ function Reviews({
         </>
       )}
     </section>
+  );
+}
+
+function PersonIcon() {
+  return (
+    <Icon>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" strokeLinecap="round" />
+    </Icon>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <Icon>
+      <rect x="4" y="5" width="16" height="16" rx="2" />
+      <path d="M4 9h16M8 3v4M16 3v4" strokeLinecap="round" />
+    </Icon>
   );
 }
 
