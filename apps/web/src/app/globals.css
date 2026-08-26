@@ -56,6 +56,12 @@
    */
   --color-divider: #2a2f45;
   --color-divider-strong: #343a54;
+  /*
+   * لبه‌ی نیم‌رنگ. دیزاین سه جا `color-mix(divider 55%)` می‌زند: کارت
+   * ورود، ردیف‌های گذشته‌ی داشبورد، و اسلات زمانِ در دسترس نبوده.
+   * همه‌جا یک معنا دارد — «هست ولی دعوت به کلیک نمی‌کند».
+   */
+  --color-divider-soft: color-mix(in srgb, var(--color-divider) 55%, transparent);
 
   /*
    * ─── متن ─────────────────────────────────────────────────────────
@@ -437,6 +443,82 @@
   );
 }
 
+/**
+ * نوارِ «سه نوع جلسه» در صفحه‌ی اصلی.
+ *
+ * سه لایه در یک `background`: خط محوشونده‌ی بالا، خط محوشونده‌ی پایین، و
+ * پرِ `surface`. یوتیلیتی جداست چون `rule-top` و `rule-bottom` هر کدام
+ * کلِ `background` را می‌نویسند و روی هم گذاشتنشان لایه‌ی قبلی را
+ * پاک می‌کند.
+ */
+@utility band-surface {
+  background:
+    linear-gradient(
+        to left,
+        transparent,
+        var(--color-divider) 48px,
+        var(--color-divider) calc(100% - 48px),
+        transparent
+      )
+      no-repeat top / 100% 1px,
+    linear-gradient(
+        to left,
+        transparent,
+        var(--color-divider) 48px,
+        var(--color-divider) calc(100% - 48px),
+        transparent
+      )
+      no-repeat bottom / 100% 1px,
+    linear-gradient(var(--color-surface), var(--color-surface));
+}
+
+/**
+ * ماسکِ عکسِ قهرمانِ صفحه‌ی اصلی.
+ *
+ * عکس نباید لبه‌ی مستطیلی داشته باشد؛ دو ماسک روی هم (`intersect`) آن
+ * را از سه طرف در صفحه حل می‌کنند و از سمت متن هم محو می‌شود تا با
+ * ستون کنارش قاطی نشود. روی موبایل که عکس بالای متن می‌رود، فقط از
+ * پایین محو می‌شود.
+ *
+ * inline نوشتنشان یعنی هشتاد کاراکتر CSS در `className`؛ اینجا نامِ
+ * معنایی می‌گیرند.
+ */
+@utility hero-mask {
+  mask-image: linear-gradient(
+    to top,
+    transparent 0%,
+    rgb(0 0 0 / 0.55) 14%,
+    #000 46%
+  );
+  -webkit-mask-image: linear-gradient(
+    to top,
+    transparent 0%,
+    rgb(0 0 0 / 0.55) 14%,
+    #000 46%
+  );
+}
+
+@utility hero-mask-wide {
+  mask-image:
+    radial-gradient(
+      115% 105% at 45% 55%,
+      #000 52%,
+      rgb(0 0 0 / 0.55) 82%,
+      transparent 100%
+    ),
+    linear-gradient(to left, transparent 0%, rgb(0 0 0 / 0.5) 6%, #000 16%);
+  -webkit-mask-image:
+    radial-gradient(
+      115% 105% at 45% 55%,
+      #000 52%,
+      rgb(0 0 0 / 0.55) 82%,
+      transparent 100%
+    ),
+    linear-gradient(to left, transparent 0%, rgb(0 0 0 / 0.5) 6%, #000 16%);
+  mask-composite: intersect;
+  -webkit-mask-composite: intersect;
+}
+
 @utility lighten {
   mix-blend-mode: lighten;
   background-color: transparent;
@@ -667,11 +749,25 @@
     background-color: var(--color-surface-2);
     padding: 0 0.875rem;
     font: inherit;
-    font-size: 0.9375rem;
+    /*
+     * ۱۶ پیکسل روی موبایل و ۱۵ از `md` به بالا.
+     *
+     * سافاریِ iOS روی هر ورودیِ کوچک‌تر از ۱۶ پیکسل موقع فوکوس صفحه را
+     * زوم می‌کند و دیگر برنمی‌گرداند — کاربر وسط پر کردن فرم گیر
+     * می‌افتد. دیزاین همین را در کارت ورود و صفحه‌ی حساب کاربری صریح
+     * گذاشته بود؛ دلیلش عمومی است پس روی خودِ کلاس نشست.
+     */
+    font-size: 1rem;
     color: var(--color-ink);
     caret-color: var(--color-violet-strong);
     box-shadow: inset 0 0 0 1px var(--color-divider);
     transition: box-shadow 180ms ease;
+  }
+
+  @media (width >= 48rem) {
+    .input {
+      font-size: 0.9375rem;
+    }
   }
 
   textarea.input {

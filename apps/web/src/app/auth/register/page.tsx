@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import {
@@ -9,8 +8,17 @@ import {
   passwordProblemMessage,
 } from "@music/shared";
 
-import { safeDestination } from "@/lib/auth-destination";
+import { AuthCard } from "@/components/auth/auth-card";
+import {
+  Button,
+  EyeIcon,
+  EyeSlashIcon,
+  Field,
+  InlineNotice,
+  TextInput,
+} from "@/components/ui";
 import { ApiError, apiFetch, errorMessage } from "@/lib/api-client";
+import { safeDestination } from "@/lib/auth-destination";
 import { faNumber } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { startSession } from "@/lib/session-store";
@@ -27,11 +35,13 @@ import { startSession } from "@/lib/session-store";
  */
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-ink-muted">در حال بارگذاری…</p>}>
+    <Suspense fallback={<p className="text-sm text-meta">در حال بارگذاری…</p>}>
       <RegisterForm />
     </Suspense>
   );
 }
+
+type FieldErrors = Partial<Record<"name" | "phone" | "password", string>>;
 
 function RegisterForm() {
   const router = useRouter();
@@ -41,7 +51,9 @@ function RegisterForm() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [reveal, setReveal] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   const destination = safeDestination(searchParams.get("next"));
@@ -51,28 +63,27 @@ function RegisterForm() {
   }, [status, router, destination]);
 
   async function submit(): Promise<void> {
-    if (fullName.trim().length < 2) {
-      setError("نام و نام خانوادگی را بنویسید.");
-      return;
-    }
+    const next: FieldErrors = {};
 
-    if (!isValidIranianMobile(phone)) {
-      setError("شماره‌ی موبایل معتبر نیست. مثل ۰۹۱۲۱۲۳۴۵۶۷ وارد کنید.");
-      return;
-    }
+    if (fullName.trim().length < 2) next.name = "نام و نام خانوادگی را بنویس.";
+    if (!isValidIranianMobile(phone)) next.phone = "شماره موبایل معتبر نیست.";
 
-    // همان تابعی که سرور هم با آن می‌سنجد. اگر اینجا کپیِ دستیِ قاعده
-    // بود، اولین باری که سیاست عوض می‌شد، فرم چیزی را می‌پذیرفت که API
-    // ردش می‌کند.
+    /*
+     * همان تابعی که سرور هم با آن می‌سنجد. اگر اینجا کپیِ دستیِ قاعده
+     * بود، اولین باری که سیاست عوض می‌شد، فرم چیزی را می‌پذیرفت که API
+     * ردش می‌کند.
+     */
     const passwordProblem = passwordProblemMessage(password);
+    if (passwordProblem) next.password = passwordProblem;
 
-    if (passwordProblem) {
-      setError(passwordProblem);
+    if (Object.keys(next).length > 0) {
+      setErrors(next);
       return;
     }
 
     setPending(true);
-    setError(null);
+    setErrors({});
+    setFormError(null);
 
     try {
       // توکن تازه‌سازی در بدنه نمی‌آید؛ در کوکی httpOnly می‌نشیند
@@ -86,9 +97,9 @@ function RegisterForm() {
       router.replace(destination);
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === "PHONE_ALREADY_REGISTERED") {
-        setError("این شماره از قبل حساب دارد. از صفحه‌ی ورود وارد شوید.");
+        setErrors({ phone: "این شماره از قبل حساب دارد. از صفحه‌ی ورود وارد شو." });
       } else {
-        setError(errorMessage(caught));
+        setFormError(errorMessage(caught));
       }
     } finally {
       setPending(false);
@@ -96,87 +107,101 @@ function RegisterForm() {
   }
 
   if (status === "loading" || status === "authenticated") {
-    return <p className="text-sm text-ink-muted">در حال بارگذاری…</p>;
+    return <p className="text-sm text-meta">در حال بارگذاری…</p>;
   }
 
   return (
-    <div className="w-full max-w-sm">
-      <h1 className="text-2xl font-bold">ساخت حساب</h1>
-      <p className="mt-2 text-sm text-ink-muted">
-        با شماره‌ی موبایل و یک رمز عبور ثبت‌نام کنید.
-      </p>
-
+    <AuthCard
+      heading="ساخت حساب"
+      lede="با شماره موبایل و یک رمز عبور ثبت‌نام کن."
+      switchLede="حساب داری؟"
+      switchHref="/auth/login"
+      switchCta="وارد شو"
+    >
       <form
-        className="mt-8 space-y-4"
+        className="mt-6.5 flex flex-col gap-4.5"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
         }}
       >
-        <div>
-          <label className="label" htmlFor="fullName">
-            نام و نام خانوادگی
-          </label>
-          <input
+        <Field label="نام و نام خانوادگی" htmlFor="fullName" error={errors.name}>
+          <TextInput
             id="fullName"
-            className="input"
             type="text"
             autoComplete="name"
+            placeholder="مثلاً علی محمدی"
+            invalid={!!errors.name}
             value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
+            onChange={(event) => {
+              setFullName(event.target.value);
+              setErrors((prev) => ({ ...prev, name: undefined }));
+            }}
           />
-        </div>
+        </Field>
 
-        <div>
-          <label className="label" htmlFor="phone">
-            شماره‌ی موبایل
-          </label>
-          <input
+        <Field label="شماره موبایل" htmlFor="phone" error={errors.phone}>
+          <TextInput
             id="phone"
-            className="input"
             type="tel"
             inputMode="tel"
             autoComplete="tel"
             dir="ltr"
             placeholder="09121234567"
+            invalid={!!errors.phone}
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
+            onChange={(event) => {
+              setPhone(event.target.value);
+              setErrors((prev) => ({ ...prev, phone: undefined }));
+            }}
           />
-        </div>
+        </Field>
 
-        <div>
-          <label className="label" htmlFor="password">
-            رمز عبور
-          </label>
-          <input
-            id="password"
-            className="input"
-            type="password"
-            // به مرورگر می‌گوید این رمزِ تازه است، نه رمزِ ذخیره‌شده —
-            // پیشنهاد رمز قوی و ذخیره‌ی درست به همین بند است
-            autoComplete="new-password"
-            dir="ltr"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <p className="mt-1 text-xs text-ink-muted">
-            دست‌کم {faNumber(PASSWORD_POLICY.MIN_LENGTH)} کاراکتر.
-          </p>
-        </div>
+        <Field
+          label="رمز عبور"
+          htmlFor="password"
+          error={errors.password}
+          hint={`دست‌کم ${faNumber(PASSWORD_POLICY.MIN_LENGTH)} کاراکتر`}
+        >
+          <div className="relative">
+            <TextInput
+              id="password"
+              // به مرورگر می‌گوید این رمزِ تازه است، نه رمزِ ذخیره‌شده —
+              // پیشنهاد رمز قوی و ذخیره‌ی درست به همین بند است
+              type={reveal ? "text" : "password"}
+              autoComplete="new-password"
+              dir="ltr"
+              className="pr-11 pl-3.5"
+              invalid={!!errors.password}
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setErrors((prev) => ({ ...prev, password: undefined }));
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setReveal(!reveal)}
+              aria-label={reveal ? "پنهان کردن رمز عبور" : "نمایش رمز عبور"}
+              aria-pressed={reveal}
+              className="absolute top-1/2 right-3 grid size-6 -translate-y-1/2 cursor-pointer place-items-center border-0 bg-transparent p-0 text-meta transition-colors hover:text-ink-2"
+            >
+              {reveal ? <EyeSlashIcon /> : <EyeIcon />}
+            </button>
+          </div>
+        </Field>
 
-        {error ? <p className="alert-error">{error}</p> : null}
+        {formError ? <InlineNotice tone="error">{formError}</InlineNotice> : null}
 
-        <button type="submit" className="btn-primary w-full" disabled={pending}>
-          {pending ? "کمی صبر کنید…" : "ساخت حساب"}
-        </button>
+        <Button
+          type="submit"
+          block
+          busy={pending}
+          className="mt-1 h-13 text-base"
+        >
+          ساخت حساب
+        </Button>
       </form>
-
-      <p className="mt-6 text-sm text-ink-muted">
-        حساب دارید؟{" "}
-        <Link className="underline" href="/auth/login">
-          وارد شوید
-        </Link>
-      </p>
-    </div>
+    </AuthCard>
   );
 }

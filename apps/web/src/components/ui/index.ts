@@ -40,5 +40,7 @@ export {
   CheckIcon,
   ChevronDownIcon,
   ClockIcon,
+  EyeIcon,
+  EyeSlashIcon,
   SignOutIcon,
 } from "./icons";

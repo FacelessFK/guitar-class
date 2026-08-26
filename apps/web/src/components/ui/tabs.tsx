@@ -18,22 +18,39 @@ import { cx } from "@/lib/cx";
  */
 export type TabItem<T extends string> = { value: T; label: string };
 
+/**
+ * عرضِ خطِ زیرین سه مقدار دارد و هر سه در دیزاین هست: تمام‌عرضِ آیتم
+ * (فیلترهای تمرین و اعلان)، ۷۰٪ (تبِ روش ورود)، و ۶۰٪ (فیلتر استادها و
+ * مجله). خطِ کوتاه‌تر روی آیتمِ پدینگ‌دار وسط‌چین می‌نشیند.
+ */
+const UNDERLINE = {
+  full: "100%",
+  wide: "70%",
+  narrow: "60%",
+} as const;
+
 export function Tabs<T extends string>({
   items,
   active,
   onSelect,
+  underline = "full",
+  dense,
   className,
 }: {
   items: ReadonlyArray<TabItem<T>>;
   active: T;
   onSelect: (value: T) => void;
+  underline?: keyof typeof UNDERLINE;
+  /** پدینگِ افقی و فاصله‌ی کمتر — شکلی که تبِ روش ورود دارد */
+  dense?: boolean;
   className?: string;
 }) {
   return (
     <div
       role="tablist"
       className={cx(
-        "-mx-4 flex gap-5 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:px-0",
+        "-mx-4 flex overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:flex-wrap md:px-0",
+        dense ? "gap-1.5" : "gap-5",
         className,
       )}
     >
@@ -46,10 +63,26 @@ export function Tabs<T extends string>({
             role="tab"
             aria-selected={on}
             onClick={() => onSelect(item.value)}
-            className={cx(
-              "shrink-0 cursor-pointer whitespace-nowrap border-0 bg-transparent pt-1.5 pb-2.5 text-[13.5px] transition-colors duration-200",
+            style={
               on
-                ? "text-violet-strong [background:linear-gradient(var(--color-violet),var(--color-violet))_no-repeat_bottom_center/100%_1px]"
+                ? {
+                    backgroundImage:
+                      "linear-gradient(var(--color-violet), var(--color-violet))",
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "bottom center",
+                    backgroundSize: `${UNDERLINE[underline]} 1px`,
+                  }
+                : undefined
+            }
+            className={cx(
+              "shrink-0 cursor-pointer whitespace-nowrap border-0 bg-transparent transition-colors duration-200",
+              dense
+                ? "px-3.5 pt-2 pb-3 text-[14.5px]"
+                : "pt-1.5 pb-2.5 text-[13.5px]",
+              on
+                ? dense
+                  ? "text-ink"
+                  : "text-violet-strong"
                 : "text-meta hover:text-ink",
             )}
           >

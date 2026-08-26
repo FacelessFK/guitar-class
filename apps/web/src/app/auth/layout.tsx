@@ -10,9 +10,20 @@ import { SessionBootstrap } from "@/lib/session";
  * ولی `SessionBootstrap` دارد، چون صفحه‌ی ورود باید تشخیص دهد کاربر از
  * قبل نشست فعال دارد و او را جلو بفرستد به‌جای اینکه دوباره کد بخواهد.
  *
- * دو هاله‌ی شعاعی در گوشه‌ها — یکی چوبی و یکی بنفش، هر دو زیر ۱۰ درصد
- * — تنها تزئین این صفحه‌اند. `overflow-hidden` روی `main` لازم است
- * وگرنه هاله‌ها که بیرون از کادرند صفحه را افقی اسکرول می‌کنند.
+ * ⚠️ **`overflow-hidden` روی `main` نیست و نباید بیاید.** دو هاله‌ی
+ * تزئینی از کادر بیرون می‌زنند و باید بریده شوند، ولی بریدن را خودِ
+ * لایه‌ی تزئین انجام می‌دهد نه ظرفِ محتوا. اگر `main` ببُرد:
+ *
+ * - حالت‌های بلندِ ورود (ثبت‌نام با سه فیلد و خطا، یا مرحله‌ی کد با
+ *   فیلد نام) روی نمایشگر کوتاه از پایین بریده می‌شوند و راهی برای
+ *   اسکرول نمی‌ماند؛
+ * - و روی موبایل، باز شدن کیبورد ارتفاع دیدنی را نصف می‌کند و دکمه‌ی
+ *   ارسال زیر کیبورد گم می‌شود.
+ *
+ * پس محتوا در جریان عادی می‌ماند و صفحه اسکرول می‌شود. روی نمایشگر
+ * کوتاه کارت از **بالا** شروع می‌شود (`items-start`) و فقط از `md` به
+ * بالا وسط‌چین می‌شود — وسط‌چینیِ اجباری روی محتوای بلندتر از پنجره،
+ * بالای کارت را به بیرونِ دسترس می‌فرستد.
  */
 export const metadata: Metadata = {
   title: "ورود",
@@ -35,15 +46,20 @@ export default function AuthLayout({
 
       <SessionBootstrap />
 
-      <main className="relative grid flex-1 place-items-start justify-items-center overflow-hidden px-4.5 pt-2 pb-30 md:place-items-center md:px-6 md:pb-10">
-        <span
+      <main className="relative flex flex-1 flex-col items-center justify-start px-4.5 pt-2 pb-30 md:justify-center md:px-6 md:pb-10">
+        {/*
+          لایه‌ی تزئین: خودش می‌بُرد، و `absolute` است تا ارتفاع ظرف را
+          تعیین نکند. `pointer-events-none` لازم است وگرنه روی کارت
+          می‌افتد و کلیک را می‌خورد.
+        */}
+        <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-20 start-[-120px] size-[520px] rounded-full [background:radial-gradient(circle,color-mix(in_srgb,var(--color-wood)_9%,transparent)_0%,transparent_68%)]"
-        />
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-35 end-[-160px] size-[560px] rounded-full [background:radial-gradient(circle,color-mix(in_srgb,var(--color-violet)_7%,transparent)_0%,transparent_70%)]"
-        />
+          className="pointer-events-none absolute inset-0 overflow-hidden"
+        >
+          <span className="absolute -top-20 start-[-120px] size-[520px] rounded-full [background:radial-gradient(circle,color-mix(in_srgb,var(--color-wood)_9%,transparent)_0%,transparent_68%)]" />
+          <span className="absolute -bottom-35 end-[-160px] size-[560px] rounded-full [background:radial-gradient(circle,color-mix(in_srgb,var(--color-violet)_7%,transparent)_0%,transparent_70%)]" />
+        </div>
+
         {children}
       </main>
     </div>
