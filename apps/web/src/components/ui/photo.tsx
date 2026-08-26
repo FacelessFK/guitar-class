@@ -20,18 +20,27 @@ import { cx } from "@/lib/cx";
  *
  * **کامپوننت سروری است.** صفحات عمومی SSG هستند و این تصویرِ بزرگ‌ترین
  * عنصر بالای صفحه‌شان است.
+ *
+ * `src` می‌تواند `null` باشد و آن‌وقت **فقط چاه** رندر می‌شود. این
+ * حالتِ «دارایی امضاشده هنوز نرسیده» است و عمدی: گذاشتن یک عکس
+ * بی‌ربط به‌جای دارایی نهایی بدتر از قابِ خالی است، و قابِ خالی چیدمان
+ * تأییدشده را هم به هم نمی‌زند. همان الگویی که کارت استاد برای استادِ
+ * بی‌عکس دارد.
  */
 export function Photo({
   src,
   alt,
+  fallback,
   focus = "50% 50%",
   ratio,
   rounded = "card",
   className,
   imgClassName,
 }: {
-  src: string;
+  src: string | null | undefined;
   alt: string;
+  /** آنچه در نبودِ عکس داخل چاه می‌نشیند — حرف‌نگار، برچسب، یا هیچ */
+  fallback?: React.ReactNode;
   /** مقدار `object-position` — مثلاً `"55% 34%"` */
   focus?: string;
   /** مقدار `aspect-ratio` — مثلاً `"4 / 5"` */
@@ -53,15 +62,21 @@ export function Photo({
         className,
       )}
     >
-      <div className="lighten absolute inset-0 [filter:contrast(1.05)_saturate(1.02)]">
-        {/* eslint-disable-next-line @next/next/no-img-element -- نشانی از باکت می‌آید و دامنه‌اش با محیط عوض می‌شود؛ next/image پیکربندی دامنه می‌خواهد */}
-        <img
-          src={src}
-          alt={alt}
-          style={{ objectPosition: focus }}
-          className={cx("size-full object-cover", imgClassName)}
-        />
-      </div>
+      {src ? (
+        <div className="lighten absolute inset-0 [filter:contrast(1.05)_saturate(1.02)]">
+          {/* eslint-disable-next-line @next/next/no-img-element -- نشانی از باکت می‌آید و دامنه‌اش با محیط عوض می‌شود؛ next/image پیکربندی دامنه می‌خواهد */}
+          <img
+            src={src}
+            alt={alt}
+            style={{ objectPosition: focus }}
+            className={cx("size-full object-cover", imgClassName)}
+          />
+        </div>
+      ) : (
+        <div className="absolute inset-0 grid place-items-center bg-surface-2">
+          {fallback}
+        </div>
+      )}
     </div>
   );
 }

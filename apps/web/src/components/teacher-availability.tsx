@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { addDaysToDateKey, tehranDateKey } from "@music/shared";
 
+import { SectionMark, Skeleton } from "@/components/ui";
 import { errorMessage } from "@/lib/api-client";
 import { getSlots, type Slot } from "@/lib/app-api";
 import { faDigits, formatJalaliShort } from "@/lib/format";
@@ -19,6 +20,11 @@ import { faDigits, formatJalaliShort } from "@/lib/format";
  *
  * فقط `@Public()` صدا زده می‌شود (`anonymous: true`) — این صفحه را
  * بازدیدکننده‌ی واردنشده هم می‌بیند و هیچ توکنی در کار نیست.
+ *
+ * دیزاین این بخش را سه ردیفِ «روز / ساعت» با خط جداکننده و یک لینک
+ * «دیدن همه‌ی زمان‌ها ←» می‌کشد. حالتِ بارگذاری اسکلتون است، نه متنِ
+ * «در حال خواندن…»: بازبینی (بند B-13) الگوی اسکلتونِ صفحه‌ی رزرو را
+ * الگوی مشترکِ همه‌ی انتظارها کرده.
  */
 
 /** پنجره‌ی جست‌وجو. کوتاه است چون این کارت خلاصه است نه تقویم کامل. */
@@ -34,7 +40,11 @@ interface Props {
   bookHref: React.ComponentProps<typeof Link>["href"];
 }
 
-export function TeacherAvailability({ offeringId, teacherProfileId, bookHref }: Props) {
+export function TeacherAvailability({
+  offeringId,
+  teacherProfileId,
+  bookHref,
+}: Props) {
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,77 +66,47 @@ export function TeacherAvailability({ offeringId, teacherProfileId, bookHref }: 
   }, [load]);
 
   return (
-    <div className="mt-6 border-t border-border pt-6">
-      <h3 className="flex items-center gap-2 font-medium">
-        <ClockIcon />
+    <div className="rule-plain mt-7 pt-5.5">
+      <SectionMark tone="violet" width="sm" className="mb-1.5">
         زمان‌های در دسترس
-      </h3>
+      </SectionMark>
 
       {slots === null ? (
-        <p className="mt-3 text-sm text-ink-muted">در حال خواندن…</p>
+        <div className="mt-3.5 flex flex-col gap-2">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-4/5" delay={1} />
+          <Skeleton className="h-5 w-3/5" delay={2} />
+        </div>
       ) : error ? (
-        <p className="mt-3 text-sm text-ink-muted">
-          فهرست ساعت‌ها الان در دسترس نیست. از دکمه‌ی رزرو وارد شوید.
+        <p className="mt-3.5 text-[13.5px] leading-[1.85] text-meta">
+          فهرست ساعت‌ها الان در دسترس نیست. از دکمه‌ی رزرو ادامه بده.
         </p>
       ) : slots.length === 0 ? (
-        <p className="mt-3 text-sm text-ink-muted">
+        <p className="mt-3.5 text-[13.5px] leading-[1.85] text-meta">
           در دو هفته‌ی آینده ساعت آزادی ندارد.
         </p>
       ) : (
-        <ul className="mt-3 space-y-2">
+        <div className="flex flex-col">
           {slots.slice(0, MAX_SHOWN).map((slot) => (
-            <li
+            <div
               key={slot.startAt}
-              className="flex items-center justify-between rounded-xl border border-border bg-surface-2 px-3 py-2.5 text-sm"
+              className="flex items-center justify-between gap-4 py-3.5"
             >
-              <span className="flex items-center gap-2">
-                <CalendarIcon />
-                {slot.weekdayName}
-                <span className="text-ink-muted">{formatJalaliShort(slot.date)}</span>
+              <span className="text-[15px] text-ink">
+                {slot.weekdayName}{" "}
+                <span className="text-ink-2">{formatJalaliShort(slot.date)}</span>
               </span>
-              <span className="font-medium">{faDigits(slot.startTime)}</span>
-            </li>
+              <span dir="ltr" className="text-[15px] text-ink-2">
+                {faDigits(slot.startTime)}
+              </span>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
 
-      <p className="mt-4 text-center text-sm text-ink-muted">
-        <Link href={bookHref} className="underline">
-          برای دیدن همه‌ی زمان‌ها وارد شوید
-        </Link>
-      </p>
+      <Link href={bookHref} className="mt-4 inline-block text-[14.5px]">
+        دیدن همه‌ی زمان‌ها ←
+      </Link>
     </div>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg
-      className="size-4 text-accent-strong"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CalendarIcon() {
-  return (
-    <svg
-      className="size-4 text-ink-muted"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      aria-hidden="true"
-    >
-      <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M3 10h18M8 3v4M16 3v4" strokeLinecap="round" />
-    </svg>
   );
 }

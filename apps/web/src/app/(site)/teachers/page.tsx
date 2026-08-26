@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
-import { getTeachers } from "@/lib/api";
-import { faNumber, formatToman, lowestPrice } from "@/lib/format";
+import { TeacherDirectory } from "@/components/teachers/teacher-directory";
+import { SectionMark } from "@/components/ui";
+import { getInstruments, getTeachers } from "@/lib/api";
 
 /**
  * ⚠️ عدد باید **عینی** نوشته شود.
@@ -22,68 +22,30 @@ export const metadata: Metadata = {
 };
 
 export default async function TeachersPage() {
-  const teachers = await getTeachers();
+  // هر دو با هم — کندترینشان زمان صفحه را تعیین می‌کند، نه جمعشان
+  const [teachers, instruments] = await Promise.all([
+    getTeachers(),
+    getInstruments(),
+  ]);
 
   return (
-    <section className="mx-auto max-w-5xl px-5 py-16">
-      <h1 className="text-3xl font-bold sm:text-4xl">استادها</h1>
+    <>
+      <section className="mx-auto max-w-[1160px] px-4.5 pt-10 pb-7 md:px-6 md:pt-[clamp(56px,7vw,96px)] md:pb-[clamp(32px,4vw,48px)]">
+        <SectionMark hero tone="violet" className="mb-5.5">
+          استادها
+        </SectionMark>
 
-      <p className="mt-6 max-w-2xl text-lg text-ink-muted">
-        هر استاد پیش از نمایش در این فهرست بررسی و تأیید می‌شود.
-      </p>
+        <h1 className="max-w-[26ch] text-[clamp(32px,4.4vw,48px)] leading-[1.4] font-semibold tracking-[-0.025em] text-ink text-pretty">
+          استادی را پیدا کن که با مسیر تو هماهنگ باشد.
+        </h1>
 
-      {teachers.length === 0 ? (
-        <p className="mt-10 text-ink-muted">
-          هنوز استادی تأیید نشده است.
+        <p className="mt-6 max-w-[54ch] text-[16.5px] leading-[1.9] text-ink-2 md:text-lg">
+          هر استاد پیش از دیده‌شدن در این فهرست بررسی و تأیید می‌شود — سابقه،
+          نمونه‌ی تدریس و کیفیت کلاس.
         </p>
-      ) : (
-        <ul className="mt-10 grid gap-4 sm:grid-cols-2">
-          {teachers.map((teacher) => {
-            const cheapest = lowestPrice(
-              teacher.offerings.map((offering) => offering.price),
-            );
-            const instruments = [
-              ...new Set(
-                teacher.offerings.map((offering) => offering.instrumentName),
-              ),
-            ];
+      </section>
 
-            return (
-              <li key={teacher.profileId}>
-                <Link
-                  href={`/teachers/${teacher.slug}`}
-                  className="card"
-                >
-                  <h2 className="font-bold">{teacher.fullName}</h2>
-                  <p className="mt-1 text-sm text-ink-muted">
-                    {teacher.headline}
-                  </p>
-
-                  {instruments.length > 0 ? (
-                    <p className="mt-3 text-sm">{instruments.join("، ")}</p>
-                  ) : null}
-
-                  <dl className="mt-3 space-y-1 text-sm">
-                    {teacher.yearsExperience > 0 ? (
-                      <div className="flex gap-2">
-                        <dt className="text-ink-muted">سابقه:</dt>
-                        <dd>{faNumber(teacher.yearsExperience)} سال</dd>
-                      </div>
-                    ) : null}
-
-                    {cheapest ? (
-                      <div className="flex gap-2">
-                        <dt className="text-ink-muted">شروع از:</dt>
-                        <dd>{formatToman(cheapest)} تومان</dd>
-                      </div>
-                    ) : null}
-                  </dl>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+      <TeacherDirectory teachers={teachers} instruments={instruments} />
+    </>
   );
 }

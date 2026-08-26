@@ -36,6 +36,7 @@ export function Tabs<T extends string>({
   underline = "full",
   dense,
   className,
+  itemClassName,
 }: {
   items: ReadonlyArray<TabItem<T>>;
   active: T;
@@ -44,6 +45,13 @@ export function Tabs<T extends string>({
   /** پدینگِ افقی و فاصله‌ی کمتر — شکلی که تبِ روش ورود دارد */
   dense?: boolean;
   className?: string;
+  /**
+   * تنظیمِ اندازه‌ی خودِ آیتم.
+   *
+   * دیزاین سه هندسه‌ی متفاوت برای یک نقش دارد و ساختن یک واریانتِ تازه
+   * به ازای هرکدام، پریمیتیو را به سه کامپوننت تکه می‌کرد.
+   */
+  itemClassName?: string;
 }) {
   return (
     <div
@@ -84,6 +92,7 @@ export function Tabs<T extends string>({
                   ? "text-ink"
                   : "text-violet-strong"
                 : "text-meta hover:text-ink",
+              itemClassName,
             )}
           >
             {item.label}

@@ -3,18 +3,23 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BUSINESS_RULES } from "@music/shared";
 
-import { Avatar } from "@/components/avatar";
-import { Stars } from "@/components/stars";
 import { TeacherAvailability } from "@/components/teacher-availability";
+import {
+  Accordion,
+  ButtonLink,
+  Mark,
+  Photo,
+  SectionMark,
+} from "@/components/ui";
 import {
   getTeacherReviews,
   getTeachers,
   type Teacher,
   type TeacherOffering,
+  type TeacherRating,
   type TeacherReview,
 } from "@/lib/api";
 import {
-  faDigits,
   faNumber,
   formatDuration,
   formatRelativeFa,
@@ -89,7 +94,9 @@ export type BookHref = {
 };
 
 function instrumentNames(teacher: Teacher): string[] {
-  return [...new Set(teacher.offerings.map((offering) => offering.instrumentName))];
+  return [
+    ...new Set(teacher.offerings.map((offering) => offering.instrumentName)),
+  ];
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -115,6 +122,24 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
+/**
+ * صفحه‌ی عمومی استاد.
+ *
+ * ⚠️ **این پرقصدترین صفحه‌ی محصول است و در دیزاین هیچ مدیا-کوئری
+ * نداشت** (بازبینی، بند A-09): گریدِ ثابتِ `minmax(0,1fr) 344px` زیر
+ * ۹۰۰ پیکسل ستون محتوا را به چند صد پیکسل می‌فشرد. رفتار رسپانسیو
+ * اینجا تصمیمِ صریحِ محصول است:
+ *
+ *   ≥ ۱۰۲۴  دو ستون؛ کارت رزرو در ستون کنار و چسبان
+ *   < ۱۰۲۴  یک ستون؛ کارت رزرو **درون‌خطی** و بلافاصله بعد از هیرو
+ *   < ۷۶۸   کارت درون‌خطی برداشته می‌شود و **فقط** نوار چسبانِ پایین
+ *           می‌ماند — دو سطح رزرو روی یک پرده‌ی کوچک، هم جا می‌گیرد و
+ *           هم کاربر را دوبار از یک تصمیم می‌پرسد
+ *
+ * چیدمان با گرید انجام می‌شود نه `display: contents`: ترتیب DOM همان
+ * ترتیب موبایل است (هیرو، رزرو، بخش‌ها) و در دسکتاپ فقط جای سلول‌ها
+ * عوض می‌شود — پس نشانه‌گذاری معنایی و ترتیب فوکوس هم درست می‌ماند.
+ */
 export default async function TeacherPage({ params }: PageProps) {
   const { slug } = await params;
   const teacher = await findTeacher(slug);
@@ -133,15 +158,15 @@ export default async function TeacherPage({ params }: PageProps) {
   }));
 
   const instruments = instrumentNames(teacher);
-  const cheapest = lowestPrice(teacher.offerings.map((offering) => offering.price));
+  const cheapest = lowestPrice(teacher.offerings.map((o) => o.price));
 
   /**
-   * کارت کناری و قیمت سرصفحه روی همین یک سرویس بسته می‌شوند.
+   * کارت کناری روی همین یک سرویس بسته می‌شود.
    *
    * استاد می‌تواند چند ساز داشته باشد با قیمت‌های متفاوت؛ کارت کناری
-   * ارزان‌ترین را می‌گوید («از … تومان») و بخش بسته‌ها همه را جدا
-   * فهرست می‌کند. اسلات‌های آزاد به طول سرویس وابسته‌اند، پس یکی باید
-   * انتخاب شود — اولی، همان که در فهرست هم اول می‌آید.
+   * ارزان‌ترین را می‌گوید و بخش بسته‌ها همه را جدا فهرست می‌کند.
+   * اسلات‌های آزاد به طول سرویس وابسته‌اند، پس یکی باید انتخاب شود —
+   * اولی، همان که در فهرست هم اول می‌آید.
    */
   const primary = teacher.offerings[0] ?? null;
 
@@ -149,106 +174,144 @@ export default async function TeacherPage({ params }: PageProps) {
     <>
       <PersonJsonLd teacher={teacher} />
 
-      <article className="mx-auto max-w-6xl px-5 py-10">
-        {/*
-          `items-start` در همه‌ی عرض‌ها، نه فقط `lg`: بدون آن، زیر
-          بریک‌پوینت `lg` گرید ستون را کش می‌آورد و چون کارتِ «درباره‌ی
-          استاد» یک `.card` با `height: 100%` است، ارتفاعش به کلِ ستون
-          می‌چسبد و بقیه‌ی محتوا از جعبه بیرون می‌زند — فوتر بالای بخش‌های
-          پایینی می‌افتد. `items-start` این کشیدگی را می‌بندد.
-        */}
-        {/*
-          کارت رزرو سمت راست، محتوا سمت چپ — مثل ماکآپ. در RTL ستون اولِ
-          گرید سمت راست است، پس `aside` با `lg:order-1` آنجا می‌نشیند و
-          محتوا با `lg:order-2` سمت چپ. ترتیبِ DOM (اول محتوا، بعد رزرو)
-          برای موبایل دست‌نخورده می‌ماند تا آنجا هیرو اول دیده شود، نه
-          کارت قیمت.
-        */}
-        <div className="grid items-start gap-8 lg:grid-cols-[20rem_1fr]">
-          <div className="min-w-0 lg:order-2">
-            <Hero teacher={teacher} instruments={instruments} />
+      <nav
+        aria-label="مسیر"
+        className="mx-auto flex max-w-[1160px] items-center gap-2.5 px-4.5 pt-4.5 text-[12.5px] text-meta md:px-6 md:pt-6.5 md:text-[13.5px]"
+      >
+        <Link href="/teachers" className="py-1.5 text-meta">
+          استادها
+        </Link>
+        {instruments[0] ? (
+          <>
+            <span aria-hidden="true">/</span>
+            <Link href="/teachers" className="py-1.5 text-meta">
+              {instruments[0]}
+            </Link>
+          </>
+        ) : null}
+        <span aria-hidden="true">/</span>
+        <span className="text-ink-2">{teacher.fullName}</span>
+      </nav>
 
-            {teacher.bio ? (
-              <section className="card mt-8">
-                <h2 className="text-xl font-bold">درباره‌ی استاد</h2>
-                <p className="mt-4 whitespace-pre-line">{teacher.bio}</p>
-              </section>
-            ) : null}
+      <div className="mx-auto grid max-w-[1160px] grid-cols-1 items-start gap-0 px-4.5 pt-5 pb-26 md:px-6 md:pb-[clamp(88px,11vw,132px)] lg:max-wide:grid-cols-[minmax(0,1fr)_300px] lg:max-wide:gap-[30px] wide:grid-cols-[minmax(0,1fr)_344px] wide:gap-[clamp(32px,4vw,56px)]">
+        {/* هیرو — ستون یک، سطر یک */}
+        <section className="grid grid-cols-1 items-center gap-6.5 lg:col-start-1 lg:row-start-1 lg:[grid-template-columns:minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-[clamp(28px,3.4vw,44px)]">
+          <Photo
+            src={teacher.avatarUrl}
+            alt={teacher.fullName}
+            focus="55% 30%"
+            className="max-h-[38vh] w-full [aspect-ratio:4/3] md:max-h-[46vh] md:[aspect-ratio:16/10] lg:max-h-none lg:[aspect-ratio:4/5]"
+            fallback={
+              <span
+                aria-hidden="true"
+                className="text-[56px] font-semibold text-[color-mix(in_srgb,var(--color-ivory)_22%,transparent)]"
+              >
+                {initials(teacher.fullName)}
+              </span>
+            }
+          />
 
-            <TeachingMethod />
+          <div>
+            <h1 className="text-[clamp(30px,3.8vw,44px)] leading-[1.35] font-semibold tracking-[-0.025em] text-ink">
+              {teacher.fullName}
+            </h1>
+
+            <p className="mt-4 max-w-[36ch] text-[17px] leading-[1.9] text-ink-2">
+              {teacher.headline}
+            </p>
 
             {instruments.length > 0 ? (
-              <section className="mt-12">
-                <h2 className="text-xl font-bold">سازها و سطح‌ها</h2>
-                <ul className="mt-5 flex flex-wrap gap-2.5">
-                  {instruments.map((name) => (
-                    <li key={name} className="badge badge-neutral px-4 py-1.5 text-sm">
-                      {name}
-                    </li>
-                  ))}
-                </ul>
-              </section>
+              <ul className="mt-6 flex list-none flex-wrap gap-2.5 p-0">
+                {instruments.map((name) => (
+                  <li
+                    key={name}
+                    className="rounded-pill px-3.5 py-1.75 text-sm text-ink-2 shadow-[inset_0_0_0_1px_var(--color-divider)]"
+                  >
+                    {name}
+                  </li>
+                ))}
+              </ul>
             ) : null}
 
-            <Packages teacher={teacher} />
+            {/*
+              نوارِ آمار فقط چیزی را می‌گوید که دامنه پشتش هست. امتیاز
+              وقتی می‌آید که واقعاً نظری ثبت شده باشد؛ حالت پیش‌فرضِ
+              محصولِ امروز یک ستونِ «سابقه» است و بس.
+            */}
+            {teacher.rating.count > 0 || teacher.yearsExperience > 0 ? (
+              <div className="rule-top-wood mt-7.5 flex flex-wrap gap-8 pt-6">
+                {teacher.rating.count > 0 && teacher.rating.average !== null ? (
+                  <div>
+                    <p className="flex items-center gap-2 text-[22px] font-semibold text-ink">
+                      <span aria-hidden="true" className="text-base text-wood-light">
+                        ★
+                      </span>
+                      <span>{faNumber(teacher.rating.average)}</span>
+                    </p>
+                    <p className="mt-1 text-[13.5px] text-meta">
+                      {faNumber(teacher.rating.count)} نظر
+                    </p>
+                  </div>
+                ) : null}
 
-            {teacher.introVideoUrl ? (
-              <section className="mt-12">
-                <h2 className="text-xl font-bold">ویدیوی معرفی مدرس</h2>
-                {/* eslint-disable-next-line jsx-a11y/media-has-caption -- ویدیوی معرفی زیرنویس ندارد */}
-                <video
-                  src={teacher.introVideoUrl}
-                  controls
-                  preload="none"
-                  poster={teacher.avatarUrl ?? undefined}
-                  className="mt-5 w-full rounded-2xl border border-border bg-surface-muted"
-                />
-              </section>
+                {teacher.yearsExperience > 0 ? (
+                  <div>
+                    <p className="text-[22px] font-semibold text-ink">
+                      {faNumber(teacher.yearsExperience)} سال
+                    </p>
+                    <p className="mt-1 text-[13.5px] text-meta">سابقه‌ی تدریس</p>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
-
-            <Reviews
-              reviews={reviews.reviews}
-              total={reviews.total}
-              rating={teacher.rating}
-            />
-
-            <Faq />
           </div>
+        </section>
 
-          {primary ? (
-            /*
-             * `h-fit` لازم است و تزئینی نیست: کلاس `.card` قید
-             * `height: 100%` دارد و کارت را تا ارتفاع کل ردیف گرید کش
-             * می‌آورد. آن‌وقت کارتی بلندتر از پنجره داریم که `sticky`
-             * هیچ‌وقت رویش نمی‌چسبد و به‌شکل یک کادر خالیِ بلند دیده
-             * می‌شود. یوتیلیتی تیلویند بعد از لایه‌ی `components` می‌آید،
-             * پس بر آن قید غالب است.
-             */
-            <aside className="card h-fit lg:order-1 lg:sticky lg:top-8">
-              <p className="text-center text-sm text-ink-muted">قیمت هر جلسه</p>
-              <p className="mt-1 text-center text-4xl font-bold">
-                {formatToman(cheapest ?? primary.price)}
-              </p>
-              <p className="mt-1 text-center text-sm text-ink-muted">
-                تومان / {formatDuration(primary.durationMinutes)}
+        {/*
+          کارت رزرو.
+          ستون دو در دسکتاپ (که در RTL سمت چپ می‌نشیند — همان جای
+          آرت‌بورد)، و زیر ۱۰۲۴ درون‌خطی بعد از هیرو. زیر ۷۶۸ کلاً پنهان
+          می‌شود و نوار چسبانِ پایین جایش را می‌گیرد.
+        */}
+        {primary ? (
+          <aside className="mt-8 hidden md:block lg:col-start-2 lg:row-start-1 lg:mt-0 lg:sticky lg:top-23">
+            <div className="rounded-card bg-surface p-5.5 shadow-[inset_0_0_0_1px_var(--color-divider)] wide:p-7">
+              <p className="text-[17px] leading-[1.6] font-semibold text-ink">
+                رزرو کلاس با {teacher.fullName}
               </p>
 
-              <div className="mt-6 space-y-3 border-t border-border pt-6">
-                <Link
-                  href={bookHref(teacher, primary, "trial")}
-                  className="btn-accent block text-center"
-                >
-                  رزرو جلسه‌ی آشنایی رایگان
-                </Link>
-                <Link
+              <div className="rule-plain mt-6 pt-5.5">
+                <SectionMark width="sm" className="w-4.5">
+                  قیمت هر جلسه
+                </SectionMark>
+                <p className="mt-3 text-[30px] font-semibold tracking-[-0.02em] text-ink">
+                  {formatToman(cheapest ?? primary.price)} تومان
+                </p>
+                <p className="mt-2 text-sm text-ink-2">
+                  مدت زمان هر جلسه: {formatDuration(primary.durationMinutes)}
+                </p>
+              </div>
+
+              <div className="mt-6.5 flex flex-col gap-3">
+                <ButtonLink
                   href={bookHref(teacher, primary, "single")}
-                  className="btn-primary block text-center"
+                  block
+                  className="py-3.75 text-base"
                 >
                   رزرو کلاس
-                </Link>
-                <p className="text-center text-xs text-ink-muted">
-                  جلسه‌ی آشنایی {faNumber(BUSINESS_RULES.TRIAL_DURATION_MINUTES)} دقیقه‌ای و
-                  یک بار برای هر کاربر است.
+                </ButtonLink>
+                <ButtonLink
+                  href={bookHref(teacher, primary, "trial")}
+                  variant="outline"
+                  block
+                  className="py-3.5"
+                >
+                  رزرو جلسه معارفه رایگان
+                </ButtonLink>
+                <p className="text-[12.5px] leading-[1.85] text-meta">
+                  جلسه معارفه{" "}
+                  {faNumber(BUSINESS_RULES.TRIAL_DURATION_MINUTES)} دقیقه‌ای و یک
+                  بار برای هر کاربر است.
                 </p>
               </div>
 
@@ -257,325 +320,274 @@ export default async function TeacherPage({ params }: PageProps) {
                 teacherProfileId={teacher.profileId}
                 bookHref={bookHref(teacher, primary)}
               />
-            </aside>
+            </div>
+          </aside>
+        ) : null}
+
+        {/* بخش‌های بلند — ستون یک، سطر دو */}
+        <div className="min-w-0 lg:col-start-1 lg:row-start-2">
+          {teacher.bio ? (
+            <Section title="درباره‌ی استاد">
+              <p className="max-w-[62ch] text-[17px] leading-[2.05] whitespace-pre-line text-ink-2 text-pretty md:text-lg">
+                {teacher.bio}
+              </p>
+            </Section>
           ) : null}
+
+          <TeachingMethod />
+
+          {instruments.length > 0 ? (
+            <Section title="سازها">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-3.5">
+                {instruments.map((name, index) => (
+                  <span key={name} className="flex items-center gap-5">
+                    {index > 0 ? <Mark width="sm" className="w-4" /> : null}
+                    <span className="text-xl font-semibold text-ink">{name}</span>
+                  </span>
+                ))}
+              </div>
+            </Section>
+          ) : null}
+
+          <Packages teacher={teacher} />
+
+          <IntroVideo teacher={teacher} />
+
+          <Reviews
+            reviews={reviews.reviews}
+            total={reviews.total}
+            rating={teacher.rating}
+          />
+
+          <Section title="سوالات متداول">
+            <Accordion items={FAQS} />
+          </Section>
         </div>
-      </article>
+      </div>
+
+      {/* نوار چسبانِ رزرو — تنها سطح رزرو زیر ۷۶۸ پیکسل */}
+      {primary ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3.5 border-t border-divider bg-[color-mix(in_srgb,var(--color-bg)_90%,transparent)] px-4.5 py-2.75 backdrop-blur-[16px] md:hidden">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-base font-semibold whitespace-nowrap text-ink">
+              {formatToman(cheapest ?? primary.price)} تومان
+            </span>
+            <span className="text-[12.5px] whitespace-nowrap text-meta">
+              هر جلسه {formatDuration(primary.durationMinutes)}
+            </span>
+          </div>
+          <ButtonLink
+            href={bookHref(teacher, primary, "single")}
+            className="shrink-0 px-6.5"
+          >
+            رزرو کلاس
+          </ButtonLink>
+        </div>
+      ) : null}
     </>
   );
 }
 
-function Hero({ teacher, instruments }: { teacher: Teacher; instruments: string[] }) {
-  return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-surface-muted">
-      {/*
-        عکس سمت چپ، متن سمت راست — مثل ماکآپ. `flex-row` در RTL فرزندِ
-        اول (متن) را راست و دومی (عکس) را چپ می‌گذارد. روی موبایل
-        `flex-col-reverse` عکس را بالا می‌آورد. عکس با `self-stretch`
-        کلِ ارتفاع ردیف را می‌گیرد، پس تمام‌قد است نه یک ستون کوتاه.
-      */}
-      <div className="flex flex-col-reverse sm:min-h-72 sm:flex-row">
-        <div className="flex flex-1 flex-col justify-center px-6 py-6 sm:px-8">
-          <h1 className="text-3xl font-bold">{teacher.fullName}</h1>
-          <p className="mt-3 text-lg text-ink-muted">{teacher.headline}</p>
+/* ───────────────────────── بخش‌ها ───────────────────────── */
 
-          {teacher.rating.average !== null ? (
-            <div className="mt-4 flex items-center gap-3 text-sm">
-              <span className="flex items-center gap-1.5">
-                <Stars value={teacher.rating.average} className="text-lg" />
-                <span className="font-bold">
-                  {faDigits(teacher.rating.average.toFixed(1))}
-                </span>
-                <span className="text-ink-muted">از ۵</span>
-              </span>
-              <span className="text-border">|</span>
-              <span className="text-ink-muted">
-                {faNumber(teacher.rating.count)} نظر
-              </span>
-            </div>
-          ) : null}
-
-          <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-4">
-            {teacher.yearsExperience > 0 ? (
-              <Stat
-                value={faNumber(teacher.yearsExperience)}
-                label="سال سابقه"
-                icon={<PersonIcon />}
-              />
-            ) : null}
-            {teacher.classesTaught > 0 ? (
-              <Stat
-                value={faNumber(teacher.classesTaught)}
-                label="کلاس برگزارشده"
-                icon={<CalendarIcon />}
-              />
-            ) : null}
-            {instruments.length > 0 ? (
-              <Stat
-                value={faNumber(instruments.length)}
-                label="ساز"
-                icon={<NoteIcon />}
-              />
-            ) : null}
-          </dl>
-
-          {/*
-            هر استادی که در این فهرست دیده می‌شود `APPROVED` است و رزرو
-            می‌پذیرد؛ نشان فقط همان را با کلمه می‌گوید. اگر روزی فیلدِ
-            «فعلاً ظرفیت ندارم» اضافه شد، این شرط جای عوض شدن دارد.
-          */}
-          <p className="mt-6 inline-flex items-center gap-2 self-start rounded-full bg-success-surface px-3 py-1 text-sm text-success">
-            <CheckIcon />
-            پذیرش هنرجوی جدید
-          </p>
-        </div>
-
-        <Avatar
-          name={teacher.fullName}
-          url={teacher.avatarUrl}
-          alt={`عکس ${teacher.fullName}`}
-          className="h-60 w-full shrink-0 sm:h-auto sm:w-64 sm:self-stretch"
-          textClassName="text-5xl"
-        />
-      </div>
-    </section>
-  );
-}
-
-function Stat({
-  value,
-  label,
-  icon,
+function Section({
+  title,
+  tone = "violet",
+  children,
 }: {
-  value: string;
-  label: string;
-  icon?: React.ReactNode;
+  title: string;
+  tone?: "violet" | "wood";
+  children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2.5">
-      {icon ? (
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
-          {icon}
-        </span>
-      ) : null}
-      <div>
-        <dd className="text-2xl font-bold leading-none">{value}</dd>
-        <dt className="mt-1 text-sm text-ink-muted">{label}</dt>
-      </div>
-    </div>
-  );
-}
-
-/**
- * روش تدریس — متن **پلتفرم** است، نه فیلد استاد.
- *
- * هیچ ستونی برای این در `teacher_profiles` نیست و ساختنش یعنی هر استاد
- * باید چهار متن بنویسد. این چهار مورد چیزی را می‌گویند که برای همه‌ی
- * کلاس‌های پلتفرم صادق است (برنامه‌ی شخصی، تمرین هفتگی، بازخورد بعد از
- * جلسه، همه‌ی سطح‌ها) — پس متن ثابت درست است، نه داده.
- */
-function TeachingMethod() {
-  const items = [
-    {
-      title: "برنامه‌ی شخصی‌سازی‌شده",
-      body: "برنامه متناسب با سطح، هدف و سلیقه‌ی هر هنرجو بسته می‌شود.",
-      icon: <PlanIcon />,
-    },
-    {
-      title: "تمرین هفتگی",
-      body: "بعد از هر جلسه تمرین مشخص ثبت می‌شود و پیشرفتش دنبال می‌شود.",
-      icon: <NoteIcon />,
-    },
-    {
-      title: "بازخورد بعد از کلاس",
-      body: "هنرجو تمرینش را می‌فرستد و استاد روی همان بازخورد می‌دهد.",
-      icon: <ChatIcon />,
-    },
-    {
-      title: "از مبتدی تا پیشرفته",
-      body: "کلاس‌ها یک‌به‌یک است، پس هر سطحی از صفر تا حرفه‌ای جا می‌شود.",
-      icon: <ChartIcon />,
-    },
-  ];
-
-  return (
-    <section className="mt-12">
-      <h2 className="text-xl font-bold">روش تدریس</h2>
-      <ul className="mt-5 grid gap-4 sm:grid-cols-2">
-        {items.map((item) => (
-          <li key={item.title} className="card bg-surface-muted">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
-              {item.icon}
-            </span>
-            <h3 className="mt-4 font-bold">{item.title}</h3>
-            <p className="mt-2 text-sm text-ink-muted">{item.body}</p>
-          </li>
-        ))}
-      </ul>
+    <section className="mt-13 md:mt-[clamp(64px,8vw,96px)]">
+      <SectionMark tone={tone} className="mb-4.5 tracking-[0.1em]">
+        {title}
+      </SectionMark>
+      {children}
     </section>
   );
 }
 
+const METHOD = [
+  {
+    title: "برنامه‌ی شخصی‌سازی‌شده",
+    body: "بر اساس هدف، سطح و سرعت یادگیری خودت، نه یک سرفصل ثابت.",
+  },
+  {
+    title: "تمرین هفتگی",
+    body: "تمرین‌های هدفمند بین جلسات که پیشرفت را پیوسته نگه می‌دارد.",
+  },
+  {
+    title: "بازخورد بعد از کلاس",
+    body: "بررسی اجرای آپلودشده و راهنمایی صوتی دقیق در پرونده‌ی جلسه.",
+  },
+  {
+    title: "از مبتدی تا پیشرفته",
+    body: "مسیر یادگیری اصولی در همه‌ی سطح‌ها، از نخستین نت تا رپرتوار.",
+  },
+] as const;
+
+function TeachingMethod() {
+  return (
+    <Section title="روش تدریس">
+      <h2 className="mb-8 text-[clamp(24px,2.8vw,32px)] leading-[1.45] font-semibold tracking-[-0.02em] text-ink md:mb-[clamp(32px,4vw,48px)]">
+        کلاس‌ها چطور پیش می‌روند؟
+      </h2>
+      <div className="grid grid-cols-1 gap-8 md:[grid-template-columns:repeat(auto-fit,minmax(240px,1fr))] md:gap-x-0 md:gap-y-[clamp(32px,4vw,44px)]">
+        {METHOD.map((item) => (
+          <div
+            key={item.title}
+            className="rule-plain relative pt-6.5 md:pe-[clamp(24px,3vw,44px)]"
+          >
+            <span
+              aria-hidden="true"
+              className="absolute -top-px start-0 h-px w-6.5 bg-violet-strong"
+            />
+            <p className="mb-3 text-xl leading-[1.5] font-semibold text-ink">
+              {item.title}
+            </p>
+            <p className="max-w-[30ch] text-[15.5px] leading-[1.95] text-ink-2">
+              {item.body}
+            </p>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 /**
- * بسته‌های کلاس — تک جلسه و پکیج ماهانه.
+ * بسته‌های کلاس.
  *
- * ⚠️ **قیمت پکیج دقیقاً `price × ۴` است و تخفیفی ندارد**، چون
- * `createPackageEnrollment` همین را حساب می‌کند
- * (`schedule.price * BigInt(sessionCount)`). نوشتن عدد کمتر روی این
- * کارت یعنی هنرجو مبلغی را ببیند که در درگاه مبلغ دیگری می‌شود.
+ * یک ردیف به ازای هر **سرویس واقعی** استاد، با قیمت و مدتِ خودش. پروتوتایپ
+ * اینجا دو ردیفِ ثابت («تک جلسه» و «بسته ماهانه» با قیمتِ نوشته‌شده)
+ * داشت؛ قیمت بسته‌ی ماهانه در این محصول از منطق رزرو درمی‌آید نه از متن،
+ * و نوشتنش اینجا یعنی ساختن عددی که هیچ‌جا پشتش نیست.
+ *
+ * جلسه‌ی معارفه ردیفِ خودش را می‌گیرد چون قیمتش قاعده است نه داده:
+ * رایگان، و یک بار برای هر کاربر.
  */
 function Packages({ teacher }: { teacher: Teacher }) {
-  if (teacher.offerings.length === 0) {
-    return (
-      <section className="mt-12">
-        <h2 className="text-xl font-bold">بسته‌های کلاس</h2>
-        <p className="mt-4 text-ink-muted">این استاد در حال حاضر کلاس فعالی ندارد.</p>
-      </section>
-    );
-  }
-
-  const count = BUSINESS_RULES.PACKAGE_SESSION_COUNT;
-  const showInstrument = teacher.offerings.length > 1;
+  if (teacher.offerings.length === 0) return null;
 
   return (
-    <section className="mt-12">
-      <h2 className="text-xl font-bold">بسته‌های کلاس</h2>
+    <Section title="بسته‌های کلاس">
+      <div className="flex flex-col">
+        <PackageRow
+          title="جلسه معارفه"
+          detail={`${formatDuration(BUSINESS_RULES.TRIAL_DURATION_MINUTES)} · آشنایی با استاد و تعیین مسیر`}
+          note="یک بار برای هر کاربر"
+          price="رایگان"
+          priceTone="violet"
+          href={
+            teacher.offerings[0]
+              ? bookHref(teacher, teacher.offerings[0], "trial")
+              : undefined
+          }
+          cta="رزرو جلسه معارفه"
+        />
 
-      <div className="mt-5 space-y-6">
-        {teacher.offerings.map((offering) => {
-          const packagePrice = (BigInt(offering.price) * BigInt(count)).toString();
-
-          return (
-            <div key={offering.id}>
-              {showInstrument ? (
-                <h3 className="mb-3 font-medium text-ink-muted">
-                  {offering.instrumentName}
-                </h3>
-              ) : null}
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <PackageCard
-                  title="تک جلسه"
-                  meta={`۱ جلسه × ${formatDuration(offering.durationMinutes)}`}
-                  price={offering.price}
-                  href={bookHref(teacher, offering, "single")}
-                  cta="انتخاب"
-                />
-                <PackageCard
-                  title={`${faNumber(count)} جلسه‌ی ماهانه`}
-                  meta={`${faNumber(count)} جلسه × ${formatDuration(
-                    offering.durationMinutes,
-                  )} — یک روز و ساعت ثابت هفتگی`}
-                  price={packagePrice}
-                  href={bookHref(teacher, offering, "package")}
-                  cta="انتخاب بسته"
-                />
-              </div>
-            </div>
-          );
-        })}
+        {teacher.offerings.map((offering) => (
+          <PackageRow
+            key={offering.id}
+            title={offering.instrumentName}
+            detail={`یک جلسه × ${formatDuration(offering.durationMinutes)}`}
+            note="در ساعتی که خودت انتخاب می‌کنی"
+            price={`${formatToman(offering.price)} تومان`}
+            href={bookHref(teacher, offering, "single")}
+            cta="انتخاب این کلاس"
+          />
+        ))}
       </div>
-
-      <p className="mt-4 text-center text-xs text-ink-muted">
-        قیمت‌ها به تومان است و هنگام رزرو ثابت می‌شود؛ تغییر بعدی قیمت استاد روی
-        رزرو انجام‌شده اثر ندارد.
-      </p>
-    </section>
+    </Section>
   );
 }
 
-function PackageCard({
+function PackageRow({
   title,
-  meta,
+  detail,
+  note,
   price,
+  priceTone = "ink",
   href,
   cta,
 }: {
   title: string;
-  meta: string;
+  detail: string;
+  note: string;
   price: string;
-  href: BookHref;
+  priceTone?: "ink" | "violet";
+  href?: BookHref;
   cta: string;
 }) {
   return (
-    <div className="card flex flex-col text-center">
-      <h3 className="font-bold">{title}</h3>
-      <p className="mt-2 text-sm text-ink-muted">{meta}</p>
-      <p className="mt-5 text-2xl font-bold">{formatToman(price)}</p>
-      <p className="text-sm text-ink-muted">تومان</p>
-      <Link href={href} className="btn-accent mt-5 block">
-        {cta}
-      </Link>
+    <div className="mb-3 flex flex-col items-stretch gap-4.5 rounded-panel p-5 shadow-[inset_0_0_0_1px_var(--color-divider)] md:flex-row md:flex-wrap md:items-center md:justify-between md:gap-6 md:p-6.5">
+      <div className="flex flex-col gap-2">
+        <span className="text-xl font-semibold text-ink">{title}</span>
+        <span className="text-[15px] text-ink-2">{detail}</span>
+        <span className="text-sm text-meta">{note}</span>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3.5 md:justify-end md:gap-6">
+        <span
+          className={
+            priceTone === "violet"
+              ? "text-lg font-semibold whitespace-nowrap text-violet-strong"
+              : "text-lg font-semibold whitespace-nowrap text-ink"
+          }
+        >
+          {price}
+        </span>
+        {href ? (
+          <ButtonLink href={href} variant="outline" className="whitespace-nowrap">
+            {cta}
+          </ButtonLink>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 /**
- * سوالات متداول — متن پلتفرم، مثل «روش تدریس».
+ * ویدیوی معرفی.
  *
- * `<details>` است نه آکاردئون جاوااسکریپتی: این صفحه ایستا رندر می‌شود و
- * باز و بسته شدن یک بخش دلیلی برای کلاینتی کردنش نیست. جواب‌ها با
- * قواعد واقعی خوانده شده‌اند — معارفه یک بار برای هر کاربر است و لغو
- * به اعتبار برمی‌گردد نه به کارت.
+ * حالتِ «هنوز اضافه نشده» خودِ دیزاین است، نه ابداعِ ما: قابِ ۱۶:۹ با
+ * چاهِ تاریک و یک قرصِ توضیح رویش. برای استادی که ویدیو ندارد این
+ * صادق‌ترین چیزی است که می‌شود نشان داد.
  */
-function Faq() {
-  const items = [
-    {
-      q: "جلسه‌ی آشنایی رایگان چگونه برگزار می‌شود؟",
-      a: `یک جلسه‌ی ${faNumber(
-        BUSINESS_RULES.TRIAL_DURATION_MINUTES,
-      )} دقیقه‌ای و رایگان، برای اینکه با استاد آشنا شوید و مسیرتان را مشخص کنید. این جلسه یک بار برای هر کاربر است، نه یک بار به ازای هر استاد.`,
-    },
-    {
-      q: "برای شرکت در کلاس به چه چیزهایی نیاز دارم؟",
-      a: "اینترنت پایدار، ساز خودتان، و حتماً هدفون سیمی. بدون هدفون، صدای بلندگو دوباره وارد میکروفن می‌شود و کلاس پر از پژواک می‌شود.",
-    },
-    {
-      q: "کلاس کجا برگزار می‌شود؟",
-      a: "داخل خود پلتفرم و زنده. لازم نیست چیزی نصب کنید؛ چند دقیقه پیش از شروع، دکمه‌ی ورود به کلاس در پنل شما فعال می‌شود.",
-    },
-    {
-      q: "در صورت لغو جلسه، چه شرایطی وجود دارد؟",
-      a: "مبلغ به‌صورت اعتبار به حساب شما در پلتفرم برمی‌گردد و می‌توانید با آن جلسه‌ی دیگری رزرو کنید. مهلت‌ها و جزئیات در صفحه‌ی قوانین آمده است.",
-    },
-  ];
-
+function IntroVideo({ teacher }: { teacher: Teacher }) {
   return (
-    <section className="mt-12">
-      <h2 className="text-xl font-bold">سوالات متداول</h2>
-
-      <div className="mt-5 space-y-3">
-        {items.map((item) => (
-          <details
-            key={item.q}
-            className="group rounded-xl border border-border bg-surface-raised px-5 py-4"
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-medium">
-              {item.q}
-              <ChevronIcon />
-            </summary>
-            <p className="mt-3 text-sm text-ink-muted">{item.a}</p>
-          </details>
-        ))}
-      </div>
-
-      <p className="mt-5 text-sm text-ink-muted">
-        جزئیات کامل در{" "}
-        <Link href="/rules" className="text-accent-strong underline">
-          قوانین و سیاست لغو
-        </Link>{" "}
-        آمده است.
-      </p>
-    </section>
+    <Section title="ویدیوی معرفی مدرس" tone="wood">
+      {teacher.introVideoUrl ? (
+        // eslint-disable-next-line jsx-a11y/media-has-caption -- ویدیوی معرفی زیرنویس ندارد
+        <video
+          src={teacher.introVideoUrl}
+          controls
+          preload="none"
+          poster={teacher.avatarUrl ?? undefined}
+          className="w-full rounded-card bg-well shadow-[inset_0_0_0_1px_var(--color-divider)]"
+        />
+      ) : (
+        <div className="relative overflow-hidden rounded-card bg-well [aspect-ratio:16/9]">
+          <div className="absolute bottom-4.5 start-4.5 flex items-center gap-3 rounded-pill bg-[color-mix(in_srgb,var(--color-well)_72%,transparent)] px-4 py-2.5 text-[13.5px] text-ink-2 backdrop-blur-[8px] md:bottom-6.5 md:start-6.5 md:px-5 md:py-3">
+            <Mark width="sm" className="w-4.5" />
+            <span>ویدیو معرفی هنوز اضافه نشده است.</span>
+          </div>
+        </div>
+      )}
+    </Section>
   );
 }
 
 /**
- * نظرهای هنرجویان.
+ * نظرات هنرجویان.
  *
- * وقتی هیچ نظری نیست، بخش پنهان نمی‌شود بلکه یک حالتِ خالیِ صادق نشان
- * می‌دهد: صفحه‌ای که این بخش را کامل حذف کند، به بازدیدکننده نمی‌گوید
- * که امتیازدهی وجود دارد و فقط هنوز نظری نیامده.
+ * ⚠️ **حالتِ پیش‌فرض «هنوز نظری ثبت نشده است.» است.** پروتوتایپ اینجا
+ * سه کارتِ نظرِ ساخته‌شده با نام و متن داشت و بازبینی (بند A-12) حذفشان
+ * کرد: اعتماد ساختگی سریع‌ترین راه از دست دادن اعتماد واقعی است، و
+ * وقتی نامِ یک استادِ حقیقی پایش باشد مسئولیت حقوقی هم دارد.
+ *
+ * پس این بخش فقط چیزی را نشان می‌دهد که در دیتابیس هست.
  */
 function Reviews({
   reviews,
@@ -584,175 +596,114 @@ function Reviews({
 }: {
   reviews: TeacherReview[];
   total: number;
-  rating: Teacher["rating"];
+  rating: TeacherRating;
 }) {
-  return (
-    <section className="mt-12">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-xl font-bold">نظرات هنرجویان</h2>
-        {rating.average !== null ? (
-          <div className="flex items-center gap-2 text-sm">
-            <Stars value={rating.average} className="text-base" />
-            <span className="font-bold">{faDigits(rating.average.toFixed(1))}</span>
-            <span className="text-ink-muted">({faNumber(rating.count)})</span>
-          </div>
-        ) : null}
-      </div>
+  const hasReviews = reviews.length > 0 && rating.average !== null;
 
-      {reviews.length === 0 ? (
-        <p className="mt-5 text-ink-muted">
-          هنوز نظری ثبت نشده است. اولین نظر را بعد از کلاس با این استاد بنویسید.
-        </p>
-      ) : (
+  return (
+    <Section title="نظرات هنرجویان">
+      {hasReviews ? (
         <>
-          <ul className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="mb-7 flex items-baseline gap-3 md:mb-[clamp(28px,3.5vw,38px)]">
+            <span aria-hidden="true" className="text-[15px] text-wood-light">
+              ★
+            </span>
+            <span className="text-[clamp(26px,3vw,34px)] font-semibold tracking-[-0.02em] text-ink">
+              {faNumber(rating.average!)}
+            </span>
+            <span className="text-[15px] text-meta">
+              از {faNumber(total)} نظر
+            </span>
+          </div>
+
+          <div className="flex flex-col">
             {reviews.map((review) => (
-              <li key={review.id} className="card">
-                <div className="flex items-center gap-3">
-                  <Avatar
-                    name={review.studentName}
-                    url={review.studentAvatarUrl}
-                    className="size-10 shrink-0 rounded-full"
-                    textClassName="text-xs"
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{review.studentName}</p>
-                    <Stars value={review.rating} className="text-sm" />
-                  </div>
+              <article key={review.id} className="rule-plain py-6.5">
+                <div className="flex flex-wrap items-center gap-3.5">
+                  <span
+                    aria-hidden="true"
+                    className="grid size-10 shrink-0 place-items-center rounded-full bg-surface-2 text-sm text-ink-2"
+                  >
+                    {initials(review.studentName)}
+                  </span>
+                  <span className="text-base font-semibold text-ink">
+                    {review.studentName}
+                  </span>
+                  <span
+                    aria-label={`${faNumber(review.rating)} از ۵`}
+                    className="text-[13.5px] tracking-[0.12em] text-wood-light"
+                  >
+                    {"★".repeat(review.rating)}
+                    {"☆".repeat(Math.max(0, 5 - review.rating))}
+                  </span>
+                  <span className="text-[13.5px] text-meta md:ms-auto">
+                    {formatRelativeFa(review.createdAt)}
+                  </span>
                 </div>
                 {review.comment ? (
-                  <p className="mt-4 text-sm whitespace-pre-line text-ink-muted">
+                  <p className="mt-3.5 max-w-[60ch] text-[16.5px] leading-[2] text-ink-2">
                     {review.comment}
                   </p>
                 ) : null}
-                <p className="mt-4 text-xs text-ink-muted">
-                  {formatRelativeFa(review.createdAt)}
-                </p>
-              </li>
+              </article>
             ))}
-          </ul>
-
-          {total > reviews.length ? (
-            <p className="mt-5 text-sm text-ink-muted">
-              {faNumber(total)} نظر ثبت شده است.
-            </p>
-          ) : null}
+          </div>
         </>
+      ) : (
+        <p className="max-w-[44ch] text-[17px] leading-[1.9] text-ink-2">
+          هنوز نظری ثبت نشده است.
+        </p>
       )}
-    </section>
+    </Section>
   );
 }
 
-function PersonIcon() {
-  return (
-    <Icon>
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" strokeLinecap="round" />
-    </Icon>
-  );
+const FAQS = [
+  {
+    q: "جلسه معارفه رایگان چگونه برگزار می‌شود؟",
+    a: "یک جلسه‌ی بیست دقیقه‌ای زنده و یک‌به‌یک است که یک بار برای هر کاربر رایگان برگزار می‌شود. در آن سطحت سنجیده می‌شود و مسیر کلاس‌ها مشخص می‌گردد.",
+  },
+  {
+    q: "برای شرکت در کلاس به چه چیزهایی نیاز دارم؟",
+    a: "سازت، اینترنت پایدار، و هدفون سیمی — هدفون سیمی برای شنیدن درست صدا الزامی است. دوربینی که هم دست و هم ساز را نشان بدهد کیفیت کلاس را بالا می‌برد.",
+  },
+  {
+    q: "کلاس کجا برگزار می‌شود؟",
+    a: "در اتاق کلاس خودِ هوگه، داخل همین سایت. ده دقیقه پیش از شروع جلسه اتاق باز می‌شود و نیازی به نصب نرم‌افزار دیگری نیست.",
+  },
+  {
+    q: "در صورت لغو جلسه چه شرایطی وجود دارد؟",
+    a: "لغو تا ۲۴ ساعت پیش از شروع کلاس بدون هزینه است و مبلغ به اعتبار تو برمی‌گردد. لغو دیرتر از آن، جلسه را مصرف‌شده در نظر می‌گیرد.",
+  },
+] as const;
+
+/**
+ * حرف اول نام و نام خانوادگی، با نیم‌فاصله — حرف‌های فارسی وگرنه به هم
+ * می‌چسبند و یک کلمه‌ی سرهم می‌سازند.
+ */
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "";
+  const first = [...words[0]!][0] ?? "";
+  if (words.length === 1) return first;
+  return `${first}‌${[...words[words.length - 1]!][0] ?? ""}`;
 }
 
-function CalendarIcon() {
-  return (
-    <Icon>
-      <rect x="4" y="5" width="16" height="16" rx="2" />
-      <path d="M4 9h16M8 3v4M16 3v4" strokeLinecap="round" />
-    </Icon>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      className="size-4"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      aria-hidden="true"
-    >
-      <path d="m5 12 5 5L20 7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function PlanIcon() {
-  return (
-    <Icon>
-      <rect x="6" y="4" width="12" height="17" rx="2" />
-      <path d="M9 4h6v3H9zM9 12h6M9 16h4" strokeLinecap="round" />
-    </Icon>
-  );
-}
-
-function NoteIcon() {
-  return (
-    <Icon>
-      <path d="M9 18V6l9-2v12" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="6.5" cy="18" r="2.5" />
-      <circle cx="15.5" cy="16" r="2.5" />
-    </Icon>
-  );
-}
-
-function ChatIcon() {
-  return (
-    <Icon>
-      <path
-        d="M20 12a7 7 0 0 1-7 7H8l-4 3v-4.5A7 7 0 0 1 8 5h5a7 7 0 0 1 7 7Z"
-        strokeLinejoin="round"
-      />
-    </Icon>
-  );
-}
-
-function ChartIcon() {
-  return (
-    <Icon>
-      <path d="M5 20V13M10 20V8M15 20v-9M20 20V4" strokeLinecap="round" />
-    </Icon>
-  );
-}
-
-function ChevronIcon() {
-  return (
-    <svg
-      className="size-4 shrink-0 text-ink-muted transition-transform group-open:rotate-180"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
-      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function Icon({ children }: { children: React.ReactNode }) {
-  return (
-    <svg
-      className="size-5"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      aria-hidden="true"
-    >
-      {children}
-    </svg>
-  );
-}
-
+/**
+ * داده‌ی ساخت‌یافته‌ی `Person`.
+ *
+ * فقط چیزی که واقعاً هست: نام، معرفی، عکس. امتیاز `aggregateRating`
+ * عمداً نمی‌آید — گوگل برای آن نظرِ قابل‌بازبینی می‌خواهد و فرستادنش
+ * پیش از وجود نظر واقعی، خطای Search Console می‌سازد.
+ */
 function PersonJsonLd({ teacher }: { teacher: Teacher }) {
   const schema = {
     "@context": "https://schema.org",
     "@type": "Person",
     name: teacher.fullName,
-    jobTitle: teacher.headline,
-    ...(teacher.bio ? { description: teacher.bio } : {}),
+    description: teacher.bio ?? teacher.headline,
     ...(teacher.avatarUrl ? { image: teacher.avatarUrl } : {}),
-    knowsAbout: instrumentNames(teacher),
+    jobTitle: "مدرس موسیقی",
   };
 
   return (
