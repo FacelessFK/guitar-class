@@ -472,7 +472,7 @@ function SubmissionRow({
         می‌خواند.
       */}
       {submission.mediaPurged ? (
-        <p className="mt-3 rounded-lg bg-surface p-3 text-sm text-ink-muted">
+        <p className="mt-3 rounded-lg bg-surface-2 p-3 text-sm text-ink-muted">
           فایل این اجرا طبق سیاست نگه‌داری پاک شده است.
         </p>
       ) : submission.mediaType === "VIDEO" ? (

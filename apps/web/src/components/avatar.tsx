@@ -40,7 +40,7 @@ export function Avatar({
     // نوشته شده، برای صفحه‌خوان تکرارِ بی‌فایده است
     <span
       aria-hidden="true"
-      className={`flex items-center justify-center bg-accent-soft font-medium text-accent-strong ${textClassName} ${className}`}
+      className={`flex items-center justify-center bg-violet-surface font-medium text-violet-strong ${textClassName} ${className}`}
     >
       {initialsOf(name)}
     </span>

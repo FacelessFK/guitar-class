@@ -4,8 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { BellIcon } from "@/components/ui";
 import { getNotifications } from "@/lib/app-api";
-import { faNumber } from "@/lib/format";
+import { cx } from "@/lib/cx";
 
 /**
  * هر چند وقت یک بار شمارنده تازه شود.
@@ -20,6 +21,11 @@ const POLL_INTERVAL_MS = 60_000;
 
 /**
  * نشانِ اعلان‌های نخوانده.
+ *
+ * دیزاین **نقطه** نشان می‌دهد نه عدد (پراپ `showNavCount` پیش‌فرض
+ * خاموش است): در نوار بالا مهم این است که «چیزی هست»، و عددِ دقیق در
+ * خودِ صفحه‌ی اعلان‌ها می‌آید. عدد اما در `aria-label` می‌ماند، چون
+ * صفحه‌خوان نقطه را نمی‌بیند.
  *
  * خطا را بی‌صدا می‌بلعد و چیزی نشان نمی‌دهد: این یک نشانه‌ی فرعی در
  * نوار بالاست و شکستن کل پوسته‌ی اپ به‌خاطر آن، هزینه‌اش از فایده‌اش
@@ -58,16 +64,21 @@ export function NotificationBell() {
   return (
     <Link
       href="/notifications"
-      className={`relative ${active ? "font-medium text-accent-strong" : "text-ink-muted"}`}
-      aria-label={
-        unread > 0 ? `اعلان‌ها، ${unread} مورد نخوانده` : "اعلان‌ها"
-      }
+      aria-current={active ? "page" : undefined}
+      aria-label={unread > 0 ? `اعلان‌ها، ${unread} مورد نخوانده` : "اعلان‌ها"}
+      className={cx(
+        "relative grid size-[34px] shrink-0 place-items-center rounded-[9px] transition-[background-color,color] duration-150",
+        active
+          ? "bg-violet-surface text-violet-strong hover:text-violet-strong"
+          : "text-ink-2 hover:bg-surface-2 hover:text-ink",
+      )}
     >
-      اعلان‌ها
+      <BellIcon />
       {unread > 0 ? (
-        <span className="badge badge-off absolute -top-3 -left-4 px-1.5">
-          {faNumber(unread)}
-        </span>
+        <span
+          aria-hidden="true"
+          className="absolute top-1.5 end-[7px] size-1.5 rounded-full bg-violet-strong"
+        />
       ) : null}
     </Link>
   );

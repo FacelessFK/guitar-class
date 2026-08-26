@@ -77,7 +77,7 @@ export function TeacherAvailability({ offeringId, teacherProfileId, bookHref }: 
           {slots.slice(0, MAX_SHOWN).map((slot) => (
             <li
               key={slot.startAt}
-              className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2.5 text-sm"
+              className="flex items-center justify-between rounded-xl border border-border bg-surface-2 px-3 py-2.5 text-sm"
             >
               <span className="flex items-center gap-2">
                 <CalendarIcon />

@@ -1,92 +1,230 @@
 @import "tailwindcss";
 
 /**
- * جهت بصری: مینیمال و گرم.
+ * جهت بصری: Hygge Nocturne V2 — Night Practice × Warm Wood × Persian Editorial.
  *
- * سفیدِ گرم، متن ذغالی، و یک اکسنت شنی. انتخاب‌شده در ۱۸ اوت ۲۰۲۶ از روی
- * تصویر مرجع در `docs/`. جای جهت سرد و آبیِ قبلی (۱۲ اوت) را گرفت.
+ * زمینه‌ی تاریکِ کم‌اشباع، متن عاجی، یک اکسنت بنفش و یک علامت چوبی.
+ * برگرفته از پروتوتایپ تأییدشده‌ی Claude Design (پروژه‌ی
+ * `7174963d-2549-4f4b-a857-23a5b1af316b`) که بلوک `:root` یکسانی را در
+ * هر ۲۳ صفحه تکرار می‌کرد. جای جهت روشنِ قبلی (سفیدِ گرم و شنی، ۱۸ اوت
+ * ۲۰۲۶) را گرفت. نقشه‌ی پیاده‌سازی در `docs/nocturne-plan.md` است.
+ *
+ * سایت **فقط تاریک** است — هیچ آرت‌بوردی حالت روشن ندارد. `color-scheme`
+ * پایین‌تر ست می‌شود تا اسکرول‌بار و کنترل‌های نیتیو مرورگر هم تاریک
+ * بیایند؛ بدون آن، `<select>` و اسکرول‌بار سفید می‌مانند و مثل وصله
+ * دیده می‌شوند.
  *
  * همه‌ی رنگ‌ها فقط اینجا تعریف می‌شوند و هیچ رنگ خامی در کامپوننت‌ها
- * نوشته نمی‌شود؛ عوض کردن جهت بصری یعنی عوض کردن همین چند خط. کل این
- * تعویض بدون دست زدن به هیچ‌کدام از ۵۱ فایل `.tsx` انجام شد — اگر روزی
- * رنگی مستقیم در کامپوننتی نوشته شود، همین خاصیت از دست می‌رود.
+ * نوشته نمی‌شود؛ عوض کردن جهت بصری یعنی عوض کردن همین چند خط.
  *
- * ⚠️ از نام‌های تولیدشده‌ی `@theme` استفاده کنید (`text-ink-muted`،
- * `bg-accent`، `border-border`)، نه از نحو براکتی. تیلویند ۴ کلاسی مثل
- * `text-[--color-ink-muted]` را به `color:--color-ink-muted` تبدیل
+ * ⚠️ از نام‌های تولیدشده‌ی `@theme` استفاده کنید (`text-ink-2`،
+ * `bg-violet-surface`، `border-divider`)، نه از نحو براکتی. تیلویند ۴
+ * کلاسی مثل `text-[--color-ink-2]` را به `color:--color-ink-2` تبدیل
  * می‌کند که CSS نامعتبر است و مرورگر بی‌صدا دورش می‌اندازد — رنگ
  * ناپدید می‌شود بدون اینکه چیزی خطا بدهد.
  */
 @theme {
   --font-sans: var(--font-vazirmatn), system-ui, sans-serif;
 
-  /**
-   * سطح‌ها گرم‌اند، نه خنثی. سفیدِ خالص فقط جایی می‌آید که کارت باید
-   * از پس‌زمینه جدا شود؛ خودِ صفحه `surface` است نه `#fff`.
-   */
-  --color-surface: #fbfaf8;
-  --color-surface-raised: #ffffff;
-  --color-surface-muted: #f4f1eb;
-  --color-border: #e6dfd4;
-
-  --color-ink: #1f1d1b;
-  /**
-   * روی هر سه سطح بالا کنتراست ≥۴.۵ می‌دهد. روشن‌تر کردنش متن ثانویه را
-   * روی `surface-muted` زیر حد خوانایی می‌برد — آنجا سخت‌گیرترین حالت است.
-   */
-  --color-ink-muted: #6b645a;
-
-  /**
-   * دو سطح کنش، نه یکی.
+  /*
+   * ─── سطح‌ها ───────────────────────────────────────────────────────
    *
-   * `action` ذغالی کنش اصلی است (رزرو، پرداخت، ثبت) و `accent` شنیْ
-   * رنگ برند و کنش دعوت‌کننده (جلسه‌ی آشنایی رایگان). در تصویر مرجع
-   * این دو کنار هم‌اند و نقششان عوض نمی‌شود: اگر ذغالی برای هر دکمه‌ای
-   * استفاده شود، سلسله‌مراتب صفحه صاف می‌شود.
+   * چهار عمق، از تاریک به روشن: زمینه‌ی صفحه، پنل، پرِ درونِ پنل، و
+   * «چاه» عکس. چاه از همه تاریک‌تر است و این عمدی است: هر عکس محتوایی
+   * با `mix-blend-mode: lighten` رویش می‌نشیند و هر پیکسلی از عکس که
+   * تاریک‌تر از چاه باشد ناپدید می‌شود. با سطحِ روشن‌تر، لبه‌ی مستطیلیِ
+   * عکس دیده می‌شد.
    */
-  --color-action: #232120;
-  --color-action-strong: #3a3634;
-  --color-action-ink: #fbfaf8;
+  --color-bg: #101321;
+  --color-surface: #161a2b;
+  --color-surface-2: #1c2033;
+  --color-well: #0d1020;
 
-  --color-accent: #c9b394;
-  /**
-   * تیره‌تر از اکسنت، برای لینک و حلقه‌ی فوکوس و لبه‌ی فعال ورودی. خودِ
-   * شنیِ روشن روی پس‌زمینه‌ی گرم کنتراست ۱.۸ دارد — به‌عنوان رنگ متن یا
-   * نشانگر فوکوس نامرئی است. این یکی ۵.۵ می‌دهد.
+  /*
+   * هاله‌ی بالای صفحات عمومی. یک گرادیان شعاعی از گوشه‌ی بالا که
+   * زمینه را از تختی درمی‌آورد؛ صفحات پشت لاگین و اتاق کلاس ندارندش
+   * (آنجا محتوا خودش شلوغ است و هاله فقط نویز اضافه می‌کند).
    */
-  --color-accent-strong: #7a6242;
-  /** متن روی پرِ شنی — ذغالی، نه سفید */
-  --color-accent-ink: #2a2521;
-  /** ته‌رنگ شنی برای برچسب و سطح نرم */
-  --color-accent-soft: #f0e8dc;
+  --color-glow: #1a1e30;
 
-  /**
-   * رنگ‌های وضعیت.
+  /*
+   * ─── لبه‌ها ───────────────────────────────────────────────────────
    *
-   * جهت بصری «گرم و یک اکسنت» است، پس این سه فقط جایی می‌آیند که
-   * معنا رنگ لازم دارد: کلاس تأییدشده، مهلت رو به پایان، جلسه‌ی لغو
-   * شده. هر کدام یک سطح روشن برای پس‌زمینه دارد تا متن روی آن خوانا
-   * بماند — بدون آن، متن قرمز روی سفید تنها ابزار موجود می‌شد و کل
-   * صفحه را هشدارآمیز نشان می‌داد.
-   *
-   * اشباعشان عمداً پایین است تا کنار پالت خاکی مثل وصله دیده نشوند؛
-   * سبزِ درخشان روی این پس‌زمینه‌ی گرم به چشم می‌زند.
+   * `divider-strong` فقط برای پنلی است که باید تأکید شود — کارت جلسه‌ی
+   * آماده، کلاس بعدی استاد. سلسله‌مراتب اینجا با روشنیِ لبه ساخته
+   * می‌شود نه با سایه؛ روی زمینه‌ی تاریک سایه دیده نمی‌شود.
    */
-  --color-success: #4c6b45;
-  --color-success-surface: #edf1e9;
+  --color-divider: #2a2f45;
+  --color-divider-strong: #343a54;
 
-  --color-warning: #8a5f27;
-  --color-warning-surface: #faf3e7;
+  /*
+   * ─── متن ─────────────────────────────────────────────────────────
+   *
+   * سه سطح، نه دو. `ink` عاجی برای عنوان و عدد و هرچه باید خوانده شود،
+   * `ink-2` برای متن بدنه، و `meta` برای برچسب و تاریخ و شمارنده.
+   * قاطی کردنشان همان چیزی است که صفحه را «تخت» می‌کند.
+   */
+  --color-ivory: #f3f0e9;
+  --color-ink: var(--color-ivory);
+  --color-ink-2: #aaa9b4;
+  /*
+   * تنها انحراف عامدانه از مقدارهای دیزاین: `#777b8d` بود.
+   *
+   * `meta` جای متن ریز است — تاریخ، شمارنده، راهنمای فیلد، برچسب بخش،
+   * ۱۲.۵ تا ۱۳.۵ پیکسل — و با مقدار دیزاین روی هیچ‌کدام از سطح‌ها به
+   * حد AA نمی‌رسید: زمینه ۴.۴۰، پنل ۴.۱۱، پرِ درونی ۳.۸۴، و ته‌رنگ
+   * بنفش ۳.۶۶. این مقدار روی هر چهار ≥۴.۵ می‌دهد (۵.۴۰ / ۵.۰۴ / ۴.۷۱
+   * / ۴.۵۰) و ۴.۷٪ در فضای RGB از مقدار اصلی فاصله دارد — با چشم
+   * تفکیک نمی‌شود.
+   *
+   * حد پایین دقیقاً `#82879a` بود؛ کمی بالاتر گرفته شد تا سطحِ
+   * ته‌رنگِ بنفش هم روی خط نایستد.
+   */
+  --color-meta: #868a9d;
 
-  --color-danger: #9e4437;
-  --color-danger-surface: #faeeec;
-  --color-danger-border: #ebd3ce;
+  /*
+   * پرِ عاجیِ کنش اصلی. متنِ رویش **ذغالیِ سرد** است نه سیاه؛ روی این
+   * عاجیِ گرم، سیاهِ خالص سخت و کنتراستش بیش از حد است.
+   */
+  --color-on-ivory: #14172a;
+  --color-ivory-hover: #fffdf7;
+
+  /*
+   * ─── بنفش ────────────────────────────────────────────────────────
+   *
+   * ⚠️ `violet` هرگز رنگ متن نیست. سهمش خط، لبه، حلقه‌ی فوکوس و نقطه‌ی
+   * وضعیت است. برای متن و لینک `violet-strong` را بردار — همان قاعده‌ی
+   * جهت بصری قبلی، با مقدارهای تازه.
+   */
+  --color-violet: #8f83c9;
+  --color-violet-strong: #aaa0dc;
+  --color-violet-surface: #24223a;
+
+  /*
+   * ─── چوب ─────────────────────────────────────────────────────────
+   *
+   * موتیف «سیم ساز»: خط کوتاهی که پیش از برچسب هر بخش می‌آید. بازبینی
+   * دیزاین (بند B-05) قطعی کرده که علامتِ بخش **چوبی** است و بنفش فقط
+   * برای وضعیت و تعامل می‌ماند.
+   *
+   * ⚠️ `wood` هم هرگز رنگ متن نیست؛ متن چوبی `wood-light` است.
+   */
+  --color-wood: #b9784e;
+  --color-wood-light: #cf8c5d;
+
+  /*
+   * ─── وضعیت ───────────────────────────────────────────────────────
+   *
+   * فایل‌های دیزاین توکن خطا را با سه نام و دو مقدار داشتند
+   * (`--hg-err` دو مقدار متفاوت، `--hg-danger` و `--hg-error`) و `ok`
+   * را با دو مقدار. بازبینی خودِ دیزاین (بند B-08) یک توکن و یک مقدار
+   * خواسته؛ اینجا همان است. رنگ خطا در اتاق کلاس و در داشبورد باید
+   * یکی باشد — سیگنال ایمنی است.
+   */
+  --color-ok: #7fa78d;
+  --color-error: #d97066;
+
+  /*
+   * ته‌رنگ‌ها. دیزاین این‌ها را همه‌جا با `color-mix()` درجا می‌ساخت؛
+   * توکن شدنشان یعنی درصدها یک جا عوض می‌شوند.
+   */
+  --color-ok-surface: color-mix(in srgb, var(--color-ok) 16%, transparent);
+  --color-wood-surface: color-mix(in srgb, var(--color-wood-light) 14%, transparent);
+  --color-error-surface: color-mix(in srgb, var(--color-error) 12%, transparent);
+  --color-error-border: color-mix(in srgb, var(--color-error) 45%, transparent);
+  --color-violet-border: color-mix(in srgb, var(--color-violet) 55%, transparent);
+  --color-violet-tint: color-mix(in srgb, var(--color-violet) 14%, transparent);
+
+  /*
+   * ─── شعاع ────────────────────────────────────────────────────────
+   *
+   * دیزاین دو شعاع کارت دارد و این عمدی مانده: صفحات عمومی ۱۴ و صفحات
+   * پشت لاگین ۱۲. کنترل‌ها ۱۰، تراشه‌ها گرد، و صحنه‌ی اتاق کلاس ۱۶.
+   */
+  --radius-card: 14px;
+  --radius-panel: 12px;
+  --radius-control: 10px;
+  --radius-stage: 16px;
+  --radius-pill: 999px;
+
+  /*
+   * ─── ارتفاع ──────────────────────────────────────────────────────
+   *
+   * روی زمینه‌ی تاریک ارتفاع = یک لبه‌ی مویی + تاریکیِ محیطی. سایه‌ی
+   * تنها دیده نمی‌شود، پس هر سه این‌ها لبه‌ی `inset` هم دارند.
+   */
+  --shadow-menu: inset 0 0 0 1px var(--color-divider), 0 20px 44px rgb(6 8 16 / 0.55);
+  --shadow-float: inset 0 0 0 1px var(--color-divider), 0 8px 24px rgb(8 10 18 / 0.5);
+  --shadow-dialog: inset 0 0 0 1px var(--color-divider), 0 18px 48px rgb(8 10 18 / 0.6);
+
+  /*
+   * ─── بریک‌پوینت ──────────────────────────────────────────────────
+   *
+   * دیزاین روی ۷۶۸ و ۱۰۲۴ می‌شکند که هر دو پیش‌فرض تیلویند (`md`, `lg`)
+   * هستند. تنها عددِ تکرارشونده‌ی دیگر ۱۲۰۰ است — `xl` تیلویند ۱۲۸۰
+   * است و به کار نمی‌آید. عددهای تک‌صفحه‌ای (۸۶۰، ۹۰۰، ۱۰۰۰) با
+   * واریانت دلخواه `max-[900px]:` می‌آیند و توکن نمی‌گیرند.
+   */
+  --breakpoint-wide: 1200px;
+
+  /*
+   * ─── انیمیشن ─────────────────────────────────────────────────────
+   */
+  --animate-pulse-slot: hg-pulse 1.4s ease-in-out infinite;
+  --animate-spin-btn: hg-spin 700ms linear infinite;
+  --animate-rise: hg-rise 220ms ease-out;
+  --animate-fade: hg-fade 200ms ease both;
+  --animate-dot: hg-dot 1.2s ease-in-out infinite;
 }
 
+/**
+ * پلِ موقتِ پالت قدیم.
+ *
+ * صفحه‌هایی که هنوز به Nocturne بازنویسی نشده‌اند از نام‌های پالت روشن
+ * استفاده می‌کنند (`text-ink-muted` در ۲۰۷ جا، `border-border` در ۴۴
+ * جا). این بلوک همان نام‌ها را به مقدارهای تاریک وصل می‌کند تا اپ بین
+ * فازها خوانا بماند و بازنویسی صفحه‌به‌صفحه و قابل‌بازبینی باشد.
+ *
+ * **در فاز ۹ حذف می‌شود.** هیچ کد تازه‌ای نباید از این نام‌ها استفاده
+ * کند؛ برای پیدا کردن بازمانده‌ها:
+ *   grep -rE '(bg|text|border)-(surface-raised|surface-muted|border|ink-muted|accent|accent-strong|accent-ink|accent-soft|action|success|warning|danger)' apps/web/src
+ */
+@theme {
+  --color-surface-raised: var(--color-surface);
+  --color-surface-muted: var(--color-surface-2);
+  --color-border: var(--color-divider);
+  /* «muted» قدیم به معنای متن بدنه بود، نه فرادادهٔ کم‌رنگ */
+  --color-ink-muted: var(--color-ink-2);
+
+  --color-accent: var(--color-violet);
+  --color-accent-strong: var(--color-violet-strong);
+  --color-accent-soft: var(--color-violet-surface);
+  --color-accent-ink: var(--color-ink);
+
+  --color-action: var(--color-ivory);
+  --color-action-strong: var(--color-ivory-hover);
+  --color-action-ink: var(--color-on-ivory);
+
+  --color-success: var(--color-ok);
+  --color-success-surface: var(--color-ok-surface);
+  --color-warning: var(--color-wood-light);
+  --color-warning-surface: var(--color-wood-surface);
+  --color-danger: var(--color-error);
+  --color-danger-surface: var(--color-error-surface);
+  --color-danger-border: var(--color-error-border);
+}
 
 @layer base {
+  :root {
+    /*
+     * بدون این، `<select>` و اسکرول‌بار و خودِ فیلدهای نیتیو روشن
+     * می‌مانند. تنها جای پروژه که به مرورگر می‌گوییم تم چیست.
+     */
+    color-scheme: dark;
+  }
+
   body {
-    background-color: var(--color-surface);
+    background-color: var(--color-bg);
     color: var(--color-ink);
     -webkit-font-smoothing: antialiased;
   }
@@ -109,128 +247,411 @@
   }
 
   /**
-   * حلقه‌ی فوکوس باید در کل سایت یکسان و دیده‌شدنی باشد.
-   *
-   * `accent-strong` است نه `accent`: شنیِ روشن روی پس‌زمینه‌ی گرم
-   * کنتراست ۱.۸ دارد و نشانگر فوکوس با آن عملاً ناپدید می‌شود.
+   * حلقه‌ی فوکوس باید در کل سایت یکسان و دیده‌شدنی باشد. `violet` است
+   * نه `violet-strong`: اینجا خطِ حلقه است نه متن، و در نقش خط همان
+   * بنفشِ پایه درست‌تر می‌نشیند.
    */
   :focus-visible {
-    outline: 2px solid var(--color-accent-strong);
+    outline: 2px solid var(--color-violet);
     outline-offset: 2px;
   }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-violet) 30%, transparent);
+  }
+
+  ::placeholder {
+    color: var(--color-meta);
+  }
+
+  /**
+   * لینک بنفش است، و در هاور عاجی.
+   *
+   * قاعده‌ی سراسری خودِ دیزاین (`a { color: var(--hg-violet-strong) }` در
+   * هر ۲۳ صفحه). لینک‌های ناوبری و دکمه‌ها رنگ صریح خودشان را دارند و
+   * این را رد می‌کنند — یوتیلیتی‌های تیلویند از لایه‌ی `base` قوی‌ترند.
+   */
+  a {
+    color: var(--color-violet-strong);
+    text-underline-offset: 3px;
+    transition: color 160ms ease;
+  }
+
+  a:hover {
+    color: var(--color-ink);
+  }
+
+  /* فلش پیش‌فرض `<details>` جای موتیف منوی همبرگری را می‌گیرد */
+  summary {
+    list-style: none;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+/**
+ * ═══ خط محوشونده ══════════════════════════════════════════════════
+ *
+ * امضای Nocturne و پرتکرارترین الگوی کل دیزاین (در هر ۲۳ صفحه): خطی
+ * که در دو سرش به شفاف محو می‌شود به‌جای اینکه تمیز قطع شود. با
+ * `border` قابل بیان نیست، پس گرادیانِ پس‌زمینه است.
+ *
+ * چهار فرورفتگی در دیزاین دیده می‌شود و هر کدام مقیاسِ خودش را دارد:
+ * ۴۸ برای لبه‌ی بخش و پابرگ، ۲۴ برای نوار فیلتر و کارت، ۱۲ و ۸ برای
+ * ردیف‌های فهرست. جداکننده‌ی **داخل** یک پنل توپر می‌ماند
+ * (`border-t border-divider`) — این محو شدن فقط برای خطِ آزاد است.
+ *
+ * جهت `to left` است نه منطقی: سایت کلاً راست‌چین است و گرادیان با
+ * `dir` نمی‌چرخد، پس همین همان چیزی است که دیزاین رندر می‌کرد.
+ */
+@utility rule-top {
+  background:
+    linear-gradient(
+        to left,
+        transparent,
+        var(--color-divider) 48px,
+        var(--color-divider) calc(100% - 48px),
+        transparent
+      )
+      no-repeat top / 100% 1px;
+}
+
+@utility rule-top-24 {
+  background:
+    linear-gradient(
+        to left,
+        transparent,
+        var(--color-divider) 24px,
+        var(--color-divider) calc(100% - 24px),
+        transparent
+      )
+      no-repeat top / 100% 1px;
+}
+
+@utility rule-top-8 {
+  background:
+    linear-gradient(
+        to left,
+        transparent,
+        var(--color-divider) 8px,
+        var(--color-divider) calc(100% - 8px),
+        transparent
+      )
+      no-repeat top / 100% 1px;
+}
+
+@utility rule-bottom {
+  background:
+    linear-gradient(
+        to left,
+        transparent,
+        var(--color-divider) 48px,
+        var(--color-divider) calc(100% - 48px),
+        transparent
+      )
+      no-repeat bottom / 100% 1px;
+}
+
+@utility rule-bottom-24 {
+  background:
+    linear-gradient(
+        to left,
+        transparent,
+        var(--color-divider) 24px,
+        var(--color-divider) calc(100% - 24px),
+        transparent
+      )
+      no-repeat bottom / 100% 1px;
+}
+
+@utility rule-bottom-8 {
+  background:
+    linear-gradient(
+        to left,
+        transparent,
+        var(--color-divider) 8px,
+        var(--color-divider) calc(100% - 8px),
+        transparent
+      )
+      no-repeat bottom / 100% 1px;
+}
+
+/**
+ * خطِ آزادِ ساده (بدون فرورفتگی) — برای ردیف‌های فهرستِ چسبیده به هم
+ * که خطشان باید سرتاسری باشد.
+ */
+@utility rule-plain {
+  background: linear-gradient(var(--color-divider), var(--color-divider))
+    no-repeat top / 100% 1px;
+}
+
+/**
+ * واریانتِ چوبی‌سر: ۳۲ پیکسل اولِ خط چوبی است و بعد به divider می‌رسد.
+ * فقط دو جا استفاده می‌شود — «نوار حقیقت» صفحه‌ی اصلی و آمار پروفایل
+ * استاد — و همان دو جا امضای بصری بخش‌اند.
+ */
+@utility rule-top-wood {
+  background:
+    linear-gradient(
+        to left,
+        var(--color-wood) 0,
+        var(--color-wood) 32px,
+        var(--color-divider) 32px,
+        var(--color-divider) calc(100% - 48px),
+        transparent
+      )
+      no-repeat top / 100% 1px;
+}
+
+/**
+ * پوششِ عکس.
+ *
+ * هر عکس محتوایی از این رد می‌شود. `lighten` یعنی هر پیکسلی از عکس که
+ * تاریک‌تر از پس‌زمینه باشد کنار می‌رود؛ روی چاهِ `--color-well` این
+ * یعنی پرتره‌ای که روی زمینه‌ی سیاه گرفته شده، لبه‌ی مستطیلی‌اش ناپدید
+ * می‌شود و در صفحه حل می‌شود. عکس روی زمینه‌ی روشن این خاصیت را ندارد.
+ */
+/**
+ * هاله‌ی صفحات عمومی.
+ *
+ * دیزاین سه هندسه‌ی کمی متفاوت داشت (`110% 60% at 80% -10%` در شش صفحه،
+ * `120% 70% at 82% -12%` در صفحه‌ی اصلی، و `110% 55% at 78% -12%` در
+ * پروفایل استاد). دو تای اول نگه داشته شد؛ سومی به `page-glow` رسید
+ * چون تفاوتش یک استاپِ ۵ درصدی است و با چشم تفکیک نمی‌شود.
+ */
+@utility page-glow {
+  background: radial-gradient(
+    110% 60% at 80% -10%,
+    var(--color-glow) 0%,
+    var(--color-bg) 58%
+  );
+}
+
+@utility page-glow-hero {
+  background: radial-gradient(
+    120% 70% at 82% -12%,
+    var(--color-glow) 0%,
+    var(--color-bg) 58%
+  );
+}
+
+@utility lighten {
+  mix-blend-mode: lighten;
+  background-color: transparent;
 }
 
 @layer components {
   /**
-   * کارت — در فهرست ساز، استاد و سرویس تکرار می‌شود.
+   * ═══ کنش ════════════════════════════════════════════════════════
    *
-   * به‌جای تکرار همین پنج کلاس در چهار فایل، یک کلاس معنایی: تغییر
-   * بعدی در ظاهر کارت‌ها یک جا انجام می‌شود.
-   */
-  .card {
-    display: block;
-    height: 100%;
-    border-radius: 1rem;
-    border: 1px solid var(--color-border);
-    background-color: var(--color-surface-raised);
-    padding: 1.25rem;
-    /* سایه گرم است نه خاکستری؛ سایه‌ی سرد روی پس‌زمینه‌ی کرم کبود دیده می‌شود */
-    box-shadow: 0 1px 2px rgb(31 29 27 / 0.04);
-    transition:
-      box-shadow 150ms ease,
-      border-color 150ms ease;
-  }
-
-  a.card:hover {
-    border-color: var(--color-accent);
-    box-shadow: 0 4px 14px rgb(31 29 27 / 0.07);
-  }
-
-  /** دکمه‌ی اصلی — «رزرو» و «دیدن استادها». ذغالی، سنگین‌ترین کنش صفحه */
-  .btn-primary {
-    display: inline-block;
-    border-radius: 0.625rem;
-    background-color: var(--color-action);
-    padding: 0.75rem 1.25rem;
-    font-weight: 600;
-    color: var(--color-action-ink);
-    transition: background-color 150ms ease;
-  }
-
-  .btn-primary:hover {
-    background-color: var(--color-action-strong);
-  }
-
-  /**
-   * دکمه‌ی دعوت — پرِ شنی، هم‌وزنِ دکمه‌ی اصلی ولی نرم‌تر.
+   * سه سطح، نه دو — و ترتیبشان معنا دارد:
    *
-   * جای «جلسه‌ی آشنایی رایگان» است: کنشی که می‌خواهیم دیده شود ولی نباید
-   * از رزرو پولی جلو بزند. متنش ذغالی است نه سفید — سفید روی این شنی
-   * کنتراست ۱.۹ می‌دهد و عملاً خوانده نمی‌شود.
+   *   `btn-primary`  پرِ عاجی. سنگین‌ترین کنش صفحه و **در هر صفحه فقط
+   *                  یکی**. رزرو، پرداخت، ورود، ذخیره، ورود به کلاس.
+   *   `btn-outline`  لبه‌ی بنفش. کنش دعوت‌کننده‌ی درجه‌دو — جلسه‌ی
+   *                  معارفه‌ی رایگان، دادن بازخورد، ارسال تمرین.
+   *   `btn-quiet`    لبه‌ی divider. کنشِ خنثی و بی‌ادعا — بازگشت،
+   *                  مدیریت زمان‌ها، افزودن فایل.
+   *
+   * بازبینی دیزاین (بند B-01) پیشنهاد داده بود واریانت سوم بازنشسته
+   * شود، ولی فایل‌های نهایی در چهار جا از آن استفاده می‌کنند و فایل‌ها
+   * منبع حقیقت‌اند — پس واریانت رسمی ماند.
+   *
+   * نام‌های قدیم (`btn-accent`، `btn-secondary`) روی همان نقش‌ها
+   * می‌نشینند، پس صفحه‌های بازنویسی‌نشده درست می‌مانند.
    */
-  .btn-accent {
-    display: inline-block;
-    border-radius: 0.625rem;
-    background-color: var(--color-accent);
-    padding: 0.75rem 1.25rem;
-    font-weight: 600;
-    color: var(--color-accent-ink);
-    transition: background-color 150ms ease;
-  }
-
-  .btn-accent:hover {
-    background-color: #bda684;
-  }
-
-  /** دکمه‌ی ثانویه — کنار دکمه‌ی اصلی، بدون رقابت با آن */
-  .btn-secondary {
-    display: inline-block;
-    border-radius: 0.625rem;
-    border: 1px solid var(--color-border);
-    background-color: var(--color-surface-raised);
-    padding: 0.75rem 1.25rem;
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 0;
+    border-radius: var(--radius-control);
+    padding: 0.75rem 1.375rem;
+    font-size: 0.9375rem;
     font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
+    cursor: pointer;
     transition:
-      border-color 150ms ease,
-      background-color 150ms ease;
+      background-color 180ms ease,
+      box-shadow 180ms ease,
+      color 160ms ease,
+      opacity 180ms ease;
   }
 
-  .btn-secondary:hover {
-    border-color: var(--color-accent);
-    background-color: var(--color-surface-muted);
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 0;
+    border-radius: var(--radius-control);
+    padding: 0.75rem 1.375rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1.4;
+    cursor: pointer;
+    background-color: var(--color-ivory);
+    color: var(--color-on-ivory);
+    transition: background-color 180ms ease, opacity 180ms ease;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--color-ivory-hover);
+  }
+
+  .btn-outline,
+  .btn-accent {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 0;
+    border-radius: var(--radius-control);
+    padding: 0.6875rem 1.25rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1.4;
+    cursor: pointer;
+    background-color: transparent;
+    color: var(--color-violet-strong);
+    box-shadow: inset 0 0 0 1px var(--color-violet-border);
+    transition: background-color 180ms ease, color 160ms ease;
+  }
+
+  .btn-outline:hover:not(:disabled),
+  .btn-accent:hover:not(:disabled) {
+    background-color: var(--color-violet-tint);
+  }
+
+  .btn-quiet,
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 0;
+    border-radius: var(--radius-control);
+    padding: 0.6875rem 1.25rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1.4;
+    cursor: pointer;
+    background-color: transparent;
+    color: var(--color-ink-2);
+    box-shadow: inset 0 0 0 1px var(--color-divider);
+    transition: background-color 180ms ease, color 160ms ease;
+  }
+
+  .btn-quiet:hover:not(:disabled),
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-surface-2);
+    color: var(--color-ink);
+  }
+
+  /** کنشِ متنی — بدون قاب. «تغییر»، «پشیمان شدم»، «دیدن همه ←» */
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 0;
+    background: transparent;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.4;
+    cursor: pointer;
+    color: var(--color-violet-strong);
+    transition: color 160ms ease;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    color: var(--color-ink);
+  }
+
+  /** لغو و حذف — لبه و متنِ خطا، هرگز پرِ خطا */
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: 0;
+    border-radius: var(--radius-control);
+    padding: 0.6875rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.4;
+    cursor: pointer;
+    background-color: transparent;
+    color: var(--color-error);
+    box-shadow: inset 0 0 0 1px var(--color-error-border);
+    transition: background-color 180ms ease;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background-color: var(--color-error-surface);
   }
 
   /**
-   * دکمه‌ی غیرفعال — روی هر سه نوع.
+   * غیرفعال روی همه‌ی واریانت‌ها.
    *
    * `pointer-events` عمداً برداشته نمی‌شود تا `cursor` دیده شود؛ خودِ
    * `disabled` در HTML جلوی کلیک را می‌گیرد.
    */
+  .btn:disabled,
   .btn-primary:disabled,
+  .btn-outline:disabled,
   .btn-accent:disabled,
+  .btn-quiet:disabled,
   .btn-secondary:disabled,
+  .btn-ghost:disabled,
   .btn-danger:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: not-allowed;
   }
 
-  /** لغو و حذف — کمرنگ‌تر از اکسنت تا با کنش اصلی رقابت نکند */
-  .btn-danger {
-    display: inline-block;
-    border-radius: 0.625rem;
-    border: 1px solid var(--color-danger-border);
-    padding: 0.75rem 1.25rem;
-    font-weight: 500;
-    color: var(--color-danger);
-    transition: background-color 150ms ease;
+  /**
+   * ═══ سطح ════════════════════════════════════════════════════════
+   *
+   * لبه با `box-shadow: inset` کشیده می‌شود نه `border` — چون دیزاین
+   * همه‌جا همین کار را می‌کند و دلیلش این است که لبه‌ی داخلی جای
+   * چیدمان نمی‌گیرد و کارت‌های چسبیده به هم یک خطِ دوبرابر نمی‌سازند.
+   */
+  .card {
+    display: block;
+    border-radius: var(--radius-card);
+    background-color: var(--color-surface);
+    box-shadow: inset 0 0 0 1px var(--color-divider);
+    padding: 1.25rem;
   }
 
-  .btn-danger:hover:not(:disabled) {
-    background-color: var(--color-danger-surface);
+  /** همان کارت با شعاع صفحه‌های پشت لاگین */
+  .card-app {
+    border-radius: var(--radius-panel);
+    background-color: var(--color-surface);
+    box-shadow: inset 0 0 0 1px var(--color-divider);
+  }
+
+  /** پنلی که باید تأکید شود — جلسه‌ی آماده، کلاس بعدی، در انتظار پرداخت */
+  .card-emph {
+    box-shadow: inset 0 0 0 1px var(--color-divider-strong);
+  }
+
+  /** کارتِ بی‌پر: فقط لبه، بدون سطح. برای کارت‌های فرعیِ کنار ستون */
+  .card-hollow {
+    border-radius: var(--radius-panel);
+    box-shadow: inset 0 0 0 1px var(--color-divider);
   }
 
   /**
-   * ورودی فرم.
+   * ═══ فرم ════════════════════════════════════════════════════════
+   *
+   * ارتفاع ۵۰ پیکسل و زمینه‌ی `surface-2`. حلقه با `inset` کشیده
+   * می‌شود تا در فوکوس فقط رنگش عوض شود و چیدمان تکان نخورد — با
+   * `border` عوض کردن ضخامت، محتوا را یک پیکسل جابه‌جا می‌کرد.
    *
    * شماره‌ی موبایل و کد ورود با ارقام لاتین تایپ می‌شوند ولی کاربر
    * ایرانی صفحه‌کلید فارسی دارد. تبدیل ارقام کار `normalizePhone` در
@@ -239,85 +660,147 @@
   .input {
     display: block;
     width: 100%;
-    border-radius: 0.625rem;
-    border: 1px solid var(--color-border);
-    background-color: var(--color-surface-raised);
-    padding: 0.75rem 0.875rem;
-    transition: border-color 150ms ease;
+    box-sizing: border-box;
+    min-height: 50px;
+    border: 0;
+    border-radius: var(--radius-control);
+    background-color: var(--color-surface-2);
+    padding: 0 0.875rem;
+    font: inherit;
+    font-size: 0.9375rem;
+    color: var(--color-ink);
+    caret-color: var(--color-violet-strong);
+    box-shadow: inset 0 0 0 1px var(--color-divider);
+    transition: box-shadow 180ms ease;
+  }
+
+  textarea.input {
+    min-height: 7rem;
+    padding: 0.875rem;
+    line-height: 2;
+    resize: vertical;
   }
 
   .input:focus {
-    border-color: var(--color-accent-strong);
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--color-violet);
   }
 
   .input:disabled {
-    background-color: var(--color-surface-muted);
-    color: var(--color-ink-muted);
+    color: var(--color-meta);
+    cursor: not-allowed;
+  }
+
+  /** ورودیِ خطادار — حلقه‌اش قرمز است و متن خطا زیرش می‌آید */
+  .input-error,
+  .input-error:focus {
+    box-shadow: inset 0 0 0 1px var(--color-error);
   }
 
   .label {
     display: block;
     margin-bottom: 0.5rem;
     font-size: 0.875rem;
-    font-weight: 500;
+    font-weight: 400;
+    color: var(--color-ink-2);
+  }
+
+  .field-hint {
+    margin-top: 0.4375rem;
+    font-size: 0.78125rem;
+    color: var(--color-meta);
+  }
+
+  .field-error {
+    margin-top: 0.5rem;
+    font-size: 0.84375rem;
+    color: var(--color-error);
   }
 
   /**
-   * برچسب وضعیت — «تأییدشده»، «در انتظار پرداخت»، «لغو شده».
+   * ═══ برچسب وضعیت ════════════════════════════════════════════════
    *
-   * رنگ با کلاس جدا داده می‌شود (`.badge-ok` و مانند آن) تا هیچ رنگ
-   * خامی در کامپوننت‌ها نوشته نشود.
+   * رنگ با کلاس جدا داده می‌شود تا هیچ رنگ خامی در کامپوننت‌ها نوشته
+   * نشود.
    */
   .badge {
     display: inline-block;
-    border-radius: 999px;
-    padding: 0.125rem 0.625rem;
+    border-radius: var(--radius-pill);
+    padding: 0.1875rem 0.625rem;
     font-size: 0.75rem;
-    font-weight: 500;
+    font-weight: 400;
     line-height: 1.8;
     white-space: nowrap;
   }
 
   .badge-neutral {
-    background-color: var(--color-accent-soft);
-    color: var(--color-accent-strong);
+    background-color: var(--color-violet-surface);
+    color: var(--color-violet-strong);
   }
 
   .badge-ok {
-    background-color: var(--color-success-surface);
-    color: var(--color-success);
+    background-color: var(--color-ok-surface);
+    color: var(--color-ok);
   }
 
   .badge-wait {
-    background-color: var(--color-warning-surface);
-    color: var(--color-warning);
+    background-color: var(--color-wood-surface);
+    color: var(--color-wood-light);
   }
 
   .badge-off {
-    background-color: var(--color-danger-surface);
-    color: var(--color-danger);
-  }
-
-  /** پیام خطای فرم و کادر هشدار */
-  .alert-error {
-    border-radius: 0.625rem;
-    border: 1px solid var(--color-danger-border);
-    background-color: var(--color-danger-surface);
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
-    color: var(--color-danger);
-  }
-
-  .alert-info {
-    border-radius: 0.625rem;
-    border: 1px solid var(--color-border);
-    background-color: var(--color-accent-soft);
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
+    background-color: color-mix(in srgb, var(--color-meta) 18%, transparent);
+    color: var(--color-ink-2);
   }
 
   /**
-   * متن نوشته‌ی بلاگ.
+   * ═══ پیام ═══════════════════════════════════════════════════════
+   *
+   * دیزاین دو شکل دارد و هر دو لازم‌اند: بندِ با **لبه‌ی کناری** (که
+   * پرتکرارترین است — بیش از پانزده جا) و کادرِ ته‌رنگی برای خطای فرم.
+   */
+  .notice {
+    padding-inline-start: 0.875rem;
+    border-inline-start: 1px solid var(--color-violet);
+    font-size: 0.84375rem;
+    line-height: 1.85;
+    color: var(--color-ink-2);
+  }
+
+  .notice-wood {
+    border-inline-start-color: var(--color-wood);
+  }
+
+  .notice-error {
+    border-inline-start-color: var(--color-error);
+    color: var(--color-error);
+  }
+
+  .notice-quiet {
+    border-inline-start-color: var(--color-divider);
+    color: var(--color-meta);
+  }
+
+  .alert-error {
+    border-radius: var(--radius-control);
+    background-color: var(--color-error-surface);
+    box-shadow: inset 0 0 0 1px var(--color-error-border);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    color: var(--color-error);
+  }
+
+  .alert-info {
+    border-radius: var(--radius-control);
+    background-color: var(--color-violet-surface);
+    box-shadow: inset 0 0 0 1px var(--color-violet-border);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    color: var(--color-ink-2);
+  }
+
+  /**
+   * ═══ متن نوشته‌ی بلاگ ═══════════════════════════════════════════
    *
    * تنها جایی در پروژه که HTML بدون کلاس رندر می‌شود: خروجی مارک‌داون
    * `<h2>` و `<p>` و `<ul>` خام می‌دهد و نمی‌شود به هر کدام کلاس داد.
@@ -328,7 +811,8 @@
    * بیرون می‌زنند و صفحه را افقی اسکرول می‌کنند.
    */
   .prose-fa {
-    line-height: 2;
+    line-height: 2.05;
+    color: var(--color-ink-2);
     overflow-wrap: break-word;
   }
 
@@ -337,20 +821,33 @@
   }
 
   .prose-fa h2 {
-    margin-top: 2.5rem;
+    margin-top: 2.75rem;
     font-size: 1.5rem;
-    font-weight: 700;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
   }
 
   .prose-fa h3 {
     margin-top: 2rem;
     font-size: 1.25rem;
-    font-weight: 700;
+    font-weight: 600;
+    color: var(--color-ink);
   }
 
   .prose-fa a {
-    color: var(--color-accent-strong);
+    color: var(--color-violet-strong);
+    text-underline-offset: 3px;
     text-decoration: underline;
+  }
+
+  .prose-fa a:hover {
+    color: var(--color-ink);
+  }
+
+  .prose-fa strong {
+    color: var(--color-ink);
+    font-weight: 600;
   }
 
   .prose-fa ul,
@@ -371,19 +868,27 @@
   }
 
   .prose-fa blockquote {
-    border-inline-start: 3px solid var(--color-accent);
-    padding-inline-start: 1rem;
-    color: var(--color-ink-muted);
+    border-inline-start: 1px solid var(--color-wood);
+    padding-inline-start: 1.375rem;
+    font-size: 1.25rem;
+    line-height: 1.95;
+    color: var(--color-ink);
+  }
+
+  .prose-fa figcaption {
+    margin-top: 0.75rem;
+    font-size: 0.84375rem;
+    color: var(--color-meta);
   }
 
   .prose-fa img {
     max-width: 100%;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-panel);
   }
 
   .prose-fa code {
     border-radius: 0.25rem;
-    background-color: var(--color-surface-muted);
+    background-color: var(--color-surface-2);
     padding: 0.125rem 0.375rem;
     font-size: 0.875em;
   }
@@ -391,10 +896,65 @@
   .prose-fa pre {
     overflow-x: auto;
     border-radius: 0.5rem;
-    background-color: var(--color-surface-muted);
+    background-color: var(--color-surface-2);
     padding: 1rem;
     /* کد همیشه چپ‌چین است، حتی داخل صفحه‌ی راست‌چین */
     direction: ltr;
     text-align: left;
+  }
+}
+
+/* ═══ کی‌فریم‌ها ═══════════════════════════════════════════════════ */
+
+/** اسکلتونِ بارگذاری — اسلات زمان، کارت، سطر جدول */
+@keyframes hg-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/** اسپینرِ روی دکمه‌ی عاجی */
+@keyframes hg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/** ورودِ کارت ورود و پنل‌های بازشو */
+@keyframes hg-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/** ورودِ کوتاه‌ترِ پیام ذخیره و پنل درون‌ردیفی */
+@keyframes hg-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/** سه نقطه‌ی «در حال بررسی پرداخت…» */
+@keyframes hg-dot {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
   }
 }
