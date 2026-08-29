@@ -3,7 +3,13 @@ import { eq } from "drizzle-orm";
 import { fromTehranWallClock, tehranMinutesOfDay } from "@music/shared";
 
 import { db } from "../db/client.js";
-import { bookings, enrollments } from "../db/schema/index.js";
+import {
+  bookings,
+  enrollments,
+  offerings,
+  teacherProfiles,
+  users,
+} from "../db/schema/index.js";
 import {
   cancelBooking,
   confirmBookings,
@@ -15,6 +21,7 @@ import {
 import {
   BookingNotCancellableError,
   NotBookingParticipantError,
+  OfferingNotFoundError,
   PackageConflictError,
   SlotUnavailableError,
   StudentBusyError,
@@ -41,6 +48,24 @@ function slotAt(dateKey: string, hour: number): Date {
 
 let fixture: Fixture;
 
+async function createAlternativeTeacher(): Promise<string> {
+  const [user] = await db
+    .insert(users)
+    .values({ phone: "+989120000099", fullName: "استاد دیگر" })
+    .returning({ id: users.id });
+  const [profile] = await db
+    .insert(teacherProfiles)
+    .values({
+      userId: user!.id,
+      slug: "other-teacher",
+      headline: "مدرس دیگر",
+      status: "APPROVED",
+    })
+    .returning({ id: teacherProfiles.id });
+
+  return profile!.id;
+}
+
 beforeEach(async () => {
   await resetDatabase();
   fixture = await seedFixture();
@@ -61,10 +86,68 @@ describe("جلسه‌ی تکی", () => {
     });
 
     expect(booking.status).toBe("PENDING_PAYMENT");
+    const [snapshot] = await db
+      .select({ teacherId: bookings.teacherId, offeringId: bookings.offeringId })
+      .from(bookings)
+      .where(eq(bookings.id, booking.id));
+    expect(snapshot).toEqual({
+      teacherId: fixture.teacherUserId,
+      offeringId: fixture.offeringId,
+    });
     expect(booking.holdExpiresAt).not.toBeNull();
     expect(booking.priceSnapshot).toBe(3_000_000n);
     // `endsAt` باید دقیقاً یک ساعت بعد باشد، وگرنه قید دیتابیس رد می‌کرد
     expect(booking.endsAt.getTime() - booking.scheduledAt.getTime()).toBe(3_600_000);
+  });
+
+  it("سرویس استاد دیگر را با خطای دامنه رد می‌کند", async () => {
+    const otherTeacherProfileId = await createAlternativeTeacher();
+
+    await expect(
+      createSingleBooking({
+        studentId: fixture.studentId,
+        teacherProfileId: otherTeacherProfileId,
+        offeringId: fixture.offeringId,
+        scheduledAt: slotAt(SATURDAY, 17),
+        now: NOW,
+      }),
+    ).rejects.toBeInstanceOf(OfferingNotFoundError);
+
+    expect(await db.select().from(bookings)).toHaveLength(0);
+  });
+
+  it("سرویس غیرفعال را رزرو نمی‌کند", async () => {
+    await db
+      .update(offerings)
+      .set({ isActive: false })
+      .where(eq(offerings.id, fixture.offeringId));
+
+    await expect(
+      createSingleBooking({
+        studentId: fixture.studentId,
+        teacherProfileId: fixture.teacherProfileId,
+        offeringId: fixture.offeringId,
+        scheduledAt: slotAt(SATURDAY, 17),
+        now: NOW,
+      }),
+    ).rejects.toBeInstanceOf(OfferingNotFoundError);
+  });
+
+  it("سرویس استاد تأییدنشده را رزرو نمی‌کند", async () => {
+    await db
+      .update(teacherProfiles)
+      .set({ status: "PENDING" })
+      .where(eq(teacherProfiles.id, fixture.teacherProfileId));
+
+    await expect(
+      createSingleBooking({
+        studentId: fixture.studentId,
+        teacherProfileId: fixture.teacherProfileId,
+        offeringId: fixture.offeringId,
+        scheduledAt: slotAt(SATURDAY, 17),
+        now: NOW,
+      }),
+    ).rejects.toBeInstanceOf(OfferingNotFoundError);
   });
 
   it("مهلت پرداخت روی رزرو ثبت می‌شود", async () => {

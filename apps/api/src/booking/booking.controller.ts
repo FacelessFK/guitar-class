@@ -74,7 +74,6 @@ const packageSchema = z.object({
   offeringId: uuidSchema,
   firstSessionDate: dateKeySchema,
   startMinute: minuteOfDaySchema,
-  sessionCount: z.number().int().min(1).max(12).optional(),
 });
 
 const cancelSchema = z.object({
@@ -227,7 +226,6 @@ export class BookingController {
       offeringId: body.offeringId,
       firstSessionDate: body.firstSessionDate,
       startMinute: body.startMinute,
-      sessionCount: body.sessionCount,
     });
 
     return {

@@ -32,7 +32,9 @@ import {
   bookings,
   offerings,
   teacherProfiles,
+  users,
 } from "../db/schema/index.js";
+import { OfferingNotFoundError } from "../booking/errors.js";
 
 export interface TeacherScheduleInput {
   /** شناسه‌ی `teacher_profiles`، نه `users` */
@@ -83,7 +85,16 @@ export async function loadSchedule(
       })
       .from(offerings)
       .innerJoin(teacherProfiles, eq(offerings.teacherId, teacherProfiles.id))
-      .where(eq(offerings.id, offeringId))
+      .innerJoin(users, eq(teacherProfiles.userId, users.id))
+      .where(
+        and(
+          eq(offerings.id, offeringId),
+          eq(offerings.teacherId, teacherProfileId),
+          eq(offerings.isActive, true),
+          eq(teacherProfiles.status, "APPROVED"),
+          eq(users.status, "ACTIVE"),
+        ),
+      )
       .limit(1),
 
     db
@@ -129,7 +140,10 @@ export async function loadSchedule(
 
   const offering = offeringRows[0];
   if (!offering) {
-    throw new Error(`سرویس با شناسه‌ی ${offeringId} پیدا نشد`);
+    // «وجود ندارد»، «برای استاد دیگری است» و «غیرفعال/تأییدنشده است»
+    // عمداً یک پاسخ می‌گیرند. مسیر عمومی است و نباید با حدس شناسه بتوان
+    // وضعیت یا مالک یک سرویس غیرقابل‌رزرو را کشف کرد.
+    throw new OfferingNotFoundError(offeringId);
   }
 
   return {
@@ -214,7 +228,6 @@ export interface PackagePreviewInput {
   firstSessionDate: DateKey;
   /** دقیقه از نیمه‌شب، به وقت تهران */
   startMinute: number;
-  sessionCount?: number;
   now?: Date;
 }
 
@@ -231,7 +244,7 @@ export interface PackagePreviewInput {
 export async function previewPackage(
   input: PackagePreviewInput,
 ): Promise<PackagePlanResult> {
-  const sessionCount = input.sessionCount ?? BUSINESS_RULES.PACKAGE_SESSION_COUNT;
+  const sessionCount = BUSINESS_RULES.PACKAGE_SESSION_COUNT;
   const lastSessionDate = addDaysToDateKey(
     input.firstSessionDate,
     (sessionCount - 1) * 7,

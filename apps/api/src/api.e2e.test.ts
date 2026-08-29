@@ -3,11 +3,14 @@ import { Test } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import type { App } from "supertest/types.js";
+import { eq } from "drizzle-orm";
 
 import { AppModule } from "./app.module.js";
 import { DomainExceptionFilter } from "./common/domain-exception.filter.js";
 import { AuthExceptionFilter } from "./common/auth-exception.filter.js";
 import { BigIntSerializationInterceptor } from "./common/serialization.interceptor.js";
+import { db } from "./db/client.js";
+import { offerings, teacherProfiles, users } from "./db/schema/index.js";
 import { SWEEPS, recordHeartbeat, type SweepName } from "./queue/heartbeat.js";
 import {
   accessTokenFor,
@@ -26,7 +29,7 @@ import {
  * سنجیده می‌شوند.
  */
 
-const SATURDAY = "2026-08-15";
+const SATURDAY = "2030-08-17";
 
 /** ضربان همه‌ی جاروها — یعنی «وُرکر کامل کار می‌کند». */
 async function beatAll(at: Date = new Date()): Promise<void> {
@@ -41,6 +44,25 @@ let fixture: Fixture;
 let studentToken: string;
 let otherStudentToken: string;
 let teacherToken: string;
+
+async function createAlternativeTeacher(): Promise<string> {
+  const [user] = await db
+    .insert(users)
+    .values({ phone: "+989120000099", fullName: "استاد دیگر" })
+    .returning({ id: users.id });
+
+  const [profile] = await db
+    .insert(teacherProfiles)
+    .values({
+      userId: user!.id,
+      slug: "other-teacher",
+      headline: "مدرس دیگر",
+      status: "APPROVED",
+    })
+    .returning({ id: teacherProfiles.id });
+
+  return profile!.id;
+}
 
 beforeAll(async () => {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -230,6 +252,57 @@ describe("GET /api/offerings/:id/availability", () => {
     expect(response.body.slots[1].startTime).toBe("16:20");
   });
 
+  it("سرویس متعلق به استاد دیگر را با ۴۰۴ امن رد می‌کند", async () => {
+    const otherTeacherProfileId = await createAlternativeTeacher();
+
+    const response = await request(server)
+      .get(`/api/offerings/${fixture.offeringId}/availability`)
+      .query({
+        teacherProfileId: otherTeacherProfileId,
+        from: SATURDAY,
+        to: SATURDAY,
+      })
+      .expect(404);
+
+    expect(response.body.code).toBe("OFFERING_NOT_FOUND");
+  });
+
+  it("سرویس غیرفعال را در مسیر تریال رد می‌کند", async () => {
+    await db
+      .update(offerings)
+      .set({ isActive: false })
+      .where(eq(offerings.id, fixture.offeringId));
+
+    const response = await request(server)
+      .get(`/api/offerings/${fixture.offeringId}/availability/trial`)
+      .query({
+        teacherProfileId: fixture.teacherProfileId,
+        from: SATURDAY,
+        to: SATURDAY,
+      })
+      .expect(404);
+
+    expect(response.body.code).toBe("OFFERING_NOT_FOUND");
+  });
+
+  it("استاد تأییدنشده را در پیش‌نمایش پکیج رد می‌کند", async () => {
+    await db
+      .update(teacherProfiles)
+      .set({ status: "PENDING" })
+      .where(eq(teacherProfiles.id, fixture.teacherProfileId));
+
+    const response = await request(server)
+      .post(`/api/offerings/${fixture.offeringId}/availability/package-preview`)
+      .send({
+        teacherProfileId: fixture.teacherProfileId,
+        firstSessionDate: SATURDAY,
+        startMinute: 17 * 60,
+      })
+      .expect(404);
+
+    expect(response.body.code).toBe("OFFERING_NOT_FOUND");
+  });
+
   it("بازه‌ی بیش از ۶۲ روز را رد می‌کند", async () => {
     const response = await request(server)
       .get(`/api/offerings/${fixture.offeringId}/availability`)
@@ -409,7 +482,7 @@ describe("POST /api/bookings/package", () => {
       .send({
         teacherProfileId: fixture.teacherProfileId,
         offeringId: fixture.offeringId,
-        date: "2026-08-29",
+        date: "2030-08-31",
         startMinute: 17 * 60,
       })
       .expect(201);
@@ -422,7 +495,7 @@ describe("POST /api/bookings/package", () => {
 
     expect(response.body.code).toBe("PACKAGE_CONFLICT");
     expect(response.body.conflicts).toEqual([
-      expect.objectContaining({ sessionIndex: 3, date: "2026-08-29" }),
+      expect.objectContaining({ sessionIndex: 3, date: "2030-08-31" }),
     ]);
   });
 });

@@ -24,9 +24,11 @@ import { zodPipe } from "../common/validation.pipe.js";
 import { PaymentError } from "./errors.js";
 import { creditBalanceOf, listCreditEntries } from "./credit.service.js";
 import {
+  authoritativeOrderResult,
   settleOrder,
   startCheckout,
   teacherEarningsBreakdown,
+  type AuthoritativeOrderResult,
   type SettlementResult,
 } from "./payment.service.js";
 
@@ -34,6 +36,7 @@ import {
 export class PaymentProvider {
   readonly checkout = startCheckout;
   readonly settle = settleOrder;
+  readonly orderResult = authoritativeOrderResult;
   readonly earnings = teacherEarningsBreakdown;
   readonly creditBalance = creditBalanceOf;
   readonly creditEntries = listCreditEntries;
@@ -87,6 +90,28 @@ interface OrderView {
   refId: string | null;
   paidAt: string | null;
   createdAt: string;
+}
+
+interface OrderResultView {
+  id: string;
+  outcome: AuthoritativeOrderResult["outcome"];
+  orderStatus: AuthoritativeOrderResult["orderStatus"];
+  totalAmount: string;
+  creditApplied: string;
+  gatewayAmount: string;
+  paymentMethod: AuthoritativeOrderResult["paymentMethod"];
+  refId: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  target: {
+    kind: "SINGLE" | "PACKAGE";
+    id: string;
+    teacherName: string;
+    instrumentName: string;
+    firstSessionAt: string;
+    sessionCount: number;
+  };
+  recoveredToCredit: string;
 }
 
 @Controller("payments")
@@ -162,20 +187,19 @@ export class PaymentController {
     @Res() response: Response,
   ): Promise<void> {
     let result: SettlementResult | null = null;
-    let errorCode: string | null = null;
 
     try {
       result = await this.payment.settle({ authority: query.Authority });
     } catch (error) {
-      errorCode = error instanceof PaymentError ? error.code : "UNEXPECTED";
+      const errorCode = error instanceof PaymentError ? error.code : "UNEXPECTED";
       this.logger.error(
-        `تأیید پرداخت ${query.Authority} (Status=${query.Status ?? "-"}) شکست خورد: ${
+        `تأیید پرداخت ${query.Authority} (Status=${query.Status ?? "-"}, code=${errorCode}) شکست خورد: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
     }
 
-    response.redirect(HttpStatus.FOUND, buildResultUrl(result, errorCode));
+    response.redirect(HttpStatus.FOUND, buildResultUrl(result));
   }
 
   /** وضعیت یک سفارش. فقط صاحبش می‌بیند. */
@@ -183,14 +207,8 @@ export class PaymentController {
   async getOrder(
     @CurrentUserId() studentId: string,
     @Param("orderId", zodPipe(uuidSchema)) orderId: string,
-  ): Promise<OrderView | null> {
-    const [row] = await db
-      .select()
-      .from(orders)
-      .where(and(eq(orders.id, orderId), eq(orders.studentId, studentId)))
-      .limit(1);
-
-    return row ? toOrderView(row) : null;
+  ): Promise<OrderResultView> {
+    return toOrderResultView(await this.payment.orderResult(studentId, orderId));
   }
 
   /** سفارش‌های کاربر جاری. */
@@ -335,6 +353,26 @@ function toOrderView(row: typeof orders.$inferSelect): OrderView {
   };
 }
 
+function toOrderResultView(result: AuthoritativeOrderResult): OrderResultView {
+  return {
+    id: result.id,
+    outcome: result.outcome,
+    orderStatus: result.orderStatus,
+    totalAmount: result.totalAmount.toString(),
+    creditApplied: result.creditApplied.toString(),
+    gatewayAmount: result.gatewayAmount.toString(),
+    paymentMethod: result.paymentMethod,
+    refId: result.refId,
+    paidAt: result.paidAt?.toISOString() ?? null,
+    createdAt: result.createdAt.toISOString(),
+    target: {
+      ...result.target,
+      firstSessionAt: result.target.firstSessionAt.toISOString(),
+    },
+    recoveredToCredit: result.recoveredToCredit.toString(),
+  };
+}
+
 /**
  * آدرس صفحه‌ی نتیجه در فرانت.
  *
@@ -342,28 +380,11 @@ function toOrderView(row: typeof orders.$inferSelect): OrderView {
  * فاصله مهلت رزرو تمام شده و اسلات آزاد شده. صفحه‌ی نتیجه باید صریح
  * بگوید پول برمی‌گردد، نه اینکه «موفق» نشان دهد.
  */
-function buildResultUrl(result: SettlementResult | null, errorCode: string | null): string {
+function buildResultUrl(result: SettlementResult | null): string {
   const origin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
   const url = new URL("/payment/result", origin);
 
-  if (!result) {
-    url.searchParams.set("status", "error");
-    url.searchParams.set("code", errorCode ?? "UNEXPECTED");
-    return url.toString();
-  }
-
-  url.searchParams.set("order", result.orderId);
-
-  if (result.status === "FAILED") {
-    url.searchParams.set("status", "failed");
-    if (result.reason) url.searchParams.set("reason", result.reason);
-    return url.toString();
-  }
-
-  url.searchParams.set(
-    "status",
-    result.unconfirmedBookingIds.length > 0 ? "paid_unmatched" : "paid",
-  );
+  if (result) url.searchParams.set("order", result.orderId);
 
   return url.toString();
 }

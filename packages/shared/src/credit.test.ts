@@ -46,6 +46,11 @@ describe("علامت مبلغ به ازای دلیل", () => {
     expect(isCreditAmountValid("CANCELLATION", -1n)).toBe(false);
   });
 
+  it("بازیابی پرداخت بی‌جلسه فقط مثبت است", () => {
+    expect(isCreditAmountValid("PAYMENT_RECOVERY", 1n)).toBe(true);
+    expect(isCreditAmountValid("PAYMENT_RECOVERY", -1n)).toBe(false);
+  });
+
   it("خرج فقط منفی است", () => {
     expect(isCreditAmountValid("SPEND", -1n)).toBe(true);
     expect(isCreditAmountValid("SPEND", 1n)).toBe(false);

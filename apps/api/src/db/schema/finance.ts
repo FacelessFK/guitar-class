@@ -184,7 +184,7 @@ export const creditEntries = pgTable(
 
     /** رزروی که این اعتبار از لغوش آمده */
     bookingId: uuid("booking_id").references(() => bookings.id),
-    /** سفارشی که این اعتبار در آن خرج شده */
+    /** سفارشی که این اعتبار در آن خرج یا از پرداخت بی‌جلسه بازیابی شده */
     orderId: uuid("order_id").references(() => orders.id),
     /** ادمینی که اعطای دستی را ثبت کرده — فقط برای `ADMIN_ADJUSTMENT` */
     createdById: uuid("created_by_id").references(() => users.id),
@@ -219,6 +219,10 @@ export const creditEntries = pgTable(
     uniqueIndex("credit_one_spend_per_order")
       .on(table.orderId)
       .where(sql`${table.reason} = 'SPEND'`),
+    /** هر سفارش پرداخت‌شده‌ی بی‌جلسه دقیقاً یک بار بازیابی می‌شود. */
+    uniqueIndex("credit_one_payment_recovery_per_order")
+      .on(table.orderId)
+      .where(sql`${table.reason} = 'PAYMENT_RECOVERY'`),
     check("credit_amount_not_zero", sql`${table.amount} <> 0`),
     /**
      * علامت مبلغ باید با دلیلش بخواند.
@@ -231,6 +235,7 @@ export const creditEntries = pgTable(
     check(
       "credit_amount_sign_matches_reason",
       sql`(${table.reason} = 'CANCELLATION' AND ${table.amount} > 0)
+        OR (${table.reason} = 'PAYMENT_RECOVERY' AND ${table.amount} > 0)
         OR (${table.reason} = 'SPEND' AND ${table.amount} < 0)
         OR ${table.reason} = 'ADMIN_ADJUSTMENT'`,
     ),

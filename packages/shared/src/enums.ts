@@ -103,12 +103,15 @@ export type PayoutStatus = (typeof PayoutStatus)[keyof typeof PayoutStatus];
  * دیگر بدهی واقعی نباشد.
  *
  * علامت مبلغ از روی دلیل قابل حدس است و در دیتابیس هم قید دارد:
- * `CANCELLATION` مثبت، `SPEND` منفی، `ADMIN_ADJUSTMENT` هر دو (ادمین هم
- * می‌بخشد و هم اشتباهِ خودش را پس می‌گیرد).
+ * `CANCELLATION` و `PAYMENT_RECOVERY` مثبت، `SPEND` منفی،
+ * `ADMIN_ADJUSTMENT` هر دو (ادمین هم می‌بخشد و هم اشتباهِ خودش را پس
+ * می‌گیرد).
  */
 export const CreditReason = {
   /** جلسه‌ای لغو شد یا استاد نیامد — مبلغِ ناخالص به هنرجو برمی‌گردد */
   CANCELLATION: "CANCELLATION",
+  /** پرداخت قطعی شد ولی رزرو/پکیج پس از انقضای مهلت دیگر قابل تأیید نبود */
+  PAYMENT_RECOVERY: "PAYMENT_RECOVERY",
   /** خرج شدن در یک سفارش */
   SPEND: "SPEND",
   /** اعطا یا اصلاح دستی از پنل ادمین */

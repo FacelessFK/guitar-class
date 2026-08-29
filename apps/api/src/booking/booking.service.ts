@@ -43,7 +43,6 @@ import {
   BookingNotCancellableError,
   BookingNotFoundError,
   NotBookingParticipantError,
-  OfferingNotFoundError,
   PackageConflictError,
   SlotUnavailableError,
   TrialAlreadyUsedError,
@@ -69,11 +68,7 @@ async function loadScheduleForInstant(
   instant: Date,
 ): Promise<LoadedSchedule> {
   const dateKey = tehranDateKey(instant);
-  try {
-    return await loadSchedule(teacherProfileId, offeringId, dateKey, dateKey);
-  } catch {
-    throw new OfferingNotFoundError(offeringId);
-  }
+  return loadSchedule(teacherProfileId, offeringId, dateKey, dateKey);
 }
 
 /** بررسی می‌کند اسلات درخواستی واقعاً در برنامه‌ی استاد آزاد است. */
@@ -230,7 +225,6 @@ export interface CreatePackageInput {
   firstSessionDate: DateKey;
   /** ساعت ثابت هفتگی، دقیقه از نیمه‌شب به وقت تهران */
   startMinute: number;
-  sessionCount?: number;
   now?: Date;
 }
 
@@ -254,20 +248,15 @@ export async function createPackageEnrollment(
   input: CreatePackageInput,
 ): Promise<CreatedPackage> {
   const now = input.now ?? new Date();
-  const sessionCount = input.sessionCount ?? BUSINESS_RULES.PACKAGE_SESSION_COUNT;
+  const sessionCount = BUSINESS_RULES.PACKAGE_SESSION_COUNT;
   const lastSessionDate = addDaysToDateKey(input.firstSessionDate, (sessionCount - 1) * 7);
 
-  let schedule: LoadedSchedule;
-  try {
-    schedule = await loadSchedule(
-      input.teacherProfileId,
-      input.offeringId,
-      input.firstSessionDate,
-      lastSessionDate,
-    );
-  } catch {
-    throw new OfferingNotFoundError(input.offeringId);
-  }
+  const schedule = await loadSchedule(
+    input.teacherProfileId,
+    input.offeringId,
+    input.firstSessionDate,
+    lastSessionDate,
+  );
 
   const plan = planPackageSessions({
     rules: schedule.rules,

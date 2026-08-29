@@ -68,6 +68,7 @@ export const payoutStatus = pgEnum("payout_status", ["PENDING", "PAID"]);
 
 export const creditReason = pgEnum("credit_reason", [
   "CANCELLATION",
+  "PAYMENT_RECOVERY",
   "SPEND",
   "ADMIN_ADJUSTMENT",
 ]);

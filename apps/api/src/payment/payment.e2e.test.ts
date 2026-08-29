@@ -29,7 +29,7 @@ import { FakePaymentGateway, setPaymentGateway } from "./gateway.port.js";
  * می‌زند صدا زده می‌شود — بدون هدر `Authorization`.
  */
 
-const SATURDAY = "2026-08-15";
+const SATURDAY = "2030-08-17";
 
 let app: INestApplication;
 let server: App;
@@ -190,7 +190,7 @@ describe("GET /api/payments/callback", () => {
 
     const location = new URL(response.headers.location!);
     expect(location.pathname).toBe("/payment/result");
-    expect(location.searchParams.get("status")).toBe("paid");
+    expect(location.searchParams.get("status")).toBeNull();
     expect(location.searchParams.get("order")).toBe(orderId);
 
     const [stored] = await db
@@ -214,8 +214,7 @@ describe("GET /api/payments/callback", () => {
       .expect(302);
 
     const location = new URL(response.headers.location!);
-    expect(location.searchParams.get("status")).toBe("error");
-    expect(location.searchParams.get("code")).toBe("ORDER_NOT_FOUND");
+    expect([...location.searchParams.keys()]).toEqual([]);
 
     const [stored] = await db
       .select({ status: bookings.status })
@@ -239,7 +238,9 @@ describe("GET /api/payments/callback", () => {
       .query({ Authority: authority, Status: "OK" })
       .expect(302);
 
-    expect(new URL(response.headers.location!).searchParams.get("status")).toBe("failed");
+    const location = new URL(response.headers.location!);
+    expect(location.searchParams.get("status")).toBeNull();
+    expect(location.searchParams.get("order")).not.toBeNull();
 
     const [stored] = await db
       .select({ status: bookings.status })
@@ -258,7 +259,7 @@ describe("GET /api/payments/callback", () => {
       .query({ Authority: authority })
       .expect(302);
 
-    expect(new URL(second.headers.location!).searchParams.get("status")).toBe("paid");
+    expect(new URL(second.headers.location!).searchParams.get("status")).toBeNull();
 
     const earnings = await request(server)
       .get("/api/payments/earnings")
@@ -287,8 +288,43 @@ describe("سفارش‌ها و درآمد", () => {
       .expect(200);
 
     expect(response.body.id).toBe(orderId);
-    expect(response.body.status).toBe("PENDING");
-    expect(response.body.amount).toBe("3000000");
+    expect(response.body.outcome).toBe("PENDING");
+    expect(response.body.orderStatus).toBe("PENDING");
+    expect(response.body.totalAmount).toBe("3000000");
+    expect(response.body.gatewayAmount).toBe("3000000");
+    expect(response.body.paymentMethod).toBe("GATEWAY");
+    expect(response.body.target).toMatchObject({
+      kind: "SINGLE",
+      id: bookingId,
+      teacherName: "استاد رضایی",
+      instrumentName: "گیتار کلاسیک",
+      sessionCount: 1,
+    });
+  });
+
+  it("پس از تأیید فقط قرارداد سرور نتیجه‌ی موفق می‌دهد", async () => {
+    const bookingId = await bookSingle();
+    const { orderId, authority } = await checkout(bookingId);
+    await request(server)
+      .get("/api/payments/callback")
+      .query({ Authority: authority, Status: "anything" })
+      .expect(302);
+
+    const response = await request(server)
+      .get(`/api/payments/orders/${orderId}`)
+      .set("Authorization", `Bearer ${studentToken}`)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      outcome: "PAID_MATCHED",
+      orderStatus: "PAID",
+      totalAmount: "3000000",
+      creditApplied: "0",
+      gatewayAmount: "3000000",
+      paymentMethod: "GATEWAY",
+      recoveredToCredit: "0",
+    });
+    expect(response.body.refId).toBeTruthy();
   });
 
   it("سفارش کاربر دیگر را نمی‌بیند", async () => {
@@ -298,9 +334,9 @@ describe("سفارش‌ها و درآمد", () => {
     const response = await request(server)
       .get(`/api/payments/orders/${orderId}`)
       .set("Authorization", `Bearer ${otherStudentToken}`)
-      .expect(200);
+      .expect(404);
 
-    expect(response.body).toEqual({});
+    expect(response.body.code).toBe("ORDER_NOT_FOUND");
   });
 
   it("درآمد استاد پس از کمیسیون گزارش می‌شود", async () => {

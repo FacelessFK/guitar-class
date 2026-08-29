@@ -53,6 +53,7 @@ export function isCreditAmountValid(reason: CreditReason, amount: bigint): boole
 
   switch (reason) {
     case "CANCELLATION":
+    case "PAYMENT_RECOVERY":
       return amount > 0n;
     case "SPEND":
       return amount < 0n;

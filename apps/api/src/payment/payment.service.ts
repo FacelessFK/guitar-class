@@ -18,7 +18,7 @@
  *      پلتفرم به اوست.
  */
 
-import { and, eq, gt, inArray, lt, sql, sum } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lt, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   BUSINESS_RULES,
@@ -54,6 +54,8 @@ import {
 import {
   cancellationCreditExists,
   creditBalanceOf,
+  paymentRecoveryAmount,
+  recoverUnmatchedPayment,
   spendCredit,
   writeCreditEntry,
 } from "./credit.service.js";
@@ -537,10 +539,12 @@ export interface SettlementResult {
    * رزروهایی که پول برایشان گرفته شد ولی دیگر قابل قطعی کردن نبودند.
    *
    * یعنی مهلت پرداخت در همان فاصله تمام شده و اسلات آزاد شده. پول
-   * انکار نمی‌شود؛ یک سطر `ADJUSTMENT` در دفتر کل ثبت می‌شود تا ادمین
-   * بازپرداخت دستی انجام دهد.
+   * انکار نمی‌شود؛ کل مبلغ سفارش در همان تراکنش به اعتبار پلتفرم
+   * برمی‌گردد.
    */
   unconfirmedBookingIds: string[];
+  /** مبلغی که به‌علت پرداخت بی‌جلسه به اعتبار پلتفرم برگشته است */
+  recoveredToCredit: bigint;
   reason: string | null;
 }
 
@@ -573,12 +577,18 @@ export async function settleOrder(input: SettleInput): Promise<SettlementResult>
   }
 
   if (order.status === "PAID") {
+    const [bookingIds, recoveredToCredit] = await Promise.all([
+      bookingIdsOfOrder(order.id),
+      paymentRecoveryAmount(order.id),
+    ]);
+
     return {
       orderId: order.id,
       status: "ALREADY_PAID",
       refId: order.gatewayRefId,
-      confirmedBookingIds: await bookingIdsOfOrder(order.id),
-      unconfirmedBookingIds: [],
+      confirmedBookingIds: recoveredToCredit > 0n ? [] : bookingIds,
+      unconfirmedBookingIds: recoveredToCredit > 0n ? bookingIds : [],
+      recoveredToCredit,
       reason: null,
     };
   }
@@ -610,6 +620,7 @@ export async function settleOrder(input: SettleInput): Promise<SettlementResult>
       refId: null,
       confirmedBookingIds: [],
       unconfirmedBookingIds: [],
+      recoveredToCredit: 0n,
       reason: verification.reason,
     };
   }
@@ -711,6 +722,128 @@ async function bookingIdsOfOrder(orderId: string): Promise<string[]> {
   return [...direct, ...rows.map((row) => row.id)];
 }
 
+export type PaymentResultOutcome =
+  | "PENDING"
+  | "PAID_MATCHED"
+  | "PAID_UNMATCHED"
+  | "FAILED"
+  | "REFUNDED";
+
+export interface AuthoritativeOrderResult {
+  id: string;
+  outcome: PaymentResultOutcome;
+  orderStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+  totalAmount: bigint;
+  creditApplied: bigint;
+  gatewayAmount: bigint;
+  paymentMethod: "CREDIT" | "MIXED" | "GATEWAY";
+  refId: string | null;
+  paidAt: Date | null;
+  createdAt: Date;
+  target: {
+    kind: "SINGLE" | "PACKAGE";
+    id: string;
+    teacherName: string;
+    instrumentName: string;
+    firstSessionAt: Date;
+    sessionCount: number;
+  };
+  recoveredToCredit: bigint;
+}
+
+/**
+ * قرارداد نتیجه‌ی پرداخت برای صاحب سفارش.
+ *
+ * مرورگر فقط شناسه‌ی سفارش را می‌دهد. وضعیت، روش پرداخت، هدف و بازیابی
+ * اعتبار همگی از رکوردهای همان تراکنش مالی خوانده می‌شوند؛ هیچ پارامتر
+ * نتیجه‌ای از URL در این قرارداد وجود ندارد.
+ */
+export async function authoritativeOrderResult(
+  studentId: string,
+  orderId: string,
+): Promise<AuthoritativeOrderResult> {
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.id, orderId), eq(orders.studentId, studentId)))
+    .limit(1);
+
+  if (!order) throw new OrderNotFoundError();
+
+  const [item] = await db
+    .select({ bookingId: orderItems.bookingId, enrollmentId: orderItems.enrollmentId })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, orderId))
+    .limit(1);
+
+  if (!item || (item.bookingId === null) === (item.enrollmentId === null)) {
+    throw new Error("هدف سفارش معتبر نیست");
+  }
+
+  const targetRows = await db
+    .select({
+      id: bookings.id,
+      scheduledAt: bookings.scheduledAt,
+      teacherName: paymentTeacher.fullName,
+      instrumentName: instruments.nameFa,
+    })
+    .from(bookings)
+    .innerJoin(paymentTeacher, eq(paymentTeacher.id, bookings.teacherId))
+    .innerJoin(offerings, eq(offerings.id, bookings.offeringId))
+    .innerJoin(instruments, eq(instruments.id, offerings.instrumentId))
+    .where(
+      item.bookingId
+        ? eq(bookings.id, item.bookingId)
+        : eq(bookings.enrollmentId, item.enrollmentId!),
+    )
+    .orderBy(asc(bookings.scheduledAt));
+
+  const first = targetRows[0];
+  if (!first) throw new Error("سفارش رزرو قابل نمایش ندارد");
+
+  const recoveredToCredit = await paymentRecoveryAmount(orderId);
+  const outcome: PaymentResultOutcome =
+    order.status === "PENDING"
+      ? "PENDING"
+      : order.status === "FAILED"
+        ? "FAILED"
+        : order.status === "REFUNDED"
+          ? "REFUNDED"
+          : recoveredToCredit > 0n
+            ? "PAID_UNMATCHED"
+            : "PAID_MATCHED";
+
+  const gatewayAmount = gatewayAmountOf(order);
+  const paymentMethod =
+    order.creditApplied === order.amount
+      ? "CREDIT"
+      : order.creditApplied > 0n && gatewayAmount > 0n
+        ? "MIXED"
+        : "GATEWAY";
+
+  return {
+    id: order.id,
+    outcome,
+    orderStatus: order.status,
+    totalAmount: order.amount,
+    creditApplied: order.creditApplied,
+    gatewayAmount,
+    paymentMethod,
+    refId: order.gatewayRefId,
+    paidAt: order.paidAt,
+    createdAt: order.createdAt,
+    target: {
+      kind: item.enrollmentId ? "PACKAGE" : "SINGLE",
+      id: item.enrollmentId ?? item.bookingId!,
+      teacherName: first.teacherName,
+      instrumentName: first.instrumentName,
+      firstSessionAt: first.scheduledAt,
+      sessionCount: targetRows.length,
+    },
+    recoveredToCredit,
+  };
+}
+
 /**
  * همه‌ی اثرهای یک پرداخت موفق، در یک تراکنش.
  *
@@ -745,6 +878,7 @@ async function applySuccessfulPayment(
       .returning({
         id: orders.id,
         studentId: orders.studentId,
+        amount: orders.amount,
         creditApplied: orders.creditApplied,
       });
 
@@ -757,6 +891,7 @@ async function applySuccessfulPayment(
         refId,
         confirmedBookingIds: [],
         unconfirmedBookingIds: [],
+        recoveredToCredit: await paymentRecoveryAmount(orderId, tx),
         reason: null,
       };
     }
@@ -774,6 +909,10 @@ async function applySuccessfulPayment(
       .from(orderItems)
       .where(eq(orderItems.orderId, orderId));
 
+    if (items.length !== 1) {
+      throw new Error("سفارش باید دقیقاً یک هدف پرداخت داشته باشد");
+    }
+
     const directBookingIds = items
       .map((item) => item.bookingId)
       .filter((id): id is string => id !== null);
@@ -782,29 +921,91 @@ async function applySuccessfulPayment(
       .filter((id): id is string => id !== null);
 
     let bookingIds = directBookingIds;
+    let confirmedIds: string[];
+
     if (enrollmentIds.length > 0) {
+      const [enrollment] = await tx
+        .select({ id: enrollments.id, status: enrollments.status })
+        .from(enrollments)
+        .where(eq(enrollments.id, enrollmentIds[0]!))
+        .limit(1)
+        .for("update");
+
       const rows = await tx
-        .select({ id: bookings.id })
+        .select({ id: bookings.id, status: bookings.status })
         .from(bookings)
-        .where(inArray(bookings.enrollmentId, enrollmentIds));
+        .where(inArray(bookings.enrollmentId, enrollmentIds))
+        .for("update");
       bookingIds = [...bookingIds, ...rows.map((row) => row.id)];
 
-      await tx
-        .update(enrollments)
-        .set({ status: "ACTIVE" })
-        .where(
-          and(
-            inArray(enrollments.id, enrollmentIds),
-            eq(enrollments.status, "PENDING_PAYMENT"),
-          ),
-        );
+      const packageIsWhole =
+        directBookingIds.length === 0 &&
+        enrollmentIds.length === 1 &&
+        enrollment?.status === "PENDING_PAYMENT" &&
+        rows.length === BUSINESS_RULES.PACKAGE_SESSION_COUNT &&
+        rows.every((row) => row.status === "PENDING_PAYMENT");
+
+      if (packageIsWhole) {
+        confirmedIds = await confirmBookings(bookingIds, tx);
+
+        if (confirmedIds.length === BUSINESS_RULES.PACKAGE_SESSION_COUNT) {
+          const activated = await tx
+            .update(enrollments)
+            .set({ status: "ACTIVE" })
+            .where(
+              and(
+                eq(enrollments.id, enrollmentIds[0]!),
+                eq(enrollments.status, "PENDING_PAYMENT"),
+              ),
+            )
+            .returning({ id: enrollments.id });
+
+          if (activated.length !== 1) {
+            throw new Error("فعال‌سازی اتمیک پکیج ناموفق بود");
+          }
+        } else {
+          // سطرها با FOR UPDATE قفل شده‌اند؛ رسیدن به این شاخه نشانه‌ی
+          // نقض داخلی است و باید کل تراکنش را عقب ببرد، نه پکیج نیمه‌فعال بسازد.
+          throw new Error("قطعی کردن اتمیک چهار جلسه‌ی پکیج ناموفق بود");
+        }
+      } else {
+        // بسته محصولی یک نتیجه است: اگر هر چهار جلسه قابل تأیید نباشند،
+        // هیچ‌کدام زنده نمی‌شوند و کل مبلغ به اعتبار برمی‌گردد.
+        confirmedIds = [];
+
+        if (enrollment?.status === "PENDING_PAYMENT") {
+          await tx
+            .update(enrollments)
+            .set({ status: "CANCELLED" })
+            .where(
+              and(
+                eq(enrollments.id, enrollment.id),
+                eq(enrollments.status, "PENDING_PAYMENT"),
+              ),
+            );
+        }
+      }
+    } else {
+      confirmedIds = await confirmBookings(bookingIds, tx);
     }
 
-    const confirmedIds = await confirmBookings(bookingIds, tx);
     const unconfirmedIds = bookingIds.filter((id) => !confirmedIds.includes(id));
 
     await writeEarnings(tx, orderId, confirmedIds);
     await writeUnmatchedPaymentAdjustment(tx, orderId, unconfirmedIds);
+
+    const recoveredToCredit =
+      unconfirmedIds.length > 0
+        ? claimedOrder.amount
+        : 0n;
+
+    if (recoveredToCredit > 0n) {
+      await recoverUnmatchedPayment(tx, {
+        studentId: claimedOrder.studentId,
+        orderId,
+        amount: recoveredToCredit,
+      });
+    }
 
     return {
       orderId,
@@ -812,6 +1013,7 @@ async function applySuccessfulPayment(
       refId,
       confirmedBookingIds: confirmedIds,
       unconfirmedBookingIds: unconfirmedIds,
+      recoveredToCredit,
       reason: null,
     };
   });
@@ -864,8 +1066,9 @@ async function writeEarnings(
  * حالت نادری است: مهلت پرداخت دقیقاً در فاصله‌ی رفتن به درگاه و برگشتن
  * تمام شده و اسلات به کس دیگری رسیده. رزرو را نمی‌شود قطعی کرد — قید
  * `EXCLUDE` هم اجازه نمی‌دهد — ولی پول واقعاً گرفته شده. یک سطر
- * `ADJUSTMENT` ثبت می‌شود تا در گزارش ادمین دیده شود و بازپرداخت دستی
- * انجام گیرد. بی‌صدا رد شدن از این حالت یعنی پولِ گم‌شده.
+ * `ADJUSTMENT` حسابداری ثبت می‌شود و کل مبلغ سفارش در همان تراکنش با
+ * دلیل `PAYMENT_RECOVERY` به اعتبار هنرجو می‌رود. سطر اینجا فقط رخداد
+ * مالی را برای گزارش نگه می‌دارد؛ بدهی واقعی به هنرجو در دفتر اعتبار است.
  */
 async function writeUnmatchedPaymentAdjustment(
   tx: Transaction,
@@ -889,7 +1092,7 @@ async function writeUnmatchedPaymentAdjustment(
       grossAmount: row.priceSnapshot,
       commission: row.priceSnapshot,
       netAmount: 0n,
-      description: `پرداخت بدون جلسه‌ی قابل تأیید — نیازمند بازپرداخت دستی (رزرو ${row.id})`,
+      description: `پرداخت بدون جلسه‌ی قابل تأیید — بازیابی‌شده در اعتبار (رزرو ${row.id})`,
     }));
 
   if (values.length > 0) {

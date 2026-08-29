@@ -275,7 +275,7 @@ export const startCheckout = (body: {
 // ---------------------------------------------------------------------------
 
 export interface CreditEntry {
-  reason: "CANCELLATION" | "SPEND" | "ADMIN_ADJUSTMENT";
+  reason: "CANCELLATION" | "PAYMENT_RECOVERY" | "SPEND" | "ADMIN_ADJUSTMENT";
   /** ریال. مثبت یعنی اعطا، منفی یعنی خرج. */
   amount: string;
   bookingId: string | null;
@@ -286,7 +286,7 @@ export interface CreditEntry {
 export const getCredit = () =>
   apiFetch<{ balance: string; entries: CreditEntry[] }>("/payments/credit");
 
-export interface Order {
+export interface OrderSummary {
   id: string;
   amount: string;
   /** سهمی که با اعتبار پرداخت شد، به ریال */
@@ -298,11 +298,33 @@ export interface Order {
   createdAt: string;
 }
 
+export interface OrderResult {
+  id: string;
+  outcome: "PENDING" | "PAID_MATCHED" | "PAID_UNMATCHED" | "FAILED" | "REFUNDED";
+  orderStatus: "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+  totalAmount: string;
+  creditApplied: string;
+  gatewayAmount: string;
+  paymentMethod: "CREDIT" | "MIXED" | "GATEWAY";
+  refId: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  target: {
+    kind: "SINGLE" | "PACKAGE";
+    id: string;
+    teacherName: string;
+    instrumentName: string;
+    firstSessionAt: string;
+    sessionCount: number;
+  };
+  recoveredToCredit: string;
+}
+
 export const getOrder = (orderId: string) =>
-  apiFetch<Order | null>(`/payments/orders/${orderId}`);
+  apiFetch<OrderResult>(`/payments/orders/${orderId}`);
 
 export const getOrders = () =>
-  apiFetch<{ orders: Order[] }>("/payments/orders").then((data) => data.orders);
+  apiFetch<{ orders: OrderSummary[] }>("/payments/orders").then((data) => data.orders);
 
 export interface Earnings {
   /** فروش ناخالص — تسویه‌ها در آن نیستند */

@@ -5,6 +5,7 @@ import { fromTehranWallClock } from "@music/shared";
 import { db } from "../db/client.js";
 import {
   bookings,
+  creditEntries,
   enrollments,
   ledgerEntries,
   orderItems,
@@ -25,6 +26,10 @@ import {
   OrderNotFoundError,
   PaymentHoldExpiredError,
 } from "./errors.js";
+import {
+  creditBalanceOf,
+  grantAdminCredit,
+} from "./credit.service.js";
 import {
   expireStalePendingOrders,
   recordCancellationRefund,
@@ -360,7 +365,7 @@ describe("تأیید پرداخت", () => {
    * تمام شده. رزرو نباید زنده شود — اسلاتش را از دست داده — ولی پول هم
    * نباید بی‌صدا گم شود.
    */
-  it("پولِ بی‌جلسه را در دفتر کل علامت می‌زند به‌جای اینکه رزرو منقضی را زنده کند", async () => {
+  it("پولِ بی‌جلسه را یک‌بار به اعتبار برمی‌گرداند و رزرو منقضی را زنده نمی‌کند", async () => {
     const booking = await makeSingleBooking();
     const checkout = await checkoutSingle(booking.id);
     const authority = await authorityOf(checkout.orderId);
@@ -372,6 +377,7 @@ describe("تأیید پرداخت", () => {
     expect(result.status).toBe("PAID");
     expect(result.confirmedBookingIds).toEqual([]);
     expect(result.unconfirmedBookingIds).toEqual([booking.id]);
+    expect(result.recoveredToCredit).toBe(PRICE);
 
     const [stored] = await db
       .select({ status: bookings.status })
@@ -384,8 +390,59 @@ describe("تأیید پرداخت", () => {
     expect(entries[0]?.type).toBe("ADJUSTMENT");
     expect(entries[0]?.teacherId).toBeNull();
     expect(entries[0]?.grossAmount).toBe(PRICE);
-    // چیزی به استاد تعلق نمی‌گیرد؛ پول تا بازپرداخت دستی نزد پلتفرم است
+    // چیزی به استاد تعلق نمی‌گیرد؛ کل مبلغ به دفتر اعتبار هنرجو رفته است
     expect(entries[0]?.netAmount).toBe(0n);
+
+    expect(await creditBalanceOf(fixture.studentId)).toBe(PRICE);
+    const recoveryEntries = await db
+      .select()
+      .from(creditEntries)
+      .where(eq(creditEntries.reason, "PAYMENT_RECOVERY"));
+    expect(recoveryEntries).toHaveLength(1);
+    expect(recoveryEntries[0]?.amount).toBe(PRICE);
+    expect(recoveryEntries[0]?.orderId).toBe(checkout.orderId);
+
+    const replay = await settleOrder({ authority, gateway, now: NOW });
+    expect(replay.status).toBe("ALREADY_PAID");
+    expect(replay.recoveredToCredit).toBe(PRICE);
+    expect(await creditBalanceOf(fixture.studentId)).toBe(PRICE);
+    expect(
+      await db
+        .select()
+        .from(creditEntries)
+        .where(eq(creditEntries.reason, "PAYMENT_RECOVERY")),
+    ).toHaveLength(1);
+  });
+
+  it("در پرداخت ترکیبی، اعتبار مصرف‌شده و مبلغ درگاه هر دو بازیابی می‌شوند", async () => {
+    const originalCredit = 1_000_000n;
+    await grantAdminCredit({
+      studentId: fixture.studentId,
+      amount: originalCredit,
+      adminId: fixture.teacherUserId,
+      description: "اعتبار آزمایشی",
+    });
+    const booking = await makeSingleBooking();
+    const checkout = await startCheckout({
+      studentId: fixture.studentId,
+      bookingId: booking.id,
+      useCredit: true,
+      gateway,
+      now: NOW,
+    });
+    expect(checkout.creditApplied).toBe(originalCredit);
+    expect(checkout.gatewayAmount).toBe(PRICE - originalCredit);
+
+    await expireStaleHolds(new Date(NOW.getTime() + 30 * 60_000));
+    const result = await settleOrder({
+      authority: await authorityOf(checkout.orderId),
+      gateway,
+      now: NOW,
+    });
+
+    expect(result.recoveredToCredit).toBe(PRICE);
+    // +۱ اولیه، −۱ خرج، +۳ بازیابی = ۳ میلیون: سهم درگاه هم اعتبار شده است.
+    expect(await creditBalanceOf(fixture.studentId)).toBe(PRICE);
   });
 
   it("سفارشی که جارو ناموفق علامت زده، با تأیید درگاه باز هم قطعی می‌شود", async () => {
@@ -464,6 +521,40 @@ describe("پرداخت پکیج", () => {
       .from(bookings)
       .where(eq(bookings.enrollmentId, created.enrollmentId));
     expect(stored.every((row) => row.status === "CONFIRMED")).toBe(true);
+  });
+
+  it("اگر هولدهای پکیج منقضی شوند، هیچ جلسه‌ای قطعی و ثبت‌نام فعال نمی‌شود", async () => {
+    const created = await makePackage();
+    const checkout = await startCheckout({
+      studentId: fixture.studentId,
+      enrollmentId: created.enrollmentId,
+      gateway,
+      now: NOW,
+    });
+
+    await expireStaleHolds(new Date(NOW.getTime() + 30 * 60_000));
+    const result = await settleOrder({
+      authority: await authorityOf(checkout.orderId),
+      gateway,
+      now: NOW,
+    });
+
+    expect(result.confirmedBookingIds).toEqual([]);
+    expect(result.unconfirmedBookingIds).toHaveLength(4);
+    expect(result.recoveredToCredit).toBe(PRICE * 4n);
+    expect(await creditBalanceOf(fixture.studentId)).toBe(PRICE * 4n);
+
+    const [enrollment] = await db
+      .select({ status: enrollments.status })
+      .from(enrollments)
+      .where(eq(enrollments.id, created.enrollmentId));
+    expect(enrollment?.status).toBe("CANCELLED");
+
+    const stored = await db
+      .select({ status: bookings.status })
+      .from(bookings)
+      .where(eq(bookings.enrollmentId, created.enrollmentId));
+    expect(stored.every((row) => row.status === "EXPIRED")).toBe(true);
   });
 
   it("به ازای هر جلسه یک سطر درآمد می‌نویسد", async () => {

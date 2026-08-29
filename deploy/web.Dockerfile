@@ -57,9 +57,7 @@ ENV NODE_ENV=production \
 # سرور در `apps/web/server.js` می‌نشیند نه در ریشه.
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
-
-# `apps/web/public` وجود ندارد و عمداً کپی نمی‌شود: خط `COPY` برای مسیر
-# نبوده بیلد را می‌شکند. اگر روزی فایل ثابتی اضافه شد، باید برگردد.
+COPY --from=builder /app/apps/web/public ./apps/web/public
 
 EXPOSE 3000
 

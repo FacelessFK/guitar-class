@@ -53,15 +53,9 @@ function Hero() {
         فارسی در ۳۹۰ پیکسل بیش از نیمی از پرده را می‌گیرد و اگر عکس
         زیرش بیفتد، هیچ‌کس نمی‌بیندش.
       */}
-      {/*
-        ⚠️ **عکسِ نمونه، نه دارایی امضاشده.** دیزاین اینجا
-        `assets/hero-guitar.png` می‌خواهد که هنوز به `public/` نرسیده.
-        این عکس روی زمینه‌ی روشن گرفته شده و با `.lighten` شسته دیده
-        می‌شود؛ با آمدن دارایی اصلی فقط همین `src` عوض می‌شود.
-      */}
       <div className="order-first md:order-last">
         <Photo
-          src="/teachers/sample-guitar-teacher.jpg"
+          src="/hygge/hero-guitar.png"
           alt="نوازنده‌ی گیتار کلاسیک"
           focus="50% 50%"
           rounded="panel"

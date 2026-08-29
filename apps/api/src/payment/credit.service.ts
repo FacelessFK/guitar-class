@@ -178,6 +178,51 @@ export async function spendCredit(
   });
 }
 
+/**
+ * پرداخت واقعاً گرفته شده ولی رزرو/پکیج دیگر قابل قطعی کردن نبود.
+ *
+ * کل مبلغ سفارش برمی‌گردد، نه فقط سهم درگاه: سهم اعتباری همین سفارش
+ * چند خط بالاتر با `SPEND` کم شده است، پس بازگرداندن کل مبلغ هم آن سهم
+ * را احیا می‌کند و هم پول گرفته‌شده از درگاه را به اعتبار تبدیل می‌کند.
+ * ایندکس `credit_one_payment_recovery_per_order` تکرار کال‌بک را در سطح
+ * دیتابیس بی‌اثر می‌کند.
+ */
+export async function recoverUnmatchedPayment(
+  tx: Transaction,
+  input: { studentId: string; orderId: string; amount: bigint },
+): Promise<bigint> {
+  if (input.amount <= 0n) {
+    throw new RangeError("مبلغ بازیابی پرداخت باید مثبت باشد");
+  }
+
+  return writeCreditEntry(tx, {
+    studentId: input.studentId,
+    reason: "PAYMENT_RECOVERY",
+    amount: input.amount,
+    orderId: input.orderId,
+    description: "بازیابی پرداختِ بدون رزرو قطعی",
+  });
+}
+
+/** مبلغی که از یک سفارش بی‌جلسه به اعتبار برگشته است. */
+export async function paymentRecoveryAmount(
+  orderId: string,
+  executor: Executor = db,
+): Promise<bigint> {
+  const [entry] = await executor
+    .select({ amount: creditEntries.amount })
+    .from(creditEntries)
+    .where(
+      and(
+        eq(creditEntries.orderId, orderId),
+        eq(creditEntries.reason, "PAYMENT_RECOVERY"),
+      ),
+    )
+    .limit(1);
+
+  return entry?.amount ?? 0n;
+}
+
 export interface AdminCreditInput {
   studentId: string;
   /** مثبت برای اعطا، منفی برای پس گرفتن اشتباهِ خود ادمین */
@@ -189,13 +234,13 @@ export interface AdminCreditInput {
 /**
  * اعطا یا اصلاح دستی اعتبار از پنل ادمین.
  *
- * دو حالت واقعی دارد که تا امروز هیچ فعلی نداشتند و در پنل فقط «نیازمند
- * بازپرداخت دستی» دیده می‌شدند:
+ * برای پرونده‌هایی است که تصمیم انسانی لازم دارند، از جمله:
  *
- *   • سطر `ADJUSTMENT` که `writeUnmatchedPaymentAdjustment` می‌سازد —
- *     پولی که گرفته شد ولی جلسه‌ای پشتش قطعی نشد.
  *   • پرونده‌ی `ATTENDANCE_UNVERIFIED` که عمداً بازپرداخت خودکار
  *     نمی‌گیرد و منتظر تصمیم آدم می‌ماند.
+ *
+ * پرداختِ قطعیِ بدون رزرو از این مسیر نمی‌گذرد؛ آن حالت با دلیل مستقل
+ * `PAYMENT_RECOVERY` و به‌صورت خودکار/ایدمپوتنت بازیابی می‌شود.
  *
  * هویت ادمین روی سطر ثبت می‌شود. اعتبارِ بی‌نام یعنی مبلغی که فردا
  * هیچ‌کس نمی‌تواند بگوید چه کسی و چرا داده.

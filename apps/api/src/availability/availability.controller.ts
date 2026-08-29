@@ -73,7 +73,6 @@ const packagePreviewSchema = z.object({
   teacherProfileId: uuidSchema,
   firstSessionDate: dateKeySchema,
   startMinute: minuteOfDaySchema,
-  sessionCount: z.number().int().min(1).max(12).optional(),
 });
 
 const availabilityQuerySchema = dateRangeSchema.and(
@@ -149,7 +148,6 @@ export class AvailabilityController {
       offeringId,
       firstSessionDate: body.firstSessionDate,
       startMinute: body.startMinute,
-      sessionCount: body.sessionCount,
     });
 
     return {
