@@ -298,7 +298,7 @@ export default async function TeacherPage({ params }: PageProps) {
                   block
                   className="py-3.75 text-base"
                 >
-                  رزرو کلاس
+                  تک جلسه
                 </ButtonLink>
                 <ButtonLink
                   href={bookHref(teacher, primary, "trial")}
@@ -306,7 +306,7 @@ export default async function TeacherPage({ params }: PageProps) {
                   block
                   className="py-3.5"
                 >
-                  رزرو جلسه معارفه رایگان
+                  جلسه معارفه رایگان
                 </ButtonLink>
                 <p className="text-[12.5px] leading-[1.85] text-meta">
                   جلسه معارفه{" "}
@@ -380,7 +380,7 @@ export default async function TeacherPage({ params }: PageProps) {
             href={bookHref(teacher, primary, "single")}
             className="shrink-0 px-6.5"
           >
-            رزرو کلاس
+            تک جلسه
           </ButtonLink>
         </div>
       ) : null}
@@ -475,7 +475,7 @@ function Packages({ teacher }: { teacher: Teacher }) {
     <Section title="بسته‌های کلاس">
       <div className="flex flex-col">
         <PackageRow
-          title="جلسه معارفه"
+          title="جلسه معارفه رایگان"
           detail={`${formatDuration(BUSINESS_RULES.TRIAL_DURATION_MINUTES)} · آشنایی با استاد و تعیین مسیر`}
           note="یک بار برای هر کاربر"
           price="رایگان"
@@ -485,20 +485,31 @@ function Packages({ teacher }: { teacher: Teacher }) {
               ? bookHref(teacher, teacher.offerings[0], "trial")
               : undefined
           }
-          cta="رزرو جلسه معارفه"
+          cta="جلسه معارفه رایگان"
         />
 
-        {teacher.offerings.map((offering) => (
+        {teacher.offerings.flatMap((offering) => [
           <PackageRow
-            key={offering.id}
-            title={offering.instrumentName}
-            detail={`یک جلسه × ${formatDuration(offering.durationMinutes)}`}
+            key={`${offering.id}-single`}
+            title="تک جلسه"
+            detail={`${offering.instrumentName} · یک جلسه × ${formatDuration(offering.durationMinutes)}`}
             note="در ساعتی که خودت انتخاب می‌کنی"
             price={`${formatToman(offering.price)} تومان`}
             href={bookHref(teacher, offering, "single")}
-            cta="انتخاب این کلاس"
-          />
-        ))}
+            cta="انتخاب تک جلسه"
+          />,
+          <PackageRow
+            key={`${offering.id}-package`}
+            title="بسته ماهانه"
+            detail={`${offering.instrumentName} · ${faNumber(BUSINESS_RULES.PACKAGE_SESSION_COUNT)} جلسه × ${formatDuration(offering.durationMinutes)}`}
+            note="یک روز و ساعت ثابت هفتگی"
+            price={`${formatToman(
+              BigInt(offering.price) * BigInt(BUSINESS_RULES.PACKAGE_SESSION_COUNT),
+            )} تومان`}
+            href={bookHref(teacher, offering, "package")}
+            cta="انتخاب بسته ماهانه"
+          />,
+        ])}
       </div>
     </Section>
   );

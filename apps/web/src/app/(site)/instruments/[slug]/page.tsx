@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const title = pageTitle(instrument.nameFa);
   const description =
     instrument.descriptionFa ??
-    `آموزش خصوصی و آنلاین ${instrument.nameFa} با استادهای تأییدشده. جلسه‌ی معارفه‌ی اول رایگان است.`;
+    `آموزش خصوصی و آنلاین ${instrument.nameFa} با استادهای تأییدشده. جلسه معارفه رایگان برای شروع مسیر.`;
 
   return {
     title,
@@ -155,7 +155,10 @@ export default async function InstrumentPage({ params }: PageProps) {
               دیدن استادهای {name}
             </ButtonLink>
             <ButtonLink
-              href="/dashboard/book"
+              href={{
+                pathname: "/dashboard/book",
+                query: { instrument: instrument.slug, type: "trial" },
+              }}
               variant="ghost"
               className="px-1.5 py-3.75 text-base"
             >
@@ -477,7 +480,7 @@ const SESSION_OPTIONS = [
     meta: "قیمت بر اساس استاد",
   },
   {
-    title: "بسته ماهانه ۴ جلسه‌ای",
+    title: "بسته ماهانه · ۴ جلسه",
     body: "برای مسیر منظم هفتگی؛ وقتی می‌خواهی تمرین و پیشرفت پیوسته باشد.",
     meta: "هفته‌ای یک جلسه · قیمت بر اساس استاد",
   },

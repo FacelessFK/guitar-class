@@ -30,3 +30,6 @@ apps/api/prisma/*.db-journal
 # ابزار محلی — پیکربندی و قفل مهارت‌ها، مال ماشین است نه مخزن
 .claude/
 skills-lock.json
+
+design-reference
+Modern educational website (2).zip

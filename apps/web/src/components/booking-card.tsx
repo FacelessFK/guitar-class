@@ -15,6 +15,7 @@ import {
   formatToman,
 } from "@/lib/format";
 import type { PaymentPlan } from "@/lib/payment-plan";
+import { paymentResultHref } from "@/lib/payment-result";
 import { useNow } from "@/lib/use-now";
 
 /**
@@ -166,10 +167,9 @@ function PaymentPanel({
        * به همان صفحه. تصمیم به `settled` گره خورده نه به تهی بودن
        * آدرس: اگر روزی مسیر سومی اضافه شود، این شرط باید صریح بشکند نه
        * اینکه بی‌صدا به شاخه‌ی درگاه بیفتد.
-       */
+      */
       if (order.settled) {
-        const outcome = order.unmatched ? "paid_unmatched" : "paid";
-        window.location.href = `/payment/result?order=${order.orderId}&status=${outcome}`;
+        window.location.href = paymentResultHref(order.orderId);
         return;
       }
 
