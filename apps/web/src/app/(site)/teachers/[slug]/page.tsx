@@ -24,7 +24,6 @@ import {
   formatDuration,
   formatRelativeFa,
   formatToman,
-  lowestPrice,
 } from "@/lib/format";
 
 /**
@@ -158,15 +157,13 @@ export default async function TeacherPage({ params }: PageProps) {
   }));
 
   const instruments = instrumentNames(teacher);
-  const cheapest = lowestPrice(teacher.offerings.map((o) => o.price));
 
   /**
    * کارت کناری روی همین یک سرویس بسته می‌شود.
    *
    * استاد می‌تواند چند ساز داشته باشد با قیمت‌های متفاوت؛ کارت کناری
-   * ارزان‌ترین را می‌گوید و بخش بسته‌ها همه را جدا فهرست می‌کند.
-   * اسلات‌های آزاد به طول سرویس وابسته‌اند، پس یکی باید انتخاب شود —
-   * اولی، همان که در فهرست هم اول می‌آید.
+   * قیمت، مدت، اسلات‌های آزاد و CTA سرویس اول را یکپارچه نشان می‌دهد.
+   * بخش بسته‌ها همه‌ی سرویس‌ها را جدا فهرست می‌کند.
    */
   const primary = teacher.offerings[0] ?? null;
 
@@ -285,7 +282,7 @@ export default async function TeacherPage({ params }: PageProps) {
                   قیمت هر جلسه
                 </SectionMark>
                 <p className="mt-3 text-[30px] font-semibold tracking-[-0.02em] text-ink">
-                  {formatToman(cheapest ?? primary.price)} تومان
+                  {formatToman(primary.price)} تومان
                 </p>
                 <p className="mt-2 text-sm text-ink-2">
                   مدت زمان هر جلسه: {formatDuration(primary.durationMinutes)}
@@ -370,7 +367,7 @@ export default async function TeacherPage({ params }: PageProps) {
         <div className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3.5 border-t border-divider bg-[color-mix(in_srgb,var(--color-bg)_90%,transparent)] px-4.5 py-2.75 backdrop-blur-[16px] md:hidden">
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="text-base font-semibold whitespace-nowrap text-ink">
-              {formatToman(cheapest ?? primary.price)} تومان
+              {formatToman(primary.price)} تومان
             </span>
             <span className="text-[12.5px] whitespace-nowrap text-meta">
               هر جلسه {formatDuration(primary.durationMinutes)}

@@ -207,7 +207,7 @@ function PaymentPanel({
   if (plan?.kind === "COVERED_BY_PACKAGE") {
     return (
       <p className="mt-4 text-sm text-ink-muted">
-        بخشی از یک پکیج است و با پرداخت جلسه‌ی اول قطعی می‌شود.
+        بخشی از یک بسته ماهانه است و با پرداخت جلسه‌ی اول قطعی می‌شود.
       </p>
     );
   }
@@ -223,7 +223,7 @@ function PaymentPanel({
           عددی نشان داده شود که با مبلغ درگاه نمی‌خواند.
         */}
         {plan?.kind === "ENROLLMENT"
-          ? `پکیج ${faNumber(plan.sessionCount)} جلسه‌ای`
+          ? `بسته ماهانه · ${faNumber(plan.sessionCount)} جلسه`
           : `مبلغ ${formatToman(booking.price)} تومان`}
         {remaining !== null ? (
           <>
@@ -265,7 +265,7 @@ function PaymentPanel({
         {pending
           ? "کمی صبر کنید…"
           : plan?.kind === "ENROLLMENT"
-            ? "پرداخت کل پکیج"
+            ? "پرداخت بسته ماهانه"
             : "پرداخت"}
       </button>
 
