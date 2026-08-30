@@ -24,10 +24,12 @@ import {
   deleteSubmission,
   getSessionLearning,
   listPractice,
+  setAssignmentCompletion,
   updateAssignment,
   writeFeedback,
   writeSessionNote,
   type AssignmentView,
+  type AssignmentCompletionView,
   type FeedbackView,
   type PracticeItem,
   type SessionLearningView,
@@ -46,6 +48,7 @@ export class LearningProvider {
   readonly deleteSubmission = deleteSubmission;
   readonly writeFeedback = writeFeedback;
   readonly practice = listPractice;
+  readonly setCompletion = setAssignmentCompletion;
 }
 
 const noteSchema = z.object({
@@ -96,6 +99,8 @@ const submissionSchema = z.object({
   /** فرانت از خود فایل صوتی می‌خواندش؛ نبودنش خطا نیست */
   durationSeconds: z.number().int().min(0).max(24 * 3600).optional(),
 });
+
+const completionSchema = z.object({ completed: z.boolean() });
 
 /**
  * دستِ‌کم یکی از متن یا صدا.
@@ -166,6 +171,16 @@ export class LearningController {
     @Body(zodPipe(updateAssignmentSchema)) body: z.infer<typeof updateAssignmentSchema>,
   ): Promise<AssignmentView> {
     return this.learning.updateAssignment(assignmentId, userId, body);
+  }
+
+  /** تکمیل دستی هنرجو — مستقل از ارسال اجرا و بازخورد. */
+  @Put("assignments/:assignmentId/completion")
+  async setCompletion(
+    @CurrentUserId() userId: string,
+    @Param("assignmentId", zodPipe(uuidSchema)) assignmentId: string,
+    @Body(zodPipe(completionSchema)) body: z.infer<typeof completionSchema>,
+  ): Promise<AssignmentCompletionView> {
+    return this.learning.setCompletion(assignmentId, userId, body.completed);
   }
 
   /**

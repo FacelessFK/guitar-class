@@ -8,6 +8,7 @@ import {
   Injectable,
   Patch,
   Post,
+  Put,
   Req,
   Res,
 } from "@nestjs/common";
@@ -23,6 +24,7 @@ import { CurrentUser } from "../common/current-user.decorator.js";
 import { Public, type AuthenticatedRequest } from "./auth.guard.js";
 import {
   AuthError,
+  changePassword,
   loginWithPassword,
   refreshSession,
   registerWithPassword,
@@ -88,6 +90,14 @@ const registerSchema = z.object({
 const passwordLoginSchema = z.object({
   phone: z.string().min(1, "شماره‌ی موبایل لازم است").max(20),
   password: z.string().min(1, "رمز عبور لازم است").max(PASSWORD_POLICY.MAX_LENGTH),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "رمز عبور فعلی لازم است").max(PASSWORD_POLICY.MAX_LENGTH).optional(),
+  newPassword: z
+    .string()
+    .min(PASSWORD_POLICY.MIN_LENGTH, `رمز عبور باید حداقل ${PASSWORD_POLICY.MIN_LENGTH} کاراکتر باشد`)
+    .max(PASSWORD_POLICY.MAX_LENGTH),
 });
 
 /**
@@ -223,6 +233,15 @@ export class AuthController {
     };
   }
 
+  /** تغییر رمزِ حساب واردشده، یا تنظیم نخستین رمز برای حساب OTP-only. */
+  @Put("password")
+  async changePassword(
+    @CurrentUser() user: AccessTokenPayload,
+    @Body(zodPipe(changePasswordSchema)) body: z.infer<typeof changePasswordSchema>,
+  ): Promise<{ hasPassword: true }> {
+    return changePassword(user.userId, body);
+  }
+
   /**
    * تمدید نشست.
    *
@@ -312,6 +331,7 @@ export class AuthController {
         avatarUrl: users.avatarUrl,
         isAdmin: users.isAdmin,
         trialUsedAt: users.trialUsedAt,
+        passwordHash: users.passwordHash,
       })
       .from(users)
       .where(eq(users.id, user.userId))
@@ -323,6 +343,7 @@ export class AuthController {
       ...row,
       phone: toLocalPhone(row.phone),
       trialUsed: row.trialUsedAt !== null,
+      hasPassword: row.passwordHash !== null,
       teacherProfileId: await findTeacherProfileId(row.id),
     };
   }

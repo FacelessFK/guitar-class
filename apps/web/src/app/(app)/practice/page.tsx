@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 
 import { errorMessage } from "@/lib/api-client";
 import { getPractice, type PracticeItem } from "@/lib/app-api";
-import { useSession } from "@/lib/session";
 import { formatJalaliDate } from "@/lib/format";
 
 const STATUS_BADGE: Record<PracticeItem["status"], { label: string; tone: string }> = {
@@ -22,29 +21,25 @@ const STATUS_BADGE: Record<PracticeItem["status"], { label: string; tone: string
  * تمرین کنم» است — و برای استاد «چه چیزی منتظر من است». هر دو یک
  * فهرست‌اند از دو طرف.
  *
- * همان الگوی `bookings/me`: یک اندپوینت، و `role` تعیین می‌کند چه
- * چیزی برجسته شود.
+ * قرارداد برای هر آیتم نقش صریح دارد. این مسیر دنیای هنرجوست، پس
+ * آیتم‌های `TEACHER` حساب دو‌نقشی را وارد صفحه نمی‌کند.
  */
 export default function PracticePage() {
-  const { user } = useSession();
   const [items, setItems] = useState<PracticeItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getPractice()
-      .then(setItems)
+      .then((loaded) => setItems(loaded.filter((item) => item.role === "STUDENT")))
       .catch((caught: unknown) => setError(errorMessage(caught)));
   }, []);
 
-  const isTeacher = Boolean(user?.teacherProfileId);
-
-  /**
-   * کارهای باز اول می‌آیند، و «باز» برای هر نقش معنای خودش را دارد:
-   * هنرجو باید اجرا بفرستد، استاد باید بازخورد بدهد.
-   */
-  const waitingFor = isTeacher ? "SUBMITTED" : "ASSIGNED";
-  const open = (items ?? []).filter((item) => item.status === waitingFor);
-  const rest = (items ?? []).filter((item) => item.status !== waitingFor);
+  const open = (items ?? []).filter(
+    (item) => item.role === "STUDENT" && item.status === "ASSIGNED",
+  );
+  const rest = (items ?? []).filter(
+    (item) => item.role === "STUDENT" && item.status !== "ASSIGNED",
+  );
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
@@ -56,14 +51,12 @@ export default function PracticePage() {
         <p className="mt-8 text-sm text-ink-muted">در حال بارگذاری…</p>
       ) : items.length === 0 ? (
         <p className="alert-info mt-8">
-          {isTeacher
-            ? "هنوز برای هیچ جلسه‌ای تمرین تعیین نکرده‌اید. از پرونده‌ی هر جلسه می‌توانید اضافه کنید."
-            : "هنوز تمرینی برایتان تعیین نشده است. بعد از اولین کلاس اینجا پر می‌شود."}
+          هنوز تمرینی برایتان تعیین نشده است. بعد از اولین کلاس اینجا پر می‌شود.
         </p>
       ) : (
         <>
           <Section
-            title={isTeacher ? "منتظر بازخورد شما" : "برای انجام"}
+            title="برای انجام"
             items={open}
           />
           <Section title="بقیه" items={rest} />

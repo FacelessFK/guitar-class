@@ -380,6 +380,75 @@ export interface PasswordLoginInput {
   userAgent?: string;
 }
 
+export interface ChangePasswordInput {
+  currentPassword?: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordResult {
+  hasPassword: true;
+}
+
+/**
+ * رمز حساب واردشده را عوض می‌کند، یا برای حساب OTP-only رمز می‌گذارد.
+ *
+ * حسابی که از قبل رمز دارد باید همان رمز را ثابت کند. حساب OTP-only
+ * چیزی برای اثبات در این مرحله ندارد؛ خودِ نشستِ معتبر مجوز تنظیم
+ * نخستین رمز است. هش، قاعده‌ی رمز، و شمارنده‌ی تلاش عین مسیر ورودند.
+ */
+export async function changePassword(
+  userId: string,
+  input: ChangePasswordInput,
+): Promise<ChangePasswordResult> {
+  if (checkPassword(input.newPassword)) {
+    throw new AuthError("رمز عبور شرایط لازم را ندارد.", "WEAK_PASSWORD");
+  }
+
+  const [user] = await db
+    .select({ phone: users.phone, passwordHash: users.passwordHash })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user) {
+    throw new AuthError("حساب شما در دسترس نیست.", "ACCOUNT_UNAVAILABLE");
+  }
+
+  const phone = normalizePhone(user.phone)!;
+  const gate = await checkLoginAllowed(phone);
+
+  if (!gate.ok) {
+    throw new AuthError(
+      "تلاش‌های ناموفق زیاد بود. کمی بعد دوباره امتحان کنید.",
+      "TOO_MANY_ATTEMPTS",
+      gate.retryAfterSeconds,
+    );
+  }
+
+  if (user.passwordHash) {
+    if (!input.currentPassword) {
+      throw new AuthError(
+        "رمز عبور فعلی لازم است.",
+        "CURRENT_PASSWORD_REQUIRED",
+      );
+    }
+
+    if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
+      await recordFailedLogin(phone);
+      throw new AuthError(
+        "رمز عبور فعلی درست نیست.",
+        "INVALID_CURRENT_PASSWORD",
+      );
+    }
+  }
+
+  const passwordHash = await hashPassword(input.newPassword);
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+  await clearLoginAttempts(phone);
+
+  return { hasPassword: true };
+}
+
 /**
  * ورود با رمز عبور.
  *

@@ -54,6 +54,7 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   // «هستی ولی طرفِ دیگرش» — ۴۰۳ مثل بقیه‌ی خطاهای نقش
   TEACHER_ONLY: HttpStatus.FORBIDDEN,
   STUDENT_ONLY: HttpStatus.FORBIDDEN,
+  COMPLETION_STUDENT_ONLY: HttpStatus.FORBIDDEN,
   ASSIGNMENT_NOT_FOUND: HttpStatus.NOT_FOUND,
   SUBMISSION_NOT_FOUND: HttpStatus.NOT_FOUND,
   ATTACHMENT_NOT_FOUND: HttpStatus.NOT_FOUND,

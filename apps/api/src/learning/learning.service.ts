@@ -43,6 +43,7 @@ import {
   AttachmentNotFoundError,
   SessionNotTeachableYetError,
   StudentOnlyActionError,
+  StudentCompletionOnlyActionError,
   SubmissionHasFeedbackError,
   SubmissionNotFoundError,
   TeacherOnlyActionError,
@@ -154,6 +155,8 @@ export interface AssignmentView {
   attachments: Array<{ url: string; name: string }>;
   dueDate: string | null;
   status: "ASSIGNED" | "SUBMITTED" | "REVIEWED";
+  /** تکمیل دستی هنرجو؛ مستقل از `status` و فرستادن اجرا */
+  completedAt: string | null;
   createdAt: string;
   submissions: SubmissionView[];
 }
@@ -277,6 +280,7 @@ async function attachSubmissions(
     attachments: normalizeAttachments(row.attachments),
     dueDate: row.dueDate,
     status: row.status,
+    completedAt: row.completedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     submissions: byAssignment.get(row.id) ?? [],
   }));
@@ -434,6 +438,48 @@ async function requireAssignment(
   if (!row) throw new AssignmentNotFoundError();
 
   return row;
+}
+
+export interface AssignmentCompletionView {
+  assignmentId: string;
+  completedAt: string | null;
+}
+
+/**
+ * تکمیل دستی تمرین را ثبت یا پاک می‌کند.
+ *
+ * وضعیت ارسال عمداً دست نمی‌خورد: تمرین می‌تواند بدون اجرا تمام شود،
+ * یا اجرا و بازخورد داشته باشد ولی هنوز از دید هنرجو تمام نشده باشد.
+ * نوشتن دوباره‌ی هر حالت امن است؛ فقط «تکمیل» زمان موجود را نگه می‌دارد
+ * تا یک retry تاریخ انجام را بی‌دلیل عوض نکند.
+ */
+export async function setAssignmentCompletion(
+  assignmentId: string,
+  userId: string,
+  completed: boolean,
+): Promise<AssignmentCompletionView> {
+  const assignment = await requireAssignment(assignmentId);
+  const { role } = await loadSession(assignment.bookingId, userId);
+
+  if (role !== "STUDENT") throw new StudentCompletionOnlyActionError();
+
+  if ((completed && assignment.completedAt) || (!completed && !assignment.completedAt)) {
+    return {
+      assignmentId,
+      completedAt: assignment.completedAt?.toISOString() ?? null,
+    };
+  }
+
+  const [updated] = await db
+    .update(assignments)
+    .set({ completedAt: completed ? new Date() : null })
+    .where(eq(assignments.id, assignmentId))
+    .returning({ completedAt: assignments.completedAt });
+
+  return {
+    assignmentId,
+    completedAt: updated!.completedAt?.toISOString() ?? null,
+  };
 }
 
 /**
@@ -784,11 +830,26 @@ export async function writeFeedback(
 // فهرست‌های میان‌جلسه‌ای
 // ---------------------------------------------------------------------------
 
-export interface PracticeItem extends AssignmentView {
+export interface PracticeItem {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: string | null;
+  status: "ASSIGNED" | "SUBMITTED" | "REVIEWED";
+  completedAt: string | null;
+  createdAt: string;
+  role: "STUDENT" | "TEACHER";
   bookingId: string;
   scheduledAt: string;
   instrumentName: string;
   counterpartName: string;
+  counterpartAvatarUrl: string | null;
+  latestSubmission: {
+    id: string;
+    mediaType: "AUDIO" | "VIDEO";
+    createdAt: string;
+    feedbackAt: string | null;
+  } | null;
 }
 
 /**
@@ -801,12 +862,12 @@ export interface PracticeItem extends AssignmentView {
  */
 export async function listPractice(userId: string): Promise<PracticeItem[]> {
   const student = db
-    .select({ id: users.id, fullName: users.fullName })
+    .select({ id: users.id, fullName: users.fullName, avatarUrl: users.avatarUrl })
     .from(users)
     .as("student");
 
   const teacher = db
-    .select({ id: users.id, fullName: users.fullName })
+    .select({ id: users.id, fullName: users.fullName, avatarUrl: users.avatarUrl })
     .from(users)
     .as("teacher");
 
@@ -818,7 +879,9 @@ export async function listPractice(userId: string): Promise<PracticeItem[]> {
       studentId: bookings.studentId,
       instrumentName: instruments.nameFa,
       studentName: student.fullName,
+      studentAvatarUrl: student.avatarUrl,
       teacherName: teacher.fullName,
+      teacherAvatarUrl: teacher.avatarUrl,
     })
     .from(assignments)
     .innerJoin(bookings, eq(assignments.bookingId, bookings.id))
@@ -835,15 +898,34 @@ export async function listPractice(userId: string): Promise<PracticeItem[]> {
 
   return views.map((view, index) => {
     const row = rows[index]!;
+    const isStudent = row.studentId === userId;
+    const latestSubmission = view.submissions.at(-1) ?? null;
 
     return {
-      ...view,
+      id: view.id,
+      title: view.title,
+      description: view.description,
+      dueDate: view.dueDate,
+      status: view.status,
+      completedAt: view.completedAt,
+      createdAt: view.createdAt,
+      role: isStudent ? "STUDENT" : "TEACHER",
       bookingId: row.bookingId,
       scheduledAt: row.scheduledAt.toISOString(),
       instrumentName: row.instrumentName,
       // «طرف مقابل» یعنی آن یکی؛ کاربر نام خودش را لازم ندارد
-      counterpartName:
-        row.studentId === userId ? row.teacherName : row.studentName,
+      counterpartName: isStudent ? row.teacherName : row.studentName,
+      counterpartAvatarUrl: isStudent
+        ? row.teacherAvatarUrl
+        : row.studentAvatarUrl,
+      latestSubmission: latestSubmission
+        ? {
+            id: latestSubmission.id,
+            mediaType: latestSubmission.mediaType,
+            createdAt: latestSubmission.createdAt,
+            feedbackAt: latestSubmission.feedback?.createdAt ?? null,
+          }
+        : null,
     };
   });
 }

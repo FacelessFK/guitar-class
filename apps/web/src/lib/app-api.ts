@@ -76,6 +76,16 @@ export const updateOwnProfile = (body: {
     body,
   });
 
+/** تغییر رمز، یا تنظیم نخستین رمز برای حسابی که فقط با OTP ساخته شده است. */
+export const changeOwnPassword = (body: {
+  currentPassword?: string;
+  newPassword: string;
+}) =>
+  apiFetch<{ hasPassword: true }>("/auth/password", {
+    method: "PUT",
+    body,
+  });
+
 // ---------------------------------------------------------------------------
 // دسترس‌پذیری
 // ---------------------------------------------------------------------------
@@ -623,6 +633,8 @@ export interface Assignment {
   attachments: Array<{ url: string; name: string }>;
   dueDate: string | null;
   status: "ASSIGNED" | "SUBMITTED" | "REVIEWED";
+  /** تکمیل دستی هنرجو، مستقل از ارسال اجرا */
+  completedAt: string | null;
   createdAt: string;
   submissions: Submission[];
 }
@@ -698,16 +710,37 @@ export const writeFeedback = (
   body,
 });
 
-export interface PracticeItem extends Assignment {
+export interface PracticeItem {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: string | null;
+  status: "ASSIGNED" | "SUBMITTED" | "REVIEWED";
+  completedAt: string | null;
+  createdAt: string;
+  role: "STUDENT" | "TEACHER";
   bookingId: string;
   scheduledAt: string;
   instrumentName: string;
   counterpartName: string;
+  counterpartAvatarUrl: string | null;
+  latestSubmission: {
+    id: string;
+    mediaType: "AUDIO" | "VIDEO";
+    createdAt: string;
+    feedbackAt: string | null;
+  } | null;
 }
 
 export const getPractice = () =>
   apiFetch<{ assignments: PracticeItem[] }>("/practice").then(
     (data) => data.assignments,
+  );
+
+export const setAssignmentCompletion = (assignmentId: string, completed: boolean) =>
+  apiFetch<{ assignmentId: string; completedAt: string | null }>(
+    `/assignments/${assignmentId}/completion`,
+    { method: "PUT", body: { completed } },
   );
 
 // ---------------------------------------------------------------------------

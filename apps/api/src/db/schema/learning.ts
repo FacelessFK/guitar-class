@@ -64,6 +64,14 @@ export const assignments = pgTable(
 
     dueDate: date("due_date"),
     status: assignmentStatus().notNull().default("ASSIGNED"),
+    /**
+     * تکمیل دستیِ هنرجو، مستقل از فرستادن اجرا و بازخورد استاد.
+     *
+     * تهی یعنی هنوز در تمرین فعال است. خودِ زمان، هم تاریخچه را برای
+     * نمایش نگه می‌دارد و هم اجازه می‌دهد برداشتن علامت، آیتم را دوباره
+     * فعال کند بدون اینکه وضعیت `SUBMITTED`/`REVIEWED` دست‌کاری شود.
+     */
+    completedAt: tstz("completed_at"),
 
     createdAt: createdAt(),
     updatedAt: updatedAt(),

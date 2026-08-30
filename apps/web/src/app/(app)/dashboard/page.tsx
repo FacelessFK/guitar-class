@@ -14,10 +14,9 @@ import { useSession } from "@/lib/session";
 /**
  * کلاس‌های من.
  *
- * یک فهرست برای هر دو نقش است: `GET /bookings/me` هم رزروهایی را
- * می‌دهد که کاربر هنرجویشان است و هم آن‌هایی که استادشان است، و هر
- * کارت خودش می‌گوید کدام است. کسی که هم استاد است و هم هنرجو، همه‌ی
- * کلاس‌هایش را یک‌جا می‌بیند به‌جای اینکه بین دو صفحه بگردد.
+ * `GET /bookings/me` برای حساب دو‌نقشی هر دو جهت را برمی‌گرداند، اما
+ * این مسیر دنیای هنرجوست و فقط رزروهای نقش `STUDENT` را نمایش می‌دهد.
+ * پنل استاد بعداً همان قرارداد را با نقش `TEACHER` مصرف می‌کند.
  */
 export default function DashboardPage() {
   const { user, reload } = useSession();
@@ -39,7 +38,7 @@ export default function DashboardPage() {
         getCredit().catch(() => null),
       ]);
 
-      setBookings(loaded);
+      setBookings(loaded.filter((booking) => booking.role === "STUDENT"));
       setCredit(balance ? BigInt(balance.balance) : null);
       setError(null);
     } catch (caught) {

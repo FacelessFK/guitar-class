@@ -29,6 +29,8 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
    */
   INVALID_CREDENTIALS: HttpStatus.UNAUTHORIZED,
   WEAK_PASSWORD: HttpStatus.BAD_REQUEST,
+  CURRENT_PASSWORD_REQUIRED: HttpStatus.BAD_REQUEST,
+  INVALID_CURRENT_PASSWORD: HttpStatus.FORBIDDEN,
   PHONE_ALREADY_REGISTERED: HttpStatus.CONFLICT,
   INVALID_REFRESH_TOKEN: HttpStatus.UNAUTHORIZED,
   // کوکی تازه‌سازی اصلاً نیامده — از نظر کاربر همان «نشست تمام شد» است

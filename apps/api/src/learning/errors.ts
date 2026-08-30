@@ -24,6 +24,16 @@ export class StudentOnlyActionError extends LearningError {
   }
 }
 
+/** تکمیل دستی مال هنرجوی همان رزرو است، نه استاد. */
+export class StudentCompletionOnlyActionError extends LearningError {
+  constructor() {
+    super(
+      "فقط هنرجوی همین جلسه می‌تواند وضعیت انجام تمرین را تغییر دهد.",
+      "COMPLETION_STUDENT_ONLY",
+    );
+  }
+}
+
 export class AssignmentNotFoundError extends LearningError {
   constructor() {
     super("این تمرین پیدا نشد.", "ASSIGNMENT_NOT_FOUND");

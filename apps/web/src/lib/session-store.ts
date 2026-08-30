@@ -36,6 +36,8 @@ export interface CurrentUser {
   isAdmin: boolean;
   /** جلسه‌ی معارفه‌ی رایگان یک‌بار برای همیشه است */
   trialUsed: boolean;
+  /** آیا حساب رمز دارد؛ حساب‌های OTP-only می‌توانند نخستین رمز را تنظیم کنند */
+  hasPassword: boolean;
   /** اگر تهی نباشد، کاربر پنل استاد هم دارد */
   teacherProfileId: string | null;
 }
