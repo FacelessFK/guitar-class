@@ -340,7 +340,10 @@ export class AuthController {
     if (!row) return null;
 
     return {
-      ...row,
+      id: row.id,
+      fullName: row.fullName,
+      avatarUrl: row.avatarUrl,
+      isAdmin: row.isAdmin,
       phone: toLocalPhone(row.phone),
       trialUsed: row.trialUsedAt !== null,
       hasPassword: row.passwordHash !== null,

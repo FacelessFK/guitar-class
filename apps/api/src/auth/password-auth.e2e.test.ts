@@ -4,6 +4,7 @@ import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import type { App } from "supertest/types.js";
 import { eq } from "drizzle-orm";
+import { PASSWORD_POLICY } from "@music/shared";
 
 import { AppModule } from "../app.module.js";
 import { AuthExceptionFilter } from "../common/auth-exception.filter.js";
@@ -12,7 +13,12 @@ import { BigIntSerializationInterceptor } from "../common/serialization.intercep
 import { InMemoryObjectStorage, setObjectStorage } from "../media/storage.port.js";
 import { db } from "../db/client.js";
 import { users } from "../db/schema/index.js";
-import { closeDatabase, resetDatabase, resetRedis } from "../test/fixtures.js";
+import {
+  accessTokenFor,
+  closeDatabase,
+  resetDatabase,
+  resetRedis,
+} from "../test/fixtures.js";
 import { PASSWORD_LOGIN_LIMIT } from "./password-attempts.js";
 import { REFRESH_COOKIE } from "./refresh-cookie.js";
 
@@ -61,6 +67,12 @@ const register = (body: Record<string, unknown>) =>
 
 const login = (body: Record<string, unknown>) =>
   request(server).post("/api/auth/login").send(body);
+
+const changePassword = (token: string, body: Record<string, unknown>) =>
+  request(server)
+    .put("/api/auth/password")
+    .set("authorization", `Bearer ${token}`)
+    .send(body);
 
 const cookieHeader = (response: request.Response): string[] => {
   const raw = response.headers["set-cookie"];
@@ -248,6 +260,148 @@ describe("POST /api/auth/login", () => {
     }
 
     await login({ phone: PHONE, password: PASSWORD }).expect(200);
+  });
+});
+
+describe("PUT /api/auth/password", () => {
+  const NEW_PASSWORD = "new correct horse battery";
+
+  const createPasswordAccount = async (): Promise<string> => {
+    const response = await register({
+      phone: PHONE,
+      fullName: "سارا محمدی",
+      password: PASSWORD,
+    }).expect(201);
+
+    return response.body.accessToken as string;
+  };
+
+  it("با رمز فعلی درست، رمز را عوض می‌کند و رمز قبلی دیگر کار نمی‌کند", async () => {
+    const token = await createPasswordAccount();
+
+    const changed = await changePassword(token, {
+      currentPassword: PASSWORD,
+      newPassword: NEW_PASSWORD,
+    }).expect(200);
+
+    expect(changed.body).toEqual({ hasPassword: true });
+    await login({ phone: PHONE, password: PASSWORD }).expect(401);
+    await login({ phone: PHONE, password: NEW_PASSWORD }).expect(200);
+
+    const me = await request(server)
+      .get("/api/auth/me")
+      .set("authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(me.body.hasPassword).toBe(true);
+    expect(me.body.passwordHash).toBeUndefined();
+  });
+
+  it("برای حساب رمزی، فرستادن رمز فعلی الزامی است", async () => {
+    const token = await createPasswordAccount();
+
+    const response = await changePassword(token, {
+      newPassword: NEW_PASSWORD,
+    }).expect(400);
+
+    expect(response.body.code).toBe("CURRENT_PASSWORD_REQUIRED");
+    await login({ phone: PHONE, password: PASSWORD }).expect(200);
+  });
+
+  it("رمز فعلی نادرست را رد می‌کند", async () => {
+    const token = await createPasswordAccount();
+
+    const response = await changePassword(token, {
+      currentPassword: "wrong-password",
+      newPassword: NEW_PASSWORD,
+    }).expect(403);
+
+    expect(response.body.code).toBe("INVALID_CURRENT_PASSWORD");
+    await login({ phone: PHONE, password: PASSWORD }).expect(200);
+  });
+
+  it("رمز تازه را با همان سیاست مشترک رد می‌کند", async () => {
+    const token = await createPasswordAccount();
+
+    await changePassword(token, {
+      currentPassword: PASSWORD,
+      newPassword: "x".repeat(PASSWORD_POLICY.MIN_LENGTH - 1),
+    }).expect(400);
+
+    await login({ phone: PHONE, password: PASSWORD }).expect(200);
+  });
+
+  it("بدون نشست معتبر اجازه‌ی تغییر رمز نمی‌دهد", async () => {
+    await request(server)
+      .put("/api/auth/password")
+      .send({ currentPassword: PASSWORD, newPassword: NEW_PASSWORD })
+      .expect(401);
+  });
+
+  it("حساب OTP-only نخستین رمز را می‌گذارد و بعد با آن وارد می‌شود", async () => {
+    const [user] = await db
+      .insert(users)
+      .values({ phone: "+989121234567", fullName: "کاربر کد پیامکی" })
+      .returning({ id: users.id });
+    const token = await accessTokenFor(user!.id);
+
+    const before = await request(server)
+      .get("/api/auth/me")
+      .set("authorization", `Bearer ${token}`)
+      .expect(200);
+    expect(before.body.hasPassword).toBe(false);
+    expect(before.body.passwordHash).toBeUndefined();
+
+    await changePassword(token, { newPassword: NEW_PASSWORD }).expect(200);
+
+    const after = await request(server)
+      .get("/api/auth/me")
+      .set("authorization", `Bearer ${token}`)
+      .expect(200);
+    expect(after.body.hasPassword).toBe(true);
+    expect(after.body.passwordHash).toBeUndefined();
+
+    await login({ phone: PHONE, password: NEW_PASSWORD }).expect(200);
+  });
+
+  it("تلاش‌های رمز فعلی نادرست از همان محدودیت ورود استفاده می‌کنند", async () => {
+    const token = await createPasswordAccount();
+
+    for (let attempt = 0; attempt < PASSWORD_LOGIN_LIMIT.MAX_ATTEMPTS; attempt += 1) {
+      const response = await changePassword(token, {
+        currentPassword: "wrong-password",
+        newPassword: NEW_PASSWORD,
+      }).expect(403);
+      expect(response.body.code).toBe("INVALID_CURRENT_PASSWORD");
+    }
+
+    const locked = await changePassword(token, {
+      currentPassword: PASSWORD,
+      newPassword: NEW_PASSWORD,
+    }).expect(429);
+
+    expect(locked.body.code).toBe("TOO_MANY_ATTEMPTS");
+    expect(locked.headers["retry-after"]).toBeDefined();
+  });
+
+  it("تغییر موفق، تلاش‌های ناموفق قبلی را پاک می‌کند", async () => {
+    const token = await createPasswordAccount();
+
+    for (let attempt = 0; attempt < PASSWORD_LOGIN_LIMIT.MAX_ATTEMPTS - 1; attempt += 1) {
+      await changePassword(token, {
+        currentPassword: "wrong-password",
+        newPassword: NEW_PASSWORD,
+      }).expect(403);
+    }
+
+    await changePassword(token, {
+      currentPassword: PASSWORD,
+      newPassword: NEW_PASSWORD,
+    }).expect(200);
+
+    // اگر شمارنده پاک نشده باشد، همین خطا حساب را قفل می‌کند و ورود بعدی ۴۲۹ می‌شود
+    await login({ phone: PHONE, password: "still-wrong" }).expect(401);
+    await login({ phone: PHONE, password: NEW_PASSWORD }).expect(200);
   });
 });
 

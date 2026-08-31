@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { Test } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
@@ -10,7 +11,7 @@ import { AuthExceptionFilter } from "../common/auth-exception.filter.js";
 import { DomainExceptionFilter } from "../common/domain-exception.filter.js";
 import { BigIntSerializationInterceptor } from "../common/serialization.interceptor.js";
 import { db } from "../db/client.js";
-import { assignments, bookings } from "../db/schema/index.js";
+import { assignments, bookings, users } from "../db/schema/index.js";
 import {
   InMemoryObjectStorage,
   setObjectStorage,
@@ -456,6 +457,150 @@ describe("حلقه‌ی کامل: تمرین ← اجرا ← بازخورد", (
   });
 });
 
+describe("تکمیل دستی تمرین", () => {
+  it("مستقل از وضعیت ارسال، به‌شکل idempotent ثبت و برداشته می‌شود", async () => {
+    const assignment = await request(server)
+      .post(`/api/bookings/${bookingId}/assignments`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ title: "تمرین مستقل" })
+      .expect(201);
+
+    expect(assignment.body).toMatchObject({
+      status: "ASSIGNED",
+      completedAt: null,
+      submissions: [],
+    });
+
+    const completed = await request(server)
+      .put(`/api/assignments/${assignment.body.id}/completion`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ completed: true })
+      .expect(200);
+
+    expect(completed.body.completedAt).toEqual(expect.any(String));
+
+    // retry همان لحظه‌ی قبلی را نگه می‌دارد، نه اینکه تاریخ انجام را عوض کند
+    const completedAgain = await request(server)
+      .put(`/api/assignments/${assignment.body.id}/completion`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ completed: true })
+      .expect(200);
+
+    expect(completedAgain.body.completedAt).toBe(completed.body.completedAt);
+
+    const withoutSubmission = await request(server)
+      .get(`/api/bookings/${bookingId}/learning`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .expect(200);
+
+    expect(withoutSubmission.body.assignments[0]).toMatchObject({
+      status: "ASSIGNED",
+      completedAt: completed.body.completedAt,
+      submissions: [],
+    });
+
+    const uncompleted = await request(server)
+      .put(`/api/assignments/${assignment.body.id}/completion`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ completed: false })
+      .expect(200);
+
+    expect(uncompleted.body.completedAt).toBeNull();
+
+    const uncompletedAgain = await request(server)
+      .put(`/api/assignments/${assignment.body.id}/completion`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ completed: false })
+      .expect(200);
+
+    expect(uncompletedAgain.body.completedAt).toBeNull();
+
+    const submissionKey = await upload(studentToken, "SUBMISSION", "audio/mpeg");
+    const submission = await request(server)
+      .post(`/api/assignments/${assignment.body.id}/submissions`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ objectKey: submissionKey })
+      .expect(201);
+
+    const [afterSubmission] = await db
+      .select({ status: assignments.status, completedAt: assignments.completedAt })
+      .from(assignments)
+      .where(eq(assignments.id, assignment.body.id));
+
+    expect(afterSubmission).toMatchObject({ status: "SUBMITTED", completedAt: null });
+
+    await request(server)
+      .put(`/api/assignments/${assignment.body.id}/completion`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ completed: true })
+      .expect(200);
+
+    await request(server)
+      .put(`/api/submissions/${submission.body.id}/feedback`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ content: "بررسی شد" })
+      .expect(200);
+
+    const [afterReview] = await db
+      .select({ status: assignments.status, completedAt: assignments.completedAt })
+      .from(assignments)
+      .where(eq(assignments.id, assignment.body.id));
+
+    expect(afterReview?.status).toBe("REVIEWED");
+    expect(afterReview?.completedAt).toBeInstanceOf(Date);
+
+    await request(server)
+      .put(`/api/assignments/${assignment.body.id}/completion`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ completed: false })
+      .expect(200);
+
+    const [reviewedButOpen] = await db
+      .select({ status: assignments.status, completedAt: assignments.completedAt })
+      .from(assignments)
+      .where(eq(assignments.id, assignment.body.id));
+
+    expect(reviewedButOpen).toMatchObject({ status: "REVIEWED", completedAt: null });
+  });
+
+  it("استاد و کاربر نامرتبط نمی‌توانند تکمیل هنرجو را تغییر دهند", async () => {
+    const assignment = await request(server)
+      .post(`/api/bookings/${bookingId}/assignments`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ title: "تمرین محافظت‌شده" })
+      .expect(201);
+
+    const teacher = await request(server)
+      .put(`/api/assignments/${assignment.body.id}/completion`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ completed: true })
+      .expect(403);
+
+    expect(teacher.body.code).toBe("COMPLETION_STUDENT_ONLY");
+
+    const unrelated = await request(server)
+      .put(`/api/assignments/${assignment.body.id}/completion`)
+      .set("authorization", `Bearer ${otherToken}`)
+      .send({ completed: true })
+      .expect(403);
+
+    expect(unrelated.body.code).toBe("NOT_PARTICIPANT");
+  });
+
+  it("تمرین ناموجود خطای امن و قابل‌نمایش می‌دهد", async () => {
+    const response = await request(server)
+      .put(`/api/assignments/${randomUUID()}/completion`)
+      .set("authorization", `Bearer ${studentToken}`)
+      .send({ completed: true })
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      code: "ASSIGNMENT_NOT_FOUND",
+      message: expect.any(String),
+    });
+  });
+});
+
 describe("مالکیت فایل", () => {
   /**
    * مهم‌ترین تست این فایل.
@@ -628,6 +773,69 @@ describe("GET /api/practice", () => {
       .expect(200);
 
     expect(response.body.assignments).toEqual([]);
+  });
+
+  it("برای حساب دونقشی، نقش و طرف مقابل را جداگانه برای هر آیتم می‌سازد", async () => {
+    await db
+      .update(users)
+      .set({ avatarUrl: "https://cdn.example/student-a.jpg" })
+      .where(eq(users.id, fixture.studentId));
+    await db
+      .update(users)
+      .set({ avatarUrl: "https://cdn.example/student-b.jpg" })
+      .where(eq(users.id, fixture.otherStudentId));
+
+    await request(server)
+      .post(`/api/bookings/${bookingId}/assignments`)
+      .set("authorization", `Bearer ${teacherToken}`)
+      .send({ title: "آیتم در نقش استاد" })
+      .expect(201);
+
+    const scheduledAt = new Date(Date.now() - 2 * 86_400_000);
+    const [studentSideBooking] = await db
+      .insert(bookings)
+      .values({
+        studentId: fixture.teacherUserId,
+        teacherId: fixture.otherStudentId,
+        offeringId: fixture.offeringId,
+        type: "SINGLE",
+        scheduledAt,
+        endsAt: new Date(scheduledAt.getTime() + 60 * 60_000),
+        durationMinutes: 60,
+        status: "COMPLETED",
+        priceSnapshot: 3_000_000n,
+        commissionSnapshot: "20",
+      })
+      .returning({ id: bookings.id });
+
+    await request(server)
+      .post(`/api/bookings/${studentSideBooking!.id}/assignments`)
+      .set("authorization", `Bearer ${otherToken}`)
+      .send({ title: "آیتم در نقش هنرجو" })
+      .expect(201);
+
+    const response = await request(server)
+      .get("/api/practice")
+      .set("authorization", `Bearer ${teacherToken}`)
+      .expect(200);
+
+    const asTeacher = response.body.assignments.find(
+      (item: { title: string }) => item.title === "آیتم در نقش استاد",
+    );
+    const asStudent = response.body.assignments.find(
+      (item: { title: string }) => item.title === "آیتم در نقش هنرجو",
+    );
+
+    expect(asTeacher).toMatchObject({
+      role: "TEACHER",
+      counterpartName: "هنرجوی الف",
+      counterpartAvatarUrl: "https://cdn.example/student-a.jpg",
+    });
+    expect(asStudent).toMatchObject({
+      role: "STUDENT",
+      counterpartName: "هنرجوی ب",
+      counterpartAvatarUrl: "https://cdn.example/student-b.jpg",
+    });
   });
 });
 
