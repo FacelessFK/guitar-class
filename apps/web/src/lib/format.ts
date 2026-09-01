@@ -122,6 +122,17 @@ export function formatJalaliShort(dateKey: DateKey): string {
   }).format(instantForDateKey(dateKey));
 }
 
+/** «۲۴ مرداد» برای روز تقویمی همان لحظه در منطقه‌ی زمانی تهران. */
+export function formatTehranJalaliShort(instant: Date | string): string {
+  const date = typeof instant === "string" ? new Date(instant) : instant;
+
+  return new Intl.DateTimeFormat(JALALI_LOCALE, {
+    timeZone: TEHRAN,
+    day: "numeric",
+    month: "long",
+  }).format(date);
+}
+
 /** ساعت دیواری تهران از یک لحظه‌ی مطلق: «۱۷:۳۰» */
 export function formatTehranTime(instant: Date | string): string {
   const date = typeof instant === "string" ? new Date(instant) : instant;

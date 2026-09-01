@@ -26,6 +26,29 @@ export function readSessionType(value: string | null): SessionType | null {
 }
 
 /**
+ * نوعی که هنوز استاد ندارد باید تا انتخاب استاد زنده بماند، حتی اگر URL
+ * برای مرحله‌ی ساز به شکل canonical بازنویسی شود.
+ */
+export function deferredSessionTypeIntent(input: {
+  requestedTeacher: string | null;
+  requestedType: SessionType | null;
+}): SessionType | null {
+  return input.requestedTeacher === null ? input.requestedType : null;
+}
+
+/** اعمال intent فقط بعد از معلوم شدن eligibility جلسه‌ی معارفه. */
+export function resolveSessionTypeIntent(
+  requestedType: SessionType | null,
+  trialEligible: boolean,
+): { sessionType: SessionType | null; step: 3 | 4 } {
+  if (!requestedType || (requestedType === "TRIAL" && !trialEligible)) {
+    return { sessionType: null, step: 3 };
+  }
+
+  return { sessionType: requestedType, step: 4 };
+}
+
+/**
  * عمیق‌ترین مرحله‌ای که یک deeplink اعتبارسنجی‌شده حق دارد باز کند.
  *
  * این تابع فقط نتیجه‌ی اعتبارسنجی داده‌های واقعی را می‌گیرد؛ وجود خامِ
@@ -39,9 +62,7 @@ export function resolveDeeplinkStep(input: {
 }): BookingStep {
   if (!input.instrumentValid) return 1;
   if (!input.teacherValid) return 2;
-  if (!input.requestedType) return 3;
-  if (input.requestedType === "TRIAL" && !input.trialEligible) return 3;
-  return 4;
+  return resolveSessionTypeIntent(input.requestedType, input.trialEligible).step;
 }
 
 /** انتخاب تازه‌ی ساز تمام تصمیم‌های وابسته را باطل می‌کند. */

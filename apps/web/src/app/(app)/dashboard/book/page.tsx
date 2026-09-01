@@ -43,8 +43,10 @@ import {
 } from "@/lib/app-api";
 import {
   canReviewSelection,
+  deferredSessionTypeIntent,
   readSessionType,
   resolveDeeplinkStep,
+  resolveSessionTypeIntent,
   type BookingStep,
   type SessionType,
 } from "@/lib/booking-wizard";
@@ -109,6 +111,9 @@ function BookingFlow() {
   const teacherDeeplinkApplied = useRef(false);
   const typeDeeplinkApplied = useRef(false);
   const teacherCameFromDeeplink = useRef(false);
+  const deferredType = useRef(
+    deferredSessionTypeIntent({ requestedTeacher, requestedType }),
+  );
 
   const offering = findOffering(teacher, instrument);
   const trialEligible = status !== "loading" && user?.trialUsed === false;
@@ -133,7 +138,7 @@ function BookingFlow() {
         const match = result.find((item) => item.slug === requestedInstrument) ?? null;
         if (!match) {
           teacherDeeplinkApplied.current = true;
-          typeDeeplinkApplied.current = true;
+          if (!deferredType.current) typeDeeplinkApplied.current = true;
           setStep(1);
           return;
         }
@@ -181,27 +186,31 @@ function BookingFlow() {
   }, [instrument, requestedTeacher]);
 
   useEffect(() => {
-    if (
-      !teacherCameFromDeeplink.current ||
-      typeDeeplinkApplied.current ||
-      !teacher ||
-      !offering
-    ) {
-      return;
-    }
-    if (requestedType === "TRIAL" && status === "loading") return;
+    const cameFromDeeplink = teacherCameFromDeeplink.current;
+    const pendingType = cameFromDeeplink ? requestedType : deferredType.current;
+    if (typeDeeplinkApplied.current || !teacher || !offering) return;
+    if (!cameFromDeeplink && !pendingType) return;
+    if (pendingType === "TRIAL" && status === "loading") return;
 
     typeDeeplinkApplied.current = true;
     const nextStep = resolveDeeplinkStep({
       instrumentValid: true,
       teacherValid: true,
-      requestedType,
+      requestedType: pendingType,
       trialEligible,
     });
 
-    if (nextStep === 4 && requestedType) setSessionType(requestedType);
+    if (nextStep === 4 && pendingType) setSessionType(pendingType);
+    if (!cameFromDeeplink) {
+      replaceContext({
+        instrument,
+        teacher,
+        type: nextStep === 4 ? pendingType : null,
+      });
+    }
+    deferredType.current = null;
     setStep(nextStep);
-  }, [offering, requestedType, status, teacher, trialEligible]);
+  }, [instrument, offering, requestedType, status, teacher, trialEligible]);
 
   useEffect(() => {
     if (sessionType !== "PACKAGE" || !slot || !teacher || !offering) {
@@ -252,7 +261,7 @@ function BookingFlow() {
       setSessionType(null);
       setSlot(null);
       setPackagePreview(null);
-      typeDeeplinkApplied.current = true;
+      if (!deferredType.current) typeDeeplinkApplied.current = true;
       replaceContext({ instrument: next });
     }
     setError(null);
@@ -265,8 +274,7 @@ function BookingFlow() {
       setSessionType(null);
       setSlot(null);
       setPackagePreview(null);
-      const deferredType = !typeDeeplinkApplied.current ? requestedType : null;
-      replaceContext({ instrument, teacher: next, type: deferredType });
+      replaceContext({ instrument, teacher: next });
     }
     setError(null);
   }
@@ -290,14 +298,20 @@ function BookingFlow() {
     }
 
     if (step === 2 && teacher) {
-      if (!typeDeeplinkApplied.current && requestedType) {
+      const pendingType = !typeDeeplinkApplied.current
+        ? (deferredType.current ?? requestedType)
+        : null;
+      if (pendingType) {
         typeDeeplinkApplied.current = true;
-        if (requestedType !== "TRIAL" || trialEligible) {
-          setSessionType(requestedType);
-          replaceContext({ instrument, teacher, type: requestedType });
-          setStep(4);
+        deferredType.current = null;
+        const resolved = resolveSessionTypeIntent(pendingType, trialEligible);
+        if (resolved.sessionType) {
+          setSessionType(resolved.sessionType);
+          replaceContext({ instrument, teacher, type: resolved.sessionType });
+          setStep(resolved.step);
           return;
         }
+        replaceContext({ instrument, teacher });
       }
       setStep(3);
       return;

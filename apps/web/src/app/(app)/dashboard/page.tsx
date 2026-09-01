@@ -228,7 +228,7 @@ function DashboardAside({
             هنوز از جلسه معارفه رایگان استفاده نکرده‌ای. ۲۰ دقیقه، بدون هزینه، برای آشنایی با استاد و سبک کارش.
           </p>
           <Link
-            href="/dashboard/book?type=TRIAL"
+            href="/dashboard/book?type=trial"
             className="btn-outline mt-4 w-full text-sm"
           >
             رزرو جلسه معارفه رایگان

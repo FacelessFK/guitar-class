@@ -17,7 +17,7 @@ import {
   markNotificationsRead,
   type AppNotification,
 } from "@/lib/app-api";
-import { formatJalaliShort, formatTehranTime } from "@/lib/format";
+import { formatTehranJalaliShort, formatTehranTime } from "@/lib/format";
 import {
   groupNotifications,
   notificationCategory,
@@ -228,7 +228,7 @@ function NotificationRow({
   const time =
     groupKey === "TODAY"
       ? formatTehranTime(notification.createdAt)
-      : `${formatJalaliShort(notification.createdAt.slice(0, 10))} · ${formatTehranTime(notification.createdAt)}`;
+      : `${formatTehranJalaliShort(notification.createdAt)} · ${formatTehranTime(notification.createdAt)}`;
 
   return (
     <button

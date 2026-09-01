@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   canReviewSelection,
+  deferredSessionTypeIntent,
   readSessionType,
   resolveDeeplinkStep,
+  resolveSessionTypeIntent,
   selectInstrument,
   selectSessionType,
   selectTeacher,
@@ -40,6 +42,76 @@ describe("deeplink ویزارد رزرو", () => {
         trialEligible: false,
       }),
     ).toBe(3);
+  });
+
+  it("type=trial بدون ساز از مرحله‌ی ساز شروع می‌شود", () => {
+    const requestedType = readSessionType("trial");
+
+    expect(requestedType).toBe("TRIAL");
+    expect(
+      resolveDeeplinkStep({
+        instrumentValid: false,
+        teacherValid: false,
+        requestedType,
+        trialEligible: true,
+      }),
+    ).toBe(1);
+  });
+
+  it("انتخاب ساز intent معارفه‌ی بدون استاد را deferred نگه می‌دارد", () => {
+    const requestedType = readSessionType("trial");
+    const deferredType = deferredSessionTypeIntent({
+      requestedTeacher: null,
+      requestedType,
+    });
+
+    expect(selectInstrument({ ...complete, sessionType: null }, "piano")).toMatchObject({
+      instrumentId: "piano",
+      teacherId: null,
+      sessionType: null,
+    });
+    expect(deferredType).toBe("TRIAL");
+  });
+
+  it("پس از انتخاب استاد، معارفه‌ی مجاز را اعمال می‌کند", () => {
+    const selected = selectTeacher({ ...complete, sessionType: null }, "teacher-2");
+    const resolved = resolveSessionTypeIntent("TRIAL", true);
+
+    expect({ ...selected, sessionType: resolved.sessionType }).toMatchObject({
+      teacherId: "teacher-2",
+      sessionType: "TRIAL",
+    });
+    expect(resolved.step).toBe(4);
+  });
+
+  it("پس از انتخاب استاد، کاربرِ دارای معارفه را به انتخاب نوع می‌برد", () => {
+    const selected = selectTeacher({ ...complete, sessionType: null }, "teacher-2");
+    const resolved = resolveSessionTypeIntent("TRIAL", false);
+
+    expect({ ...selected, sessionType: resolved.sessionType }).toMatchObject({
+      teacherId: "teacher-2",
+      sessionType: null,
+    });
+    expect(resolved.step).toBe(3);
+  });
+
+  it.each([
+    ["trial", "TRIAL"],
+    ["single", "SINGLE"],
+    ["package", "PACKAGE"],
+  ] as const)("deeplink کامل type=%s را مثل قبل اعمال می‌کند", (value, expected) => {
+    const requestedType = readSessionType(value);
+
+    expect(requestedType).toBe(expected);
+    expect(
+      resolveDeeplinkStep({
+        instrumentValid: true,
+        teacherValid: true,
+        requestedType,
+        trialEligible: true,
+      }),
+    ).toBe(4);
+    expect(resolveSessionTypeIntent(requestedType, true).sessionType).toBe(expected);
   });
 
   it("type نامعتبر را پیش‌انتخاب نمی‌کند", () => {
