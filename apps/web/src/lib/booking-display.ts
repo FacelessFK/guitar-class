@@ -99,11 +99,11 @@ export function statusLabel(status: BookingStatus): string {
 export function typeLabel(type: "TRIAL" | "SINGLE" | "PACKAGE"): string {
   switch (type) {
     case "TRIAL":
-      return "جلسه‌ی معارفه";
+      return "جلسه معارفه رایگان";
     case "SINGLE":
-      return "جلسه‌ی تکی";
+      return "تک جلسه";
     case "PACKAGE":
-      return "پکیج ماهانه";
+      return "بسته ماهانه";
   }
 }
 

@@ -1,4 +1,84 @@
-# Phase 4B Design QA
+# Phase 5B Design QA
+
+## Evidence
+
+- Source visual truth: the five signed-off `.dc.html` exports for Dashboard, Practice, Notifications, Profile, and Session File under `design-reference/Modern educational website/`.
+- Browser-rendered implementation: the corresponding local Next.js routes using an authenticated student account and real local API data.
+- Browser: local Google Chrome 151 headless through the Chrome DevTools protocol; no Playwright.
+- Paired comparison inputs:
+  - `/tmp/phase5b-comparison-390.png`
+  - `/tmp/phase5b-comparison-768.png`
+  - `/tmp/phase5b-comparison-1280.png`
+- Individual source and implementation captures use `/tmp/phase5b-{route}-{width}[-ref].png`; machine-readable route, overflow, and console results are in `/tmp/phase5b-qa-results.json`.
+
+The `.dc.html` files depend on an editor runtime, so their signed-off markup and bundled design-system CSS were flattened into temporary static browser documents for capture. Prototype interpolation labels remain visible where the export expects editor state; they were treated as content placeholders, while layout, responsive behavior, typography hierarchy, surfaces, borders, controls, and tokens remain directly inspectable.
+
+## Viewports and normalization
+
+| Target | CSS viewport | Source pixels | Implementation pixels | Device scale factor |
+| --- | ---: | ---: | ---: | ---: |
+| Mobile | 390 × 844 | 390 × 844 | 390 × 844 | 1 |
+| Tablet | 768 × 960 | 768 × 960 | 768 × 960 | 1 |
+| Desktop | 1280 × 900 | 1280 × 900 | 1280 × 900 | 1 |
+
+All captures use RTL layout, dark theme, browser content only, and exact matching viewport dimensions. No density resampling was used.
+
+## States and interactions covered
+
+- Dashboard: authenticated student, real upcoming and past bookings, monthly-package grouping, and completed/no-show presentation.
+- Practice: the genuine local empty state. The local database has no student assignment records, so populated assignment, submission, feedback, and manual-completion browser states were not fabricated. Grouping and independent completion semantics are covered by unit tests.
+- Notifications: real mixed notifications grouped into Today/This Week/Older, filters visible, unread affordances present, and no invented event facts.
+- Profile: real user with an existing password, locked phone field, name/avatar controls, and the password-change entry point. OTP-only setup and success/error variants were not available without mutating account state; password policy and API error mapping are covered by unit tests.
+- Session File: a real past student booking with the genuine no-learning-content state. Populated attachments, submissions, feedback, and media were unavailable in local data and were not invented.
+- Existing booking payment, credit, cancellation, classroom, Session File media, and teacher-only controls were preserved in code and typechecked; this QA did not create new financial or learning records solely to force visual states.
+
+## Full-view comparison
+
+The three combined sheets were opened at original resolution and reviewed route by route. Across mobile, tablet, and desktop, the implementation matches the signed-off Nocturne hierarchy: shared app bar behavior, 1080px content measure, RTL alignment, restrained surface borders, wood section rules, violet interactive accents, ivory typography, responsive full-width mobile actions, and desktop whitespace.
+
+Dynamic content differs intentionally from prototype placeholders. Dashboard shows all real package sessions rather than one sample card; Notifications shows the account's real feed; Practice and Session File correctly collapse to their real empty states. These are domain-state differences, not visual drift.
+
+## Focused-region comparison
+
+The original-resolution individual captures were used to inspect headers, section labels, card padding, dividers, Persian line wrapping, filter rows, avatar fallbacks, button radii, status colors, and responsive navigation. No clipped text, sticky-header overlap, broken crop, or horizontal overflow was found. All fifteen implementation captures reported `scrollWidth === clientWidth`.
+
+## Console and runtime checks
+
+- All five implementation routes remained authenticated and resolved to their requested URL at every viewport.
+- No application runtime exception was captured.
+- One first-load 404 occurred on the mobile Dashboard capture for an absent static resource; it did not recur and produced no visible defect. The reference captures also report missing prototype-only file assets, which are not implementation failures.
+- The circular `N` visible at the lower-left edge of development screenshots is the Next.js development indicator, not product UI.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual findings remain for the realistic states available locally.
+- [P3] Add a project favicon/static icon separately if desired; the first Dashboard load requested one missing static resource.
+- Coverage gap: populated Practice/Session File learning data, OTP-only password setup, password success/error banners, dashboard pending-payment, and notification empty state need seeded fixtures or naturally occurring local data for additional browser-state coverage.
+
+## Comparison history
+
+1. Initial direct `file://` source captures were blank because the `.dc` editor runtime could not fetch its own document under Chrome file security.
+2. The source markup and bundled design-system CSS were flattened into temporary static documents; the second capture rendered all five references at all three viewports.
+3. Source and implementation screenshots were placed side by side in the same 390, 768, and 1280 comparison inputs and reviewed at original resolution. No P0/P1/P2 correction cycle was required.
+
+## Implementation checklist
+
+- [x] Capture all five routes at 390 × 844, 768 × 960, and 1280 × 900.
+- [x] Pair each implementation capture with its signed-off source at the same viewport.
+- [x] Verify authentication, requested-route retention, console output, and horizontal overflow.
+- [x] Use realistic local student data without adding fake product records.
+- [x] Preserve real booking, notification, profile, password, practice, and Session File behavior.
+- [x] Run focused web/shared tests, workspace typecheck, and diff whitespace checks.
+
+## Follow-up polish
+
+- Add purpose-built local fixtures for the explicitly unavailable populated/error/success states if exhaustive screenshot coverage becomes a release gate.
+
+final result: passed
+
+---
+
+# Archived Phase 4B Design QA
 
 ## Evidence
 

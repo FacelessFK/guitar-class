@@ -17,6 +17,7 @@ import {
 import type { PaymentPlan } from "@/lib/payment-plan";
 import { paymentResultHref } from "@/lib/payment-result";
 import { useNow } from "@/lib/use-now";
+import { CalendarIcon, ClockIcon } from "@/components/ui/icons";
 
 /**
  * یک کلاس در فهرست.
@@ -31,6 +32,8 @@ export function BookingCard({
   paymentPlan,
   creditBalance = null,
   onChange,
+  compact = false,
+  grouped = false,
 }: {
   booking: BookingDetail;
   /** تهی یعنی این کارت کنش پرداختی ندارد — تمام‌شده یا مال استاد است */
@@ -38,64 +41,127 @@ export function BookingCard({
   /** موجودی اعتبار هنرجو به ریال؛ صفحه‌ی استاد آن را نمی‌فرستد */
   creditBalance?: bigint | null;
   onChange: () => void;
+  /** ردیف آرامِ بخش گذشته */
+  compact?: boolean;
+  /** داخل قاب معنایی بسته‌ی ماهانه رندر می‌شود */
+  grouped?: boolean;
 }) {
   const now = useNow();
   const status = statusDisplay(booking.status, booking.role);
 
-  return (
-    <li className="card">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-bold">
+  if (compact) {
+    return (
+      <li
+        className={`flex flex-wrap items-center gap-x-6 gap-y-3 bg-surface/60 px-4.5 py-4 md:px-5.5 ${
+          grouped
+            ? "rounded-none shadow-none"
+            : "rounded-panel shadow-[inset_0_0_0_1px_var(--color-divider-soft)]"
+        }`}
+      >
+        <div className="min-w-0 flex-[1_1_240px]">
+          <h3 className="text-base text-ink-2">
             {booking.instrumentName} با {booking.counterpartName}
           </h3>
-          <p className="mt-1 text-sm text-ink-muted">
-            {formatJalaliDayMonth(booking.date)}
-            {" · "}
-            {faDigits(booking.startTime)} تا {faDigits(booking.endTime)}
-            {" · "}
-            {typeLabel(booking.type)}
+          <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] text-meta">
+            <span>{formatJalaliDayMonth(booking.date)}</span>
+            <span>
+              {faDigits(booking.startTime)} تا {faDigits(booking.endTime)}
+            </span>
+            <span>{booking.type === "PACKAGE" ? "بسته ماهانه · ۴ جلسه" : typeLabel(booking.type)}</span>
+            {booking.sessionIndex ? <span>جلسه {faNumber(booking.sessionIndex)} از ۴</span> : null}
           </p>
         </div>
+        {SESSION_FILE_STATUSES.includes(booking.status) ? (
+          <Link href={`/sessions/${booking.id}`} className="min-h-11 py-2 text-[13.5px]">
+            نکات جلسه و تمرین‌ها ←
+          </Link>
+        ) : null}
+        <StatusLine label={status.label} tone={status.tone} />
+      </li>
+    );
+  }
 
-        <span className={`badge ${status.tone}`}>{status.label}</span>
+  return (
+    <li
+      className={`overflow-hidden bg-surface ${
+        grouped
+          ? "rounded-none shadow-none"
+          : booking.status === "PENDING_PAYMENT" || booking.status === "IN_PROGRESS"
+            ? "rounded-panel shadow-[inset_0_0_0_1px_var(--color-divider-strong)]"
+            : "rounded-panel shadow-[inset_0_0_0_1px_var(--color-divider)]"
+      }`}
+    >
+      <div className="flex flex-wrap">
+        <div className="min-w-0 flex-[3_1_300px] px-4.5 py-5 md:px-5.5 md:py-5.5">
+          <h3 className="text-[17.5px] font-semibold tracking-[-0.01em] text-ink">
+            {booking.instrumentName} با {booking.counterpartName}
+          </h3>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4.5 gap-y-2 text-sm text-ink-2">
+            <span className="flex items-center gap-1.5">
+              <CalendarIcon className="text-meta" />
+              {formatJalaliDayMonth(booking.date)}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <ClockIcon className="text-meta" />
+              {faDigits(booking.startTime)} تا {faDigits(booking.endTime)}
+            </span>
+            <span className="text-meta">
+              {booking.type === "PACKAGE" ? "بسته ماهانه · ۴ جلسه" : typeLabel(booking.type)}
+            </span>
+            {booking.sessionIndex ? (
+              <span className="text-meta">جلسه {faNumber(booking.sessionIndex)} از ۴</span>
+            ) : null}
+          </div>
+          {SESSION_FILE_STATUSES.includes(booking.status) ? (
+            <Link href={`/sessions/${booking.id}`} className="mt-4 inline-flex min-h-11 items-center text-sm">
+              نکات جلسه و تمرین‌ها ←
+            </Link>
+          ) : null}
+        </div>
+        <aside className="box-border flex min-w-0 flex-[1_1_236px] flex-col gap-3.5 border-t border-divider bg-surface-2/70 p-4.5 md:min-w-[236px] md:border-t-0 md:p-5">
+          <StatusLine label={status.label} tone={status.tone} />
+          {booking.status === "PENDING_PAYMENT" ? (
+            <PaymentPanel
+              booking={booking}
+              plan={paymentPlan}
+              creditBalance={creditBalance}
+              now={now}
+              onChange={onChange}
+            />
+          ) : null}
+          {booking.status === "CONFIRMED" || booking.status === "IN_PROGRESS" ? (
+            <RoomPanel booking={booking} now={now} />
+          ) : null}
+          {LIVE_STATUSES.includes(booking.status) ? (
+            <CancelPanel booking={booking} now={now} onChange={onChange} />
+          ) : null}
+        </aside>
       </div>
-
-      {booking.status === "PENDING_PAYMENT" ? (
-        <PaymentPanel
-          booking={booking}
-          plan={paymentPlan}
-          creditBalance={creditBalance}
-          now={now}
-          onChange={onChange}
-        />
-      ) : null}
-
-      {booking.status === "CONFIRMED" || booking.status === "IN_PROGRESS" ? (
-        <RoomPanel booking={booking} now={now} />
-      ) : null}
-
-      {LIVE_STATUSES.includes(booking.status) ? (
-        <CancelPanel booking={booking} now={now} onChange={onChange} />
-      ) : null}
-
-      {/*
-        پرونده‌ی جلسه — نکات، تمرین و بازخورد.
-
-        فقط روی جلسه‌های برگزارشده می‌آید چون حلقه‌ی یادگیری بعد از کلاس
-        شروع می‌شود و API ثبت روی جلسه‌ی برگزارنشده را رد می‌کند. لینک
-        دادن به صفحه‌ای که همیشه خالی است، همان اندازه گمراه‌کننده است
-        که نبودنش.
-      */}
-      {SESSION_FILE_STATUSES.includes(booking.status) ? (
-        <Link
-          href={`/sessions/${booking.id}`}
-          className="mt-4 inline-block text-sm text-accent-strong underline"
-        >
-          نکات جلسه و تمرین‌ها
-        </Link>
-      ) : null}
     </li>
+  );
+}
+
+function StatusLine({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "badge-ok" | "badge-wait" | "badge-off" | "badge-neutral";
+}) {
+  const color =
+    tone === "badge-ok"
+      ? "bg-ok text-ok"
+      : tone === "badge-wait"
+        ? "bg-wood-light text-wood-light"
+        : tone === "badge-neutral"
+          ? "bg-violet text-violet-strong"
+          : "bg-meta text-meta";
+
+  return (
+    <span className={`flex items-center gap-2 text-[13.5px] ${color.split(" ")[1]}`}>
+      <span className={`size-1.5 rounded-full ${color.split(" ")[0]}`} />
+      {label}
+    </span>
   );
 }
 
@@ -188,7 +254,7 @@ function PaymentPanel({
 
   if (booking.role === "TEACHER") {
     return (
-      <p className="mt-4 text-sm text-ink-muted">
+      <p className="text-sm leading-[1.85] text-ink-2">
         هنرجو هنوز پرداخت نکرده است. تا پرداخت نشود این ساعت قطعی نیست.
       </p>
     );
@@ -196,7 +262,7 @@ function PaymentPanel({
 
   if (expired) {
     return (
-      <p className="mt-4 text-sm text-ink-muted">
+      <p className="text-sm leading-[1.85] text-ink-2">
         مهلت پرداخت تمام شد و این ساعت آزاد شد. اگر هنوز می‌خواهید، دوباره رزرو
         کنید.
       </p>
@@ -206,14 +272,14 @@ function PaymentPanel({
   // جلسه‌ی دیگرِ همان پکیج: دکمه ندارد، ولی باید بگوید چرا
   if (plan?.kind === "COVERED_BY_PACKAGE") {
     return (
-      <p className="mt-4 text-sm text-ink-muted">
+      <p className="text-sm leading-[1.85] text-ink-2">
         بخشی از یک بسته ماهانه است و با پرداخت جلسه‌ی اول قطعی می‌شود.
       </p>
     );
   }
 
   return (
-    <div className="mt-4">
+    <div>
       <p className="text-sm">
         {/*
           برای پکیج مبلغی نوشته نمی‌شود.
@@ -258,7 +324,7 @@ function PaymentPanel({
 
       <button
         type="button"
-        className="btn-primary mt-3"
+        className="btn-primary mt-3 w-full"
         disabled={pending || !plan}
         onClick={() => void pay()}
       >
@@ -296,7 +362,7 @@ function RoomPanel({ booking, now }: { booking: BookingDetail; now: number | nul
 
   if (state === "CLOSED") {
     return (
-      <p className="mt-4 text-sm text-ink-muted">
+      <p className="text-sm leading-[1.85] text-ink-2">
         این جلسه تمام شده است. وضعیت نهایی‌اش تا چند دقیقه‌ی دیگر ثبت می‌شود.
       </p>
     );
@@ -304,15 +370,15 @@ function RoomPanel({ booking, now }: { booking: BookingDetail; now: number | nul
 
   if (state === "TOO_EARLY") {
     return (
-      <p className="mt-4 text-sm text-ink-muted">
+      <p className="text-sm leading-[1.85] text-ink-2">
         اتاق کلاس {formatCountdown(roomWindow(session).start - now)} دیگر باز می‌شود.
       </p>
     );
   }
 
   return (
-    <div className="mt-4">
-      <Link href={`/room/${booking.id}`} className="btn-primary">
+    <div>
+      <Link href={`/room/${booking.id}`} className="btn-primary w-full">
         ورود به کلاس
       </Link>
       <p className="mt-2 text-sm text-ink-muted">
@@ -375,7 +441,7 @@ function CancelPanel({
    */
   if (credited) {
     return (
-      <p className="alert-info mt-4">
+      <p className="notice notice-wood">
         {formatToman(credited)} تومان به اعتبار شما اضافه شد و در رزرو بعدی خرج
         می‌شود.
       </p>
@@ -386,7 +452,7 @@ function CancelPanel({
     return (
       <button
         type="button"
-        className="mt-4 text-sm text-ink-muted underline"
+        className="min-h-11 self-start py-2 text-sm text-meta transition hover:text-ink-2"
         onClick={() => setOpen(true)}
       >
         لغو این جلسه
@@ -395,8 +461,8 @@ function CancelPanel({
   }
 
   return (
-    <div className="mt-4 space-y-3">
-      <p className="alert-info">
+    <div className="space-y-3 border-t border-divider pt-3">
+      <p className="notice notice-wood">
         {booking.role === "TEACHER"
           ? "لغو از سمت شما یعنی مبلغ به اعتبار هنرجو برمی‌گردد و برایش پیامک اطلاع‌رسانی می‌رود."
           : freeCancellation

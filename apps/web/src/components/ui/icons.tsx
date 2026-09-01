@@ -85,6 +85,54 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+export function ChatIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M128 24a104 104 0 0 0-91 154.9l-9.8 34.2a16 16 0 0 0 19.8 19.8l34.3-9.8A104 104 0 1 0 128 24m0 192a88 88 0 0 1-44.3-12 8 8 0 0 0-6.2-.7l-34.2 9.8 9.8-34.2a8 8 0 0 0-.7-6.2A88 88 0 1 1 128 216M84 116a12 12 0 1 0 12 12 12 12 0 0 0-12-12m44 0a12 12 0 1 0 12 12 12 12 0 0 0-12-12m44 0a12 12 0 1 0 12 12 12 12 0 0 0-12-12" />
+    </Svg>
+  );
+}
+
+export function CreditCardIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M224 48H32a16 16 0 0 0-16 16v128a16 16 0 0 0 16 16h192a16 16 0 0 0 16-16V64a16 16 0 0 0-16-16m0 16v24H32V64zm0 128H32v-88h192zm-16-24a8 8 0 0 1-8 8h-32a8 8 0 0 1 0-16h32a8 8 0 0 1 8 8" />
+    </Svg>
+  );
+}
+
+export function VideoIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M251.8 73a8 8 0 0 0-8.1.3l-40.3 25.6A16 16 0 0 0 188 80H32a16 16 0 0 0-16 16v96a16 16 0 0 0 16 16h156a16 16 0 0 0 15.4-18.9l40.3 25.6a8 8 0 0 0 12.3-6.7V80a8 8 0 0 0-4.2-7M188 192H32V96h156zm52 13.4-36-22.8v-53.2l36-22.8z" />
+    </Svg>
+  );
+}
+
+export function LockIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M208 80h-28V56a52 52 0 0 0-104 0v24H48a16 16 0 0 0-16 16v112a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16V96a16 16 0 0 0-16-16M92 56a36 36 0 0 1 72 0v24H92Zm116 152H48V96h160z" />
+    </Svg>
+  );
+}
+
+export function PencilIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M227.3 76.7 179.3 28.7a16 16 0 0 0-22.6 0l-120 120A15.9 15.9 0 0 0 32 160v48a16 16 0 0 0 16 16h48a15.9 15.9 0 0 0 11.3-4.7l120-120a16 16 0 0 0 0-22.6M96 208H48v-48l88-88 48 48Z" />
+    </Svg>
+  );
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M216 48h-36V36a20 20 0 0 0-20-20H96a20 20 0 0 0-20 20v12H40a8 8 0 0 0 0 16h8v144a16 16 0 0 0 16 16h128a16 16 0 0 0 16-16V64h8a8 8 0 0 0 0-16M92 36a4 4 0 0 1 4-4h64a4 4 0 0 1 4 4v12H92Zm100 172H64V64h128Z" />
+    </Svg>
+  );
+}
+
 export function EyeIcon(props: IconProps) {
   return (
     <Svg {...props}>

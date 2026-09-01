@@ -11,6 +11,7 @@ import {
   deleteSubmission,
   getSessionLearning,
   readMediaDuration,
+  setAssignmentCompletion,
   updateAssignment,
   uploadFile,
   writeFeedback,
@@ -20,6 +21,8 @@ import {
   type Submission,
 } from "@/lib/app-api";
 import { faNumber, formatJalaliDate } from "@/lib/format";
+import { CheckIcon } from "@/components/ui/icons";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * حلقه‌ی یادگیریِ یک جلسه.
@@ -51,24 +54,24 @@ export function SessionLearning({ bookingId }: { bookingId: string }) {
 
   if (data === null) {
     return error ? (
-      <p className="alert-error">{error}</p>
+      <p className="alert-error mt-6">{error}</p>
     ) : (
-      <p className="text-sm text-ink-muted">در حال بارگذاری…</p>
+      <SessionLearningSkeleton />
     );
   }
 
   const isTeacher = data.role === "TEACHER";
 
   return (
-    <div className="space-y-10">
-      {error ? <p className="alert-error">{error}</p> : null}
+    <div className="mt-9 md:mt-12">
+      {error ? <p className="alert-error mb-6">{error}</p> : null}
 
       {/*
         جلسه‌ی برگزارنشده حلقه ندارد و API هم ثبت روی آن را رد می‌کند.
         گفتنش بهتر از نشان دادن فرمی است که همیشه خطا می‌دهد.
       */}
       {data.teachable ? null : (
-        <p className="alert-info">
+        <p className="notice mb-8">
           نکات جلسه و برنامه‌ی تمرین بعد از برگزاری کلاس ثبت می‌شوند.
         </p>
       )}
@@ -89,6 +92,29 @@ export function SessionLearning({ bookingId }: { bookingId: string }) {
         onChanged={load}
         onError={setError}
       />
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="flex items-center gap-2.5 text-[13px] font-medium tracking-[0.08em] text-meta">
+      <span className="h-px w-5 bg-wood" />
+      {children}
+    </h2>
+  );
+}
+
+function SessionLearningSkeleton() {
+  return (
+    <div className="mt-10" aria-label="در حال بارگذاری محتوای جلسه">
+      <Skeleton className="h-4 w-32" />
+      <Skeleton className="mt-5 h-24 w-[62ch] max-w-full" delay={1} />
+      <Skeleton className="mt-14 h-4 w-36" />
+      <div className="mt-5 space-y-3">
+        <Skeleton className="h-44 w-full" />
+        <Skeleton className="h-44 w-full" delay={1} />
+      </div>
     </div>
   );
 }
@@ -138,13 +164,19 @@ function NoteSection({
   if (!editable) {
     return (
       <section>
-        <h2 className="text-lg font-bold">نکات جلسه</h2>
+        <SectionLabel>خلاصه این جلسه</SectionLabel>
         {note ? (
-          <p className="mt-3 whitespace-pre-line rounded-lg border border-border p-4 text-sm">
+          <div className="mt-4.5 max-w-[62ch]">
+            <p className="whitespace-pre-line text-[17px] leading-[2.05] text-ink">
             {note.content}
-          </p>
+            </p>
+            <div className="mt-4.5 flex items-center gap-2.5 text-[13.5px] text-meta">
+              <span className="h-px w-6 bg-divider" />
+              <span>یادداشت استاد</span>
+            </div>
+          </div>
         ) : (
-          <p className="mt-3 text-sm text-ink-muted">
+          <p className="mt-4 max-w-[52ch] text-[15px] leading-[1.95] text-ink-2">
             استاد هنوز نکته‌ای برای این جلسه ننوشته است.
           </p>
         )}
@@ -154,8 +186,8 @@ function NoteSection({
 
   return (
     <section>
-      <h2 className="text-lg font-bold">نکات جلسه</h2>
-      <form onSubmit={(event) => void save(event)} className="mt-3 space-y-3">
+      <SectionLabel>خلاصه این جلسه</SectionLabel>
+      <form onSubmit={(event) => void save(event)} className="mt-4 space-y-3">
         <textarea
           className="input min-h-32"
           value={content}
@@ -206,25 +238,41 @@ function AssignmentsSection({
   onError: (message: string | null) => void;
 }) {
   return (
-    <section>
-      <h2 className="text-lg font-bold">برنامه‌ی تمرین</h2>
+    <section className="pt-11 md:pt-16">
+      <div className="flex flex-wrap items-baseline justify-between gap-4">
+        <SectionLabel>تمرین تا جلسه بعد</SectionLabel>
+        {!isTeacher && assignments.length > 0 ? (
+          <span className="text-[13.5px] text-meta">
+            {faNumber(assignments.filter((assignment) => assignment.completedAt).length)} از {faNumber(assignments.length)} تمرین انجام شده
+          </span>
+        ) : null}
+      </div>
 
       {assignments.length === 0 ? (
-        <p className="mt-3 text-sm text-ink-muted">
+        <p className="mt-4 text-[15px] text-ink-2">
           {isTeacher
             ? "برای این جلسه هنوز تمرینی تعیین نکرده‌اید."
             : "استاد هنوز تمرینی برای این جلسه تعیین نکرده است."}
         </p>
       ) : (
-        <ul className="mt-4 space-y-4">
+        <ul className="mt-5 space-y-3">
           {assignments.map((assignment) => (
-            <AssignmentCard
-              key={assignment.id}
-              assignment={assignment}
-              isTeacher={isTeacher}
-              onChanged={onChanged}
-              onError={onError}
-            />
+            isTeacher ? (
+              <AssignmentCard
+                key={assignment.id}
+                assignment={assignment}
+                isTeacher
+                onChanged={onChanged}
+                onError={onError}
+              />
+            ) : (
+              <StudentAssignmentCard
+                key={assignment.id}
+                assignment={assignment}
+                onChanged={onChanged}
+                onError={onError}
+              />
+            )
           ))}
         </ul>
       )}
@@ -237,6 +285,143 @@ function AssignmentsSection({
         />
       ) : null}
     </section>
+  );
+}
+
+function StudentAssignmentCard({
+  assignment,
+  onChanged,
+  onError,
+}: {
+  assignment: Assignment;
+  onChanged: () => Promise<void>;
+  onError: (message: string | null) => void;
+}) {
+  const [done, setDone] = useState(Boolean(assignment.completedAt));
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setDone(Boolean(assignment.completedAt));
+  }, [assignment.completedAt]);
+
+  async function toggle() {
+    const next = !done;
+    setDone(next);
+    setBusy(true);
+    onError(null);
+    try {
+      await setAssignmentCompletion(assignment.id, next);
+      await onChanged();
+    } catch (caught) {
+      setDone(!next);
+      onError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const stateLabel = assignment.status === "REVIEWED"
+    ? done ? "بازخورد گرفته · انجام شد" : "بازخورد گرفته"
+    : assignment.status === "SUBMITTED"
+      ? done ? "ارسال شد · انجام شد" : "ارسال شد"
+      : done ? "انجام شد" : "انجام نشده";
+  const stateColor = assignment.status === "REVIEWED" || assignment.status === "SUBMITTED"
+    ? "text-violet-strong"
+    : done ? "text-ok" : "text-meta";
+
+  return (
+    <li
+      className={`overflow-hidden rounded-panel bg-surface shadow-[inset_0_0_0_1px_var(--color-divider)] ${
+        done && assignment.status === "ASSIGNED" ? "opacity-85" : ""
+      }`}
+    >
+      <div className="flex flex-col gap-4 p-4.5 md:flex-row md:items-start md:gap-5.5 md:p-5.5">
+        <div className="flex min-w-0 flex-1 items-start gap-2.5 md:gap-3.5">
+          <button
+            type="button"
+            aria-label={done ? `برداشتن علامت انجام‌شده از ${assignment.title}` : `علامت زدن ${assignment.title} به‌عنوان انجام‌شده`}
+            aria-pressed={done}
+            disabled={busy}
+            onClick={() => void toggle()}
+            className="-m-2 grid size-11 shrink-0 place-items-center rounded-full disabled:opacity-50"
+          >
+            <span
+              className={`grid size-[22px] place-items-center rounded-full ${
+                done
+                  ? "bg-ok-surface text-ok shadow-[inset_0_0_0_1px_var(--color-ok)]"
+                  : assignment.status === "ASSIGNED"
+                    ? "text-transparent shadow-[inset_0_0_0_1px_var(--color-divider-strong)]"
+                    : "text-transparent shadow-[inset_0_0_0_1px_var(--color-violet)]"
+              }`}
+            >
+              {done ? <CheckIcon /> : null}
+            </span>
+          </button>
+          <div className="min-w-0 flex-1">
+            <h3 className={`text-[16.5px] font-semibold ${done && assignment.status === "ASSIGNED" ? "text-ink-2" : "text-ink"}`}>
+              {assignment.title}
+            </h3>
+            {assignment.description ? (
+              <p className="mt-1.5 whitespace-pre-line text-[14.5px] leading-[1.9] text-ink-2">
+                {assignment.description}
+              </p>
+            ) : null}
+            {assignment.dueDate ? (
+              <p className="notice notice-wood mt-3 text-[13px]">
+                مهلت: {formatJalaliDate(assignment.dueDate)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-4 border-t border-divider pt-4 md:w-40 md:flex-col md:items-end md:border-0 md:pt-0 md:text-end">
+          <span className={`text-[13px] ${stateColor}`}>{busy ? "در حال ذخیره…" : stateLabel}</span>
+        </div>
+      </div>
+
+      {assignment.attachments.length > 0 ? (
+        <div className="border-t border-divider px-4.5 py-4 md:px-5.5">
+          <p className="text-[12.5px] text-meta">منابع تمرین</p>
+          <ul className="mt-2 space-y-2 text-sm">
+            {assignment.attachments.map((attachment) => (
+              <li key={attachment.url} className="min-w-0">
+                <a
+                  href={attachment.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-block max-w-full break-all py-1"
+                >
+                  {attachment.name} ←
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="border-t border-divider bg-surface-2/40 px-4.5 py-4 md:px-5.5">
+        {assignment.submissions.length === 0 ? (
+          <p className="mb-4 text-[13.5px] text-meta">هنوز اجرایی نفرستاده‌ای.</p>
+        ) : (
+          <div className="mb-4 space-y-4">
+            {assignment.submissions.map((submission) => (
+              <SubmissionRow
+                key={submission.id}
+                submission={submission}
+                isTeacher={false}
+                onChanged={onChanged}
+                onError={onError}
+              />
+            ))}
+          </div>
+        )}
+        <SubmissionUpload
+          assignmentId={assignment.id}
+          hasPrevious={assignment.submissions.length > 0}
+          onUploaded={onChanged}
+          onError={onError}
+        />
+      </div>
+    </li>
   );
 }
 
