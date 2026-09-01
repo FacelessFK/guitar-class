@@ -1,3 +1,97 @@
+# Phase 6 Design QA
+
+## Evidence
+
+- Signed source visual truth:
+  - `design-reference/Modern educational website/Hygge Teacher Dashboard.dc.html`
+  - `design-reference/Modern educational website/Hygge Teacher Availability.dc.html`
+  - `design-reference/Modern educational website/Hygge Teacher Profile Edit.dc.html`
+  - `design-reference/Modern educational website/Hygge Teacher Earnings.dc.html`
+- Browser-rendered implementation: `/teacher`, `/teacher/availability`, `/teacher/profile`, and `/teacher/earnings` with real local teacher accounts and API data.
+- Browser: local Google Chrome 151 headless through the Chrome DevTools protocol; no Playwright.
+- Paired source/implementation sheets:
+  - `/tmp/phase6-comparison-390.png`
+  - `/tmp/phase6-comparison-768.png`
+  - `/tmp/phase6-comparison-1280.png`
+- Individual captures use `/tmp/phase6-teacher-{dashboard,availability,profile,earnings}-{390,768,1280}[-ref].png`. Machine-readable route, overflow, console, and interaction evidence is in `/tmp/phase6-qa-results.json`.
+- Additional real pending/empty-state captures use `/tmp/phase6-teacher-{dashboard,availability,profile,earnings}-pending-390.png`; assertions are in `/tmp/phase6-pending-qa-results.json`.
+
+The signed `.dc.html` files depend on their editor runtime, so the exact documents and bundled design-system CSS were flattened into temporary static browser documents for capture. Prototype interpolation labels remain visible where the export expects editor state. The Teacher Profile source also preserves its unsaved-change overlay state. Those artifacts were treated as prototype state, while typography hierarchy, layout, surfaces, spacing, borders, controls, color tokens, and responsive composition remained directly inspectable.
+
+## Viewports and normalization
+
+| Target | CSS viewport | Source pixels | Implementation pixels | Device scale factor |
+| --- | ---: | ---: | ---: | ---: |
+| Mobile | 390 × 844 | 390 × 844 | 390 × 844 | 1 |
+| Tablet | 768 × 960 | 768 × 960 | 768 × 960 | 1 |
+| Desktop | 1280 × 900 | 1280 × 900 | 1280 × 900 | 1 |
+
+All paired captures use RTL layout, dark theme, browser content only, exact matching viewport dimensions, and no density resampling.
+
+## Real fixtures and states covered
+
+- Approved teacher: one active offering, seven teacher-side bookings (`CONFIRMED`, `COMPLETED`, and `NO_SHOW`), five weekly rules, and five positive ledger entries. Dashboard, populated availability, populated profile, and populated earnings were captured at all three target viewports.
+- Pending teacher: real pending status, no public-profile link, no bookings, no offering, no weekly rules, and no earnings. Dashboard, Profile, Availability, and Earnings empty/status states were captured at 390 × 844 without adding product records.
+- No local teacher has a stored `BLOCK` or `EXTRA` exception, and the local ledger has no negative row. Those production facts were not fabricated for screenshots.
+
+## Interaction and domain checks
+
+- Dashboard: three real Session File links were present for applicable teacher bookings. No student payment button or credit control appeared in the teacher world.
+- Availability: the weekly-rule form opened with two native `time` inputs; the one-day exception form exposed 60 future dates plus both `BLOCK` and `EXTRA`; a real rule's delete confirmation opened and was cancelled, so fixture state was not mutated.
+- Profile: approved public-profile gating, account-avatar ownership link, one read-only offering, initially disabled save action, and URL-only video input were verified. The pending account hid the public-profile link.
+- Earnings: real ledger detail disclosure expanded successfully and no payout-request action was present.
+
+## Full-view comparison
+
+The three paired sheets were opened at original resolution and reviewed route by route. The implementation follows the signed Nocturne hierarchy: existing Teacher shell and «حالت استاد» boundary, editorial page headings, dark navy surfaces, ivory primary actions, muted violet interaction states, copper section accents, thin dividers, restrained card use, and generous RTL whitespace.
+
+The implementation is intentionally taller where real domain data exceeds prototype samples: the approved Dashboard shows all relevant real classes, Availability includes both the weekly schedule and one-day exceptions, Profile exposes every editable contract field plus read-only offerings, and Earnings shows all real ledger rows. These are honest product-state adaptations rather than a new visual direction.
+
+## Focused-region comparison
+
+Original-resolution individual captures were used to inspect shared headers, Persian wrapping, card and row padding, amount alignment, native time controls, avatar presentation, status edges/dots, field widths, sticky mobile save controls, touch targets, and empty-state actions. No clipped content, shell overlap, broken control, or horizontal overflow was found. All twelve primary captures and all four pending/empty mobile captures reported `scrollWidth === clientWidth`.
+
+## Required fidelity surfaces
+
+- Typography: existing Vazirmatn hierarchy, weights, line heights, wrapping, and RTL alignment match the signed Teacher concepts.
+- Layout: shared content measures, editorial section rhythm, mobile stacking, tablet/desktop whitespace, and page-specific hierarchy follow the source.
+- Color and surfaces: existing Nocturne background, surface, well, ivory, violet, wood, success, error, and divider tokens are used throughout; no gradients, neon treatment, or fintech/admin card wall was introduced.
+- Assets and icons: real user avatar data and the existing icon library are used. No fake image, emoji icon, hand-drawn SVG, or placeholder asset was added.
+- Copy and content: canonical booking terms and real profile, offering, schedule, booking, and ledger facts replace prototype placeholders. No analytics, rating, payout, attendance, or progress facts were invented.
+
+## Console and runtime checks
+
+- Every primary implementation capture remained authenticated on its requested route at 390, 768, and 1280.
+- No runtime exception or console error was captured on any of the twelve primary captures or four pending/empty captures.
+- The circular `N` at the lower-left edge of development captures is the Next.js development indicator, not product UI.
+
+## Findings
+
+- No actionable P0, P1, or P2 visual findings remain.
+- Coverage gap: no real local `BLOCK`/`EXTRA` row, negative/refund ledger entry, teacher-side `PENDING_PAYMENT`/cancelled booking, or safely disposable profile save-error fixture exists. The controls and presentation paths were exercised non-mutatingly where possible; role/status/date/negative-amount behavior is covered by focused tests and unchanged shared contracts.
+- The source Profile capture shows its prototype unsaved-leave overlay. The implementation instead exposes an inline dirty-state message with discard/save actions and does not force an overlay during a normal page capture.
+
+## Comparison history
+
+1. Exact source documents were flattened with their bundled design-system CSS and captured at the three target viewports.
+2. The first implementation montage accidentally retained login screens after a rotated local refresh cookie expired. Route assertions exposed the invalid evidence; no application finding was inferred from it.
+3. The local approved-teacher session was refreshed, all twelve implementation captures were replaced, and route retention, console output, interaction behavior, and overflow were rechecked.
+4. Corrected source/implementation screenshots were paired in the 390, 768, and 1280 comparison sheets and reviewed at original resolution. No P0/P1/P2 correction cycle was required.
+5. A real pending teacher supplied additional pending-profile and empty Dashboard/Availability/Earnings evidence at 390 without mutating product data.
+
+## Implementation checklist
+
+- [x] Compare all four routes with signed source at 390 × 844, 768 × 960, and 1280 × 900.
+- [x] Verify authenticated route retention, console/runtime output, and horizontal overflow.
+- [x] Verify approved and pending status gating with real fixtures.
+- [x] Verify populated and safely available empty states without fabricating production facts.
+- [x] Exercise weekly-rule, exception, delete-confirmation, profile, ledger-detail, and Session File controls without destructive mutation.
+- [x] Re-run web/shared tests, workspace typecheck, and diff whitespace checks.
+
+final result: passed
+
+---
+
 # Phase 5B Design QA
 
 ## Evidence

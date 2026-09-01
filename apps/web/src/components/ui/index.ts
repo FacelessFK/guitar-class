@@ -43,4 +43,5 @@ export {
   EyeIcon,
   EyeSlashIcon,
   SignOutIcon,
+  TrashIcon,
 } from "./icons";

@@ -1,139 +1,216 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 
+import {
+  ChevronDownIcon,
+  EmptyState,
+  InlineNotice,
+  SectionMark,
+  Skeleton,
+} from "@/components/ui";
 import { errorMessage } from "@/lib/api-client";
 import { getEarnings, type Earnings } from "@/lib/app-api";
-import { formatJalaliDate, formatToman } from "@/lib/format";
+import { formatLedgerToman, ledgerTypeLabel } from "@/lib/earnings-presentation";
+import { formatTehranJalaliDate } from "@/lib/format";
 
-/**
- * درآمد استاد.
- *
- * `net` همان چیزی است که در تسویه پرداخت می‌شود و از پیش خالص است:
- * بازپرداخت در دفتر کل سطر **منفی** است، نه ویرایش سطر درآمد، پس جمع
- * ساده‌ی ستون خالص عدد درست را می‌دهد و هیچ‌جا «منهای بازپرداخت‌ها»
- * حساب نمی‌شود.
- *
- * تسویه در این فاز دستی و ماهانه است (سند معماری، بخش ۴.۵)، پس این
- * صفحه فقط گزارش است و هیچ دکمه‌ی «درخواست تسویه» ندارد که به جایی
- * وصل نباشد.
- */
 export default function EarningsPage() {
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getEarnings()
-      .then(setEarnings)
-      .catch((caught: unknown) => setError(errorMessage(caught)));
+  const load = useCallback(async () => {
+    try {
+      setEarnings(await getEarnings());
+      setError(null);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
   }, []);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const hasAccountActivity = earnings
+    ? earnings.entries.length > 0 ||
+      [earnings.gross, earnings.commission, earnings.paidOut, earnings.outstanding].some(
+        (amount) => BigInt(amount) !== 0n,
+      )
+    : false;
+
   return (
-    <div className="mx-auto max-w-3xl px-5 py-12">
-      <h1 className="text-2xl font-bold">درآمد</h1>
+    <div className="mx-auto max-w-[1000px] px-4.5 pt-6 pb-19 md:px-6 md:pt-9 md:pb-26">
+      <div className="flex items-center gap-2 text-[13px] text-meta">
+        <Link href="/teacher" className="text-meta hover:text-ink">پنل استاد</Link>
+        <span>←</span>
+        <span className="text-ink-2">درآمدها</span>
+      </div>
 
-      {error ? <p className="alert-error mt-6">{error}</p> : null}
+      <header className="mt-4.5">
+        <h1 className="text-[clamp(25px,3vw,32px)] font-semibold tracking-[-0.02em] text-ink">
+          درآمدها
+        </h1>
+        <p className="mt-2.5 max-w-[52ch] text-[15.5px] leading-[1.95] text-ink-2 text-pretty">
+          درآمد کلاس‌ها و وضعیت تسویه‌های ثبت‌شده را اینجا ببین.
+        </p>
+      </header>
 
-      {earnings === null ? (
-        <p className="mt-8 text-sm text-ink-muted">در حال بارگذاری…</p>
-      ) : (
+      {error ? (
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          <p className="alert-error flex-1">{error}</p>
+          <button type="button" className="btn-quiet" onClick={() => void load()}>
+            تلاش دوباره
+          </button>
+        </div>
+      ) : null}
+
+      {!earnings && !error ? (
+        <EarningsSkeleton />
+      ) : earnings && !hasAccountActivity ? (
+        <section className="rule-top mt-10 pt-9 md:mt-13 md:pt-10">
+          <EmptyState
+            title="هنوز درآمدی ثبت نشده است."
+            action={<Link href="/teacher" className="btn-ghost">دیدن کلاس‌ها ←</Link>}
+          >
+            بعد از نخستین کلاس پرداخت‌شده، جمع‌ها و ریز دفتر کل اینجا نمایش داده
+            می‌شوند.
+          </EmptyState>
+        </section>
+      ) : earnings ? (
         <>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Total label="ناخالص" amount={earnings.gross} />
-            <Total label="سهم پلتفرم" amount={earnings.commission} />
-            <Total label="تسویه‌شده" amount={earnings.paidOut} />
-            <Total label="مانده" amount={earnings.outstanding} emphasis />
-          </div>
+          <EarningsSummary earnings={earnings} />
 
-          {/*
-            «ناخالص» با تسویه شدن پایین نمی‌آید، هرچند سطر تسویه در دفتر
-            کل ناچار `gross` منفی دارد: API سطرهای تسویه را از دو ستون
-            اول کنار می‌گذارد. وگرنه استاد بعد از گرفتن پول می‌دید که
-            «درآمد ناخالص»‌اش کم شده.
-          */}
-          <p className="alert-info mt-6">
-            تسویه در حال حاضر ماهانه و دستی انجام می‌شود. «مانده» همان مبلغی است
-            که در تسویه‌ی بعدی پرداخت می‌شود.
-          </p>
+          <InlineNotice tone="wood" className="mt-7 max-w-[74ch]">
+            تسویه در حال حاضر ماهانه و دستی است. «مانده قابل تسویه» همان عددی
+            است که سرور برای پرداخت بعدی نگه می‌دارد.
+          </InlineNotice>
 
-          <section className="mt-10">
-            <h2 className="text-lg font-bold">گردش حساب</h2>
-
-            {earnings.entries.length === 0 ? (
-              <p className="mt-4 text-sm text-ink-muted">
-                هنوز تراکنشی ثبت نشده است.
-              </p>
-            ) : (
-              <ul className="mt-4 space-y-2">
-                {earnings.entries.map((entry, index) => (
-                  <li
-                    key={`${entry.createdAt}-${index}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 text-sm"
-                  >
-                    {/*
-                      نوع سطر جدا نوشته نمی‌شود.
-                      شرحی که دفتر کل ذخیره می‌کند خودش نوعش را می‌گوید
-                      («درآمد جلسه»، «بازپرداخت لغو جلسه»)، و کنار هم
-                      گذاشتنشان یعنی هر سطر یک کلمه را دو بار تکرار کند.
-                    */}
-                    <div>
-                      <p>{entry.description}</p>
-                      <p className="text-ink-muted">
-                        {formatJalaliDate(entry.createdAt.slice(0, 10))}
-                      </p>
-                    </div>
-
-                    {/*
-                      مبلغ منفی با یک منهای صریح نشان داده می‌شود، نه
-                      فقط با رنگ: سطر بازپرداخت باید در نگاه اول از سطر
-                      درآمد قابل تشخیص باشد، حتی چاپ‌شده یا سیاه‌وسفید.
-                    */}
-                    <span
-                      className={
-                        entry.net.startsWith("-") ? "text-ink-muted" : "font-medium"
-                      }
-                    >
-                      {signedToman(entry.net)} تومان
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <Ledger entries={earnings.entries} />
         </>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function Total({
-  label,
-  amount,
-  emphasis = false,
-}: {
-  label: string;
-  amount: string;
-  emphasis?: boolean;
-}) {
+function EarningsSummary({ earnings }: { earnings: Earnings }) {
   return (
-    <div className="card">
-      <p className="text-sm text-ink-muted">{label}</p>
-      <p className={`mt-2 ${emphasis ? "text-xl font-bold" : "text-lg"}`}>
-        {signedToman(amount)} <span className="text-sm font-normal">تومان</span>
+    <section className="mt-8 grid items-start gap-5 border-t border-divider pt-7 md:mt-10 md:grid-cols-[1.4fr_1fr_1fr] md:gap-0 md:pt-8">
+      <div className="md:pe-8">
+        <p className="text-[13.5px] text-meta">درآمد ناخالص ثبت‌شده</p>
+        <p className="mt-2 flex flex-wrap items-baseline gap-2">
+          <bdi dir="ltr" className="text-[clamp(30px,4.4vw,40px)] font-semibold tracking-[-0.02em] text-ink">
+            {formatLedgerToman(earnings.gross)}
+          </bdi>
+          <span className="text-[15px] text-ink-2">تومان</span>
+        </p>
+        <p className="mt-2 text-[13.5px] text-meta">
+          سهم پلتفرم: <bdi dir="ltr">{formatLedgerToman(earnings.commission)}</bdi> تومان
+        </p>
+      </div>
+      <SummaryCell label="مانده قابل تسویه" amount={earnings.outstanding} dot="bg-wood-light" />
+      <SummaryCell label="تسویه‌شده" amount={earnings.paidOut} dot="bg-violet" />
+    </section>
+  );
+}
+
+function SummaryCell({ label, amount, dot }: { label: string; amount: string; dot: string }) {
+  return (
+    <div className="border-t border-divider pt-5 md:border-t-0 md:border-s md:ps-8 md:pt-0">
+      <p className="flex items-center gap-2 text-[13.5px] text-meta">
+        <span className={`size-1.5 rounded-full ${dot}`} />
+        {label}
+      </p>
+      <p className="mt-2 text-[19px] text-ink">
+        <bdi dir="ltr">{formatLedgerToman(amount)}</bdi>{" "}
+        <span className="text-[13.5px] text-ink-2">تومان</span>
       </p>
     </div>
   );
 }
 
-/**
- * مبلغ علامت‌دار.
- *
- * `formatToman` روی `bigint` منفی هم کار می‌کند، ولی `Intl` علامت را
- * سمت درست RTL نمی‌گذارد و «−۱۲۳» گاهی «۱۲۳−» دیده می‌شود. علامت
- * دستی و جدا از عدد نوشته می‌شود.
- */
-function signedToman(rial: string): string {
-  return rial.startsWith("-")
-    ? `${formatToman(rial.slice(1))}−`
-    : formatToman(rial);
+function Ledger({ entries }: { entries: Earnings["entries"] }) {
+  return (
+    <section className="mt-9 md:mt-10">
+      <SectionMark tone="wood">ریز درآمد</SectionMark>
+
+      {entries.length === 0 ? (
+        <div className="mt-7 border-t border-divider pt-7">
+          <EmptyState quiet title="دفتر کل هنوز سطری ندارد.">
+            درآمد، بازپرداخت، تعدیل و تسویه‌ها بعد از ثبت واقعی اینجا دیده
+            می‌شوند.
+          </EmptyState>
+        </div>
+      ) : (
+        <div className="mt-5">
+          <div className="hidden grid-cols-[1.6fr_1fr_1fr_1fr_24px] gap-4 px-1 pb-2.5 text-[12.5px] text-meta min-[861px]:grid">
+            <span>شرح</span>
+            <span>تاریخ</span>
+            <span>نوع سطر</span>
+            <span>مبلغ خالص</span>
+            <span />
+          </div>
+          {entries.map((entry, index) => {
+            const negative = entry.net.startsWith("-");
+            return (
+              <details key={`${entry.createdAt}-${index}`} className="group border-t border-divider">
+                <summary className="grid min-h-11 cursor-pointer grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1.5 px-1 py-4 transition-colors hover:bg-surface-2 min-[861px]:grid-cols-[1.6fr_1fr_1fr_1fr_24px] min-[861px]:gap-4">
+                  <span className="min-w-0 text-[14.5px] text-ink">{entry.description}</span>
+                  <span className="text-end text-[13px] text-ink-2 min-[861px]:text-start">
+                    {formatTehranJalaliDate(entry.createdAt)}
+                  </span>
+                  <span className="col-span-2 text-[13px] text-meta min-[861px]:col-span-1">
+                    {ledgerTypeLabel(entry.type)}
+                  </span>
+                  <span className={`text-[14.5px] min-[861px]:text-start ${negative ? "text-wood-light" : "text-ink"}`}>
+                    <bdi dir="ltr">{formatLedgerToman(entry.net)}</bdi>{" "}تومان
+                  </span>
+                  <ChevronDownIcon className="mx-auto text-meta transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="pb-5">
+                  <div className="grid gap-4 rounded-panel bg-surface-2 p-4.5 shadow-[inset_0_0_0_1px_var(--color-divider)] sm:grid-cols-3 md:p-5">
+                    <LedgerAmount label="مبلغ ناخالص" amount={entry.gross} />
+                    <LedgerAmount label="سهم پلتفرم" amount={entry.commission} />
+                    <LedgerAmount label="خالص سطر" amount={entry.net} />
+                    <p className="sm:col-span-3 text-[13px] leading-[1.9] text-meta">
+                      این ارقام عیناً از دفتر کل سرور نمایش داده می‌شوند؛ سطرهای
+                      بازپرداخت یا تعدیل می‌توانند منفی باشند.
+                    </p>
+                  </div>
+                </div>
+              </details>
+            );
+          })}
+          <div className="border-t border-divider" />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LedgerAmount({ label, amount }: { label: string; amount: string }) {
+  return (
+    <div>
+      <p className="text-[12.5px] text-meta">{label}</p>
+      <p className="mt-1 text-sm text-ink"><bdi dir="ltr">{formatLedgerToman(amount)}</bdi> تومان</p>
+    </div>
+  );
+}
+
+function EarningsSkeleton() {
+  return (
+    <div className="mt-10" aria-label="در حال بارگذاری درآمدها">
+      <div className="grid gap-5 border-t border-divider pt-8 md:grid-cols-[1.4fr_1fr_1fr] md:gap-8">
+        <div><Skeleton className="h-4 w-36" /><Skeleton className="mt-3 h-11 w-52 max-w-full" delay={1} /><Skeleton className="mt-3 h-3.5 w-44" delay={2} /></div>
+        <div><Skeleton className="h-4 w-32" delay={1} /><Skeleton className="mt-3 h-7 w-36" delay={2} /></div>
+        <div><Skeleton className="h-4 w-28" delay={2} /><Skeleton className="mt-3 h-7 w-36" /></div>
+      </div>
+      <Skeleton className="mt-9 h-4 w-24" />
+      <div className="mt-5 space-y-px bg-divider">
+        <Skeleton className="h-16 w-full rounded-none" delay={1} />
+        <Skeleton className="h-16 w-full rounded-none" delay={2} />
+        <Skeleton className="h-16 w-full rounded-none" />
+      </div>
+    </div>
+  );
 }

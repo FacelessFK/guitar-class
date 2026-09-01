@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
   WEEKDAY_NAMES_FA,
@@ -9,6 +10,14 @@ import {
   tehranDateKey,
 } from "@music/shared";
 
+import {
+  CheckIcon,
+  EmptyState,
+  InlineNotice,
+  SectionMark,
+  Skeleton,
+  TrashIcon,
+} from "@/components/ui";
 import { errorMessage } from "@/lib/api-client";
 import {
   addException,
@@ -21,21 +30,6 @@ import {
 } from "@/lib/app-api";
 import { faDigits, faNumber, formatJalaliDayMonth } from "@/lib/format";
 
-/**
- * برنامه‌ی استاد.
- *
- * دو چیز جدا که با هم برنامه را می‌سازند:
- *
- *   **قوانین هفتگی** — «هر شنبه ۱۶ تا ۲۰». تکرارشونده و بدون تاریخ
- *   پایان. اسکلت برنامه از این‌ها ساخته می‌شود.
- *
- *   **استثناها** — «این پنج‌شنبه نیستم» یا «این یک‌شنبه استثنائاً
- *   هستم». فقط یک روز مشخص.
- *
- * اسلات‌های آزاد هیچ‌جا ذخیره نمی‌شوند و هر بار از روی همین دو تا
- * محاسبه می‌شوند (سند معماری، بخش ۴.۳). یعنی هر تغییری اینجا بلافاصله
- * در آنچه هنرجو می‌بیند اثر می‌گذارد.
- */
 export default function AvailabilityPage() {
   const [rules, setRules] = useState<ScheduleRule[] | null>(null);
   const [exceptions, setExceptions] = useState<ScheduleException[] | null>(null);
@@ -58,20 +52,51 @@ export default function AvailabilityPage() {
   }, [load]);
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-12">
-      <h1 className="text-2xl font-bold">برنامه‌ی من</h1>
-      <p className="mt-2 text-sm text-ink-muted">
-        ساعت‌هایی که اینجا تعریف می‌کنید، همان ساعت‌هایی است که هنرجو می‌تواند
-        رزرو کند. همه به وقت تهران است.
-      </p>
+    <div className="mx-auto max-w-[1000px] px-4.5 pt-6 pb-19 md:px-6 md:pt-9 md:pb-26">
+      <div className="flex items-center gap-2 text-[13px] text-meta">
+        <Link href="/teacher" className="text-meta hover:text-ink">
+          پنل استاد
+        </Link>
+        <span>←</span>
+        <span className="text-ink-2">زمان‌های تدریس</span>
+      </div>
 
-      {error ? <p className="alert-error mt-6">{error}</p> : null}
-      {notice ? <p className="alert-info mt-6">{notice}</p> : null}
+      <header className="mt-4.5">
+        <h1 className="text-[clamp(25px,3vw,32px)] font-semibold tracking-[-0.02em] text-ink">
+          زمان‌های تدریس
+        </h1>
+        <p className="mt-2.5 max-w-[58ch] text-[15px] leading-[1.9] text-ink-2 text-pretty">
+          برنامه عادی هر هفته و تغییرهای یک‌روزه را جداگانه مدیریت کن. همه
+          ساعت‌ها به وقت تهران است.
+        </p>
+      </header>
+
+      <InlineNotice tone="wood" className="mt-5 max-w-[76ch]">
+        کلاس‌های رزروشده با حذف یک زمان هفتگی از بین نمی‌روند و همچنان باید
+        برگزار شوند.
+      </InlineNotice>
+
+      {error ? (
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          <p className="alert-error flex-1">{error}</p>
+          {rules === null || exceptions === null ? (
+            <button type="button" className="btn-quiet" onClick={() => void load()}>
+              تلاش دوباره
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {notice ? (
+        <p className="mt-6 flex items-start gap-2 text-[13.5px] leading-[1.9] text-ok">
+          <CheckIcon className="mt-1 shrink-0" />
+          <span>{notice}</span>
+        </p>
+      ) : null}
 
       <WeeklyRules
         rules={rules}
         onChanged={(message) => {
-          setNotice(message);
+          setNotice(message ?? "برنامه هفتگی ذخیره شد.");
           void load();
         }}
         onError={setError}
@@ -79,8 +104,8 @@ export default function AvailabilityPage() {
 
       <Exceptions
         exceptions={exceptions}
-        onChanged={() => {
-          setNotice(null);
+        onChanged={(message) => {
+          setNotice(message);
           void load();
         }}
         onError={setError}
@@ -88,10 +113,6 @@ export default function AvailabilityPage() {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// قوانین هفتگی
-// ---------------------------------------------------------------------------
 
 function WeeklyRules({
   rules,
@@ -102,10 +123,18 @@ function WeeklyRules({
   onChanged: (message: string | null) => void;
   onError: (message: string | null) => void;
 }) {
+  const [formOpen, setFormOpen] = useState(false);
   const [weekday, setWeekday] = useState(0);
   const [start, setStart] = useState("16:00");
   const [end, setEnd] = useState("20:00");
   const [pending, setPending] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+
+  function openForDay(day: number) {
+    setWeekday(day);
+    setFormOpen(true);
+    setPendingDelete(null);
+  }
 
   async function submit() {
     setPending(true);
@@ -116,12 +145,10 @@ function WeeklyRules({
         weekday,
         startMinute: parseTimeToMinutes(start),
         endMinute: parseTimeToMinutes(end),
-        // «از امروز، بدون تاریخ پایان» تقریباً همیشه همان چیزی است که
-        // استاد می‌خواهد. تاریخ پایان در API هست ولی در فرم نیامده تا
-        // فرم سه‌فیلدی بماند؛ برای بستن یک بازه، حذفش ساده‌تر است.
         validFrom: tehranDateKey(new Date()),
         validUntil: null,
       });
+      setFormOpen(false);
       onChanged(null);
     } catch (caught) {
       onError(errorMessage(caught));
@@ -135,10 +162,11 @@ function WeeklyRules({
 
     try {
       const result = await removeRule(rule.id);
+      setPendingDelete(null);
       onChanged(
         result.affectedBookings > 0
-          ? `این بازه حذف شد، ولی ${faNumber(result.affectedBookings)} کلاسِ از پیش رزروشده در همان ساعت سر جایش می‌ماند و باید برگزار شود.`
-          : null,
+          ? `این زمان حذف شد؛ ${faNumber(result.affectedBookings)} کلاس از پیش رزروشده در همان بازه سر جایش می‌ماند و باید برگزار شود.`
+          : "زمان هفتگی حذف شد.",
       );
     } catch (caught) {
       onError(errorMessage(caught));
@@ -146,119 +174,182 @@ function WeeklyRules({
   }
 
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-bold">ساعت‌های هفتگی</h2>
+    <section className="mt-10 md:mt-12">
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <SectionMark tone="wood">برنامه هفتگی</SectionMark>
+          <h2 className="mt-2.5 text-xl font-semibold text-ink">برنامه عادی هر هفته</h2>
+          <p className="mt-1.5 max-w-[58ch] text-[13.5px] leading-[1.9] text-meta">
+            مثل «هر شنبه از ساعت ۱۶ تا ۲۰». این زمان‌ها هر هفته تکرار می‌شوند.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-primary w-full sm:w-auto"
+          onClick={() => setFormOpen((open) => !open)}
+        >
+          {formOpen ? "بستن فرم" : "افزودن زمان هفتگی"}
+        </button>
+      </div>
+
+      {formOpen ? (
+        <WeeklyRuleForm
+          weekday={weekday}
+          start={start}
+          end={end}
+          pending={pending}
+          onWeekday={setWeekday}
+          onStart={setStart}
+          onEnd={setEnd}
+          onCancel={() => setFormOpen(false)}
+          onSubmit={submit}
+        />
+      ) : null}
 
       {rules === null ? (
-        <p className="mt-4 text-sm text-ink-muted">در حال بارگذاری…</p>
+        <WeeklyRulesSkeleton />
       ) : rules.length === 0 ? (
-        <p className="alert-info mt-4">
-          هنوز هیچ ساعتی تعریف نکرده‌اید، پس هیچ هنرجویی نمی‌تواند با شما کلاس
-          بگیرد.
-        </p>
-      ) : (
-        <ul className="mt-4 space-y-2">
-          {rules.map((rule) => (
-            <li
-              key={rule.id}
-              className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3"
-            >
-              <span>
-                <span className="font-medium">{WEEKDAY_NAMES_FA[rule.weekday]}</span>
-                {"، "}
-                {faDigits(formatMinutes(rule.startMinute))} تا{" "}
-                {faDigits(formatMinutes(rule.endMinute))}
-              </span>
-
-              <button
-                type="button"
-                className="text-sm text-ink-muted underline"
-                onClick={() => void remove(rule)}
-              >
-                حذف
+        <div className="card-hollow mt-7 px-5 py-9 text-center md:px-8 md:py-11">
+          <EmptyState
+            className="mx-auto text-start"
+            title="هنوز زمانی برای تدریس مشخص نکرده‌ای."
+            action={
+              <button type="button" className="btn-outline" onClick={() => openForDay(0)}>
+                افزودن اولین زمان
               </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <form
-        className="mt-6 flex flex-wrap items-end gap-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <div>
-          <label className="label" htmlFor="weekday">
-            روز
-          </label>
-          <select
-            id="weekday"
-            className="input"
-            value={weekday}
-            onChange={(event) => setWeekday(Number(event.target.value))}
+            }
           >
-            {WEEKDAY_NAMES_FA.map((name, index) => (
-              <option key={name} value={index}>
-                {name}
-              </option>
-            ))}
-          </select>
+            تا برنامه هفتگی نداشته باشی، هنرجوها هیچ ساعت آزادی برای رزرو
+            نمی‌بینند.
+          </EmptyState>
         </div>
-
-        <TimeField label="از ساعت" id="start" value={start} onChange={setStart} />
-        <TimeField label="تا ساعت" id="end" value={end} onChange={setEnd} />
-
-        <button type="submit" className="btn-primary" disabled={pending}>
-          {pending ? "…" : "افزودن"}
-        </button>
-      </form>
+      ) : (
+        <div className="mt-7">
+          {WEEKDAY_NAMES_FA.map((name, day) => {
+            const dayRules = rules.filter((rule) => rule.weekday === day);
+            return (
+              <div key={name} className="border-b border-divider/70">
+                <div className="flex flex-col items-stretch gap-3 px-1 py-4 md:flex-row md:items-start md:gap-5">
+                  <div className="flex w-auto shrink-0 items-center gap-2.5 pt-1.5 md:w-24">
+                    <span className={`size-1.5 rounded-full ${dayRules.length ? "bg-violet" : "bg-divider"}`} />
+                    <span className={dayRules.length ? "text-[15px] text-ink" : "text-[15px] text-meta"}>
+                      {name}
+                    </span>
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+                    {dayRules.length ? (
+                      dayRules.map((rule) => (
+                        <div key={rule.id} className="w-full md:w-auto">
+                          <div className="flex min-h-12 w-full items-center gap-3 rounded-control bg-violet-surface px-3.5 shadow-[inset_0_0_0_1px_var(--color-violet-border)] md:w-auto">
+                            <span dir="ltr" className="text-sm text-ink">
+                              {faDigits(formatMinutes(rule.startMinute))} — {faDigits(formatMinutes(rule.endMinute))}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`حذف زمان ${name}`}
+                              className="ms-auto grid size-11 place-items-center rounded-control border-0 bg-transparent text-meta transition-colors hover:bg-surface-2 hover:text-wood-light md:ms-1 md:size-9"
+                              onClick={() => setPendingDelete(rule.id)}
+                            >
+                              <TrashIcon size={14} />
+                            </button>
+                          </div>
+                          {pendingDelete === rule.id ? (
+                            <div className="mt-2 rounded-control bg-surface-2 p-3.5 shadow-[inset_0_0_0_1px_var(--color-divider)]">
+                              <p className="text-[13.5px] text-ink-2">این زمان هفتگی حذف شود؟</p>
+                              <div className="mt-3 flex flex-wrap gap-2.5">
+                                <button type="button" className="btn-danger" onClick={() => void remove(rule)}>
+                                  بله، حذف کن
+                                </button>
+                                <button type="button" className="btn-ghost" onClick={() => setPendingDelete(null)}>
+                                  انصراف
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))
+                    ) : (
+                      <span className="py-2 text-sm text-meta">زمانی ثبت نشده</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex min-h-11 shrink-0 items-center self-start px-1 text-[13px] text-meta transition-colors hover:text-violet-strong"
+                    onClick={() => openForDay(day)}
+                  >
+                    + افزودن زمان
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
 
-/**
- * ورودی ساعت.
- *
- * `type="time"` مرورگر استفاده می‌شود نه فیلد متنی: صفحه‌کلید موبایل
- * را درست باز می‌کند و خودش «۲۵:۷۰» را نمی‌پذیرد. سقفش ۲۳:۵۹ است، پس
- * بازه‌ای که دقیقاً سر نیمه‌شب تمام شود از این فرم درنمی‌آید — که برای
- * کلاس موسیقی حالت واقعی‌ای نیست.
- */
-function TimeField({
-  label,
-  id,
-  value,
-  onChange,
+function WeeklyRuleForm({
+  weekday,
+  start,
+  end,
+  pending,
+  onWeekday,
+  onStart,
+  onEnd,
+  onCancel,
+  onSubmit,
 }: {
-  label: string;
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
+  weekday: number;
+  start: string;
+  end: string;
+  pending: boolean;
+  onWeekday: (value: number) => void;
+  onStart: (value: string) => void;
+  onEnd: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => Promise<void>;
 }) {
   return (
-    <div>
-      <label className="label" htmlFor={id}>
-        {label}
-      </label>
-      <input
-        id={id}
-        className="input"
-        type="time"
-        dir="ltr"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
+    <form
+      className="mt-6 rounded-panel bg-surface p-4.5 shadow-[inset_0_0_0_1px_var(--color-violet-border)] md:p-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void onSubmit();
+      }}
+    >
+      <SectionMark tone="violet" width="sm">زمان هفتگی تازه</SectionMark>
+      <div className="mt-4 grid gap-3.5 md:grid-cols-3">
+        <div>
+          <label className="label" htmlFor="weekday">روز</label>
+          <select id="weekday" className="input" value={weekday} onChange={(event) => onWeekday(Number(event.target.value))}>
+            {WEEKDAY_NAMES_FA.map((name, index) => <option key={name} value={index}>{name}</option>)}
+          </select>
+        </div>
+        <TimeField label="از ساعت" id="weekly-start" value={start} onChange={onStart} />
+        <TimeField label="تا ساعت" id="weekly-end" value={end} onChange={onEnd} />
+      </div>
+      <div className="mt-4 flex flex-col-reverse gap-2.5 sm:flex-row">
+        <button type="submit" className="btn-primary min-h-12" disabled={pending}>
+          {pending ? "کمی صبر کنید…" : "ذخیره زمان"}
+        </button>
+        <button type="button" className="btn-ghost min-h-11 justify-center" onClick={onCancel}>
+          انصراف
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function TimeField({ label, id, value, onChange }: { label: string; id: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="min-w-0">
+      <label className="label" htmlFor={id}>{label}</label>
+      <input id={id} className="input min-w-0" type="time" dir="ltr" required value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// استثناها
-// ---------------------------------------------------------------------------
-
-/** چند روز آینده در فهرست انتخاب تاریخ بیاید. */
 const EXCEPTION_HORIZON_DAYS = 60;
 
 function Exceptions({
@@ -267,9 +358,10 @@ function Exceptions({
   onError,
 }: {
   exceptions: ScheduleException[] | null;
-  onChanged: () => void;
+  onChanged: (message: string) => void;
   onError: (message: string | null) => void;
 }) {
+  const [formOpen, setFormOpen] = useState(false);
   const [date, setDate] = useState(tehranDateKey(new Date()));
   const [type, setType] = useState<"BLOCK" | "EXTRA">("BLOCK");
   const [wholeDay, setWholeDay] = useState(true);
@@ -277,15 +369,11 @@ function Exceptions({
   const [end, setEnd] = useState("20:00");
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
-
-  // «کل روز» فقط برای بستن معنا دارد؛ «استثنائاً هستم» بدون ساعت یعنی
-  // چه؟ اگر واقعاً همیشه آن روز آزاد است، جایش قانون هفتگی است.
   const timesRequired = type === "EXTRA" || !wholeDay;
 
   async function submit() {
     setPending(true);
     onError(null);
-
     try {
       await addException({
         date,
@@ -296,7 +384,8 @@ function Exceptions({
         ...(reason.trim() ? { reason: reason.trim() } : {}),
       });
       setReason("");
-      onChanged();
+      setFormOpen(false);
+      onChanged("تغییر این روز ذخیره شد.");
     } catch (caught) {
       onError(errorMessage(caught));
     } finally {
@@ -306,160 +395,140 @@ function Exceptions({
 
   async function remove(exception: ScheduleException) {
     onError(null);
-
     try {
       await removeException(exception.id);
-      onChanged();
+      onChanged("تغییر یک‌روزه حذف شد.");
     } catch (caught) {
       onError(errorMessage(caught));
     }
   }
 
   return (
-    <section className="mt-12">
-      <h2 className="text-lg font-bold">استثناها</h2>
-      <p className="mt-1 text-sm text-ink-muted">
-        روزهایی که با برنامه‌ی هفتگی فرق دارند. فقط روزهای پیشِ رو نشان داده
-        می‌شوند.
-      </p>
+    <section className="rule-top mt-12 pt-9 md:mt-15 md:pt-11">
+      <div className="flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <SectionMark tone="violet">تغییر برای یک روز خاص</SectionMark>
+          <h2 className="mt-2.5 text-xl font-semibold text-ink">استثناهای برنامه</h2>
+          <p className="mt-1.5 max-w-[62ch] text-[13.5px] leading-[1.9] text-meta">
+            برای یک تاریخ مشخص، تمام یا بخشی از روز را ببند؛ یا زمانی اضافه کن
+            که در برنامه هفتگی‌ات نیست.
+          </p>
+        </div>
+        <button type="button" className="btn-outline w-full sm:w-auto" onClick={() => setFormOpen((open) => !open)}>
+          {formOpen ? "بستن فرم" : "ثبت تغییر یک‌روزه"}
+        </button>
+      </div>
+
+      {formOpen ? (
+        <form
+          className="mt-6 rounded-panel bg-surface p-4.5 shadow-[inset_0_0_0_1px_var(--color-divider)] md:p-5"
+          onSubmit={(event) => { event.preventDefault(); void submit(); }}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="exception-date">تاریخ</label>
+              <select id="exception-date" className="input" value={date} onChange={(event) => setDate(event.target.value)}>
+                {upcomingDates().map((day) => <option key={day} value={day}>{formatJalaliDayMonth(day)}</option>)}
+              </select>
+              <p className="field-hint">فقط روزهای پیشِ رو قابل انتخاب‌اند.</p>
+            </div>
+            <fieldset>
+              <legend className="label">نوع تغییر</legend>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  aria-pressed={type === "BLOCK"}
+                  className={type === "BLOCK" ? "btn-outline min-h-12 bg-violet-surface" : "btn-quiet min-h-12"}
+                  onClick={() => setType("BLOCK")}
+                >
+                  این روز نیستم
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={type === "EXTRA"}
+                  className={type === "EXTRA" ? "btn-outline min-h-12 bg-violet-surface" : "btn-quiet min-h-12"}
+                  onClick={() => { setType("EXTRA"); setWholeDay(false); }}
+                >
+                  زمان اضافه دارم
+                </button>
+              </div>
+            </fieldset>
+          </div>
+
+          {type === "BLOCK" ? (
+            <label className="mt-4 flex min-h-11 items-center gap-2.5 text-sm text-ink-2">
+              <input type="checkbox" checked={wholeDay} onChange={(event) => setWholeDay(event.target.checked)} />
+              بستن تمام روز
+            </label>
+          ) : null}
+
+          {timesRequired ? (
+            <div className="mt-4 grid gap-3.5 sm:grid-cols-2">
+              <TimeField label="از ساعت" id="exception-start" value={start} onChange={setStart} />
+              <TimeField label="تا ساعت" id="exception-end" value={end} onChange={setEnd} />
+            </div>
+          ) : null}
+
+          <div className="mt-4">
+            <label className="label" htmlFor="exception-reason">دلیل (اختیاری)</label>
+            <input id="exception-reason" className="input" maxLength={200} value={reason} onChange={(event) => setReason(event.target.value)} />
+            <p className="field-hint">این یادداشت فقط برای خودت نمایش داده می‌شود.</p>
+          </div>
+          <div className="mt-4 flex flex-col-reverse gap-2.5 sm:flex-row">
+            <button type="submit" className="btn-primary min-h-12" disabled={pending}>
+              {pending ? "کمی صبر کنید…" : "ذخیره تغییر"}
+            </button>
+            <button type="button" className="btn-ghost min-h-11 justify-center" onClick={() => setFormOpen(false)}>
+              انصراف
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {exceptions === null ? (
-        <p className="mt-4 text-sm text-ink-muted">در حال بارگذاری…</p>
+        <div className="mt-7 space-y-3"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" delay={1} /></div>
       ) : exceptions.length === 0 ? (
-        <p className="mt-4 text-sm text-ink-muted">استثنایی ثبت نشده است.</p>
+        <p className="mt-7 text-[14px] text-meta">برای روزهای پیشِ رو تغییری ثبت نشده است.</p>
       ) : (
-        <ul className="mt-4 space-y-2">
+        <ul className="mt-7">
           {exceptions.map((exception) => (
-            <li
-              key={exception.id}
-              className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3"
-            >
-              <span className="text-sm">
-                <span
-                  className={`badge ${exception.type === "BLOCK" ? "badge-off" : "badge-ok"}`}
-                >
-                  {exception.type === "BLOCK" ? "نیستم" : "استثنائاً هستم"}
-                </span>{" "}
-                {formatJalaliDayMonth(exception.date)}
-                {exception.startMinute !== null && exception.endMinute !== null
-                  ? ` · ${faDigits(formatMinutes(exception.startMinute))} تا ${faDigits(formatMinutes(exception.endMinute))}`
-                  : " · کل روز"}
-                {exception.reason ? (
-                  <span className="text-ink-muted"> · {exception.reason}</span>
-                ) : null}
+            <li key={exception.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-divider/70 px-1 py-4">
+              <span className={`flex items-center gap-2 text-[13.5px] ${exception.type === "BLOCK" ? "text-wood-light" : "text-violet-strong"}`}>
+                <span className={`size-1.5 rounded-full ${exception.type === "BLOCK" ? "bg-wood-light" : "bg-violet"}`} />
+                {exception.type === "BLOCK" ? "در دسترس نیستم" : "زمان اضافه"}
               </span>
-
-              <button
-                type="button"
-                className="text-sm text-ink-muted underline"
-                onClick={() => void remove(exception)}
-              >
-                حذف
+              <span className="text-sm text-ink-2">{formatJalaliDayMonth(exception.date)}</span>
+              <span dir="ltr" className="text-sm text-meta">
+                {exception.startMinute !== null && exception.endMinute !== null
+                  ? `${faDigits(formatMinutes(exception.startMinute))} — ${faDigits(formatMinutes(exception.endMinute))}`
+                  : "تمام روز"}
+              </span>
+              {exception.reason ? <span className="min-w-0 flex-1 text-[13px] text-meta">{exception.reason}</span> : <span className="flex-1" />}
+              <button type="button" className="inline-flex min-h-11 items-center gap-2 px-1 text-[13px] text-meta transition-colors hover:text-error" onClick={() => void remove(exception)}>
+                <TrashIcon size={14} /> حذف
               </button>
             </li>
           ))}
         </ul>
       )}
-
-      <form
-        className="mt-6 space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="label" htmlFor="exception-date">
-              تاریخ
-            </label>
-            {/*
-              فهرست تاریخ‌های شمسی به‌جای `input[type=date]`.
-              ورودی تاریخ مرورگر میلادی است و استادی که «این پنج‌شنبه»
-              را می‌خواهد باید معادل میلادی‌اش را حساب کند. فهرست
-              محدودِ روزهای پیشِ رو هم این را حل می‌کند و هم انتخاب
-              تاریخ گذشته را ناممکن.
-            */}
-            <select
-              id="exception-date"
-              className="input"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-            >
-              {upcomingDates().map((day) => (
-                <option key={day} value={day}>
-                  {formatJalaliDayMonth(day)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="label" htmlFor="exception-type">
-              نوع
-            </label>
-            <select
-              id="exception-type"
-              className="input"
-              value={type}
-              onChange={(event) => setType(event.target.value as "BLOCK" | "EXTRA")}
-            >
-              <option value="BLOCK">نیستم</option>
-              <option value="EXTRA">استثنائاً هستم</option>
-            </select>
-          </div>
-
-          {type === "BLOCK" ? (
-            <label className="flex items-center gap-2 pb-3 text-sm">
-              <input
-                type="checkbox"
-                checked={wholeDay}
-                onChange={(event) => setWholeDay(event.target.checked)}
-              />
-              کل روز
-            </label>
-          ) : null}
-        </div>
-
-        {timesRequired ? (
-          <div className="flex flex-wrap items-end gap-3">
-            <TimeField
-              label="از ساعت"
-              id="exception-start"
-              value={start}
-              onChange={setStart}
-            />
-            <TimeField label="تا ساعت" id="exception-end" value={end} onChange={setEnd} />
-          </div>
-        ) : null}
-
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex-1">
-            <label className="label" htmlFor="exception-reason">
-              دلیل (اختیاری، فقط خودتان می‌بینید)
-            </label>
-            <input
-              id="exception-reason"
-              className="input"
-              type="text"
-              maxLength={200}
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </div>
-
-          <button type="submit" className="btn-primary" disabled={pending}>
-            {pending ? "…" : "افزودن"}
-          </button>
-        </div>
-      </form>
     </section>
+  );
+}
+
+function WeeklyRulesSkeleton() {
+  return (
+    <div className="mt-7 space-y-1" aria-label="در حال بارگذاری برنامه هفتگی">
+      {Array.from({ length: 4 }, (_, index) => (
+        <div key={index} className="flex items-center gap-5 border-b border-divider/70 px-1 py-4">
+          <Skeleton className="h-4 w-20" delay={(index % 3) as 0 | 1 | 2} />
+          <Skeleton className="h-12 w-44 max-w-[60%]" delay={((index + 1) % 3) as 0 | 1 | 2} />
+        </div>
+      ))}
+    </div>
   );
 }
 
 function upcomingDates(): string[] {
   const today = tehranDateKey(new Date());
-  return Array.from({ length: EXCEPTION_HORIZON_DAYS }, (_, index) =>
-    addDaysToDateKey(today, index),
-  );
+  return Array.from({ length: EXCEPTION_HORIZON_DAYS }, (_, index) => addDaysToDateKey(today, index));
 }
