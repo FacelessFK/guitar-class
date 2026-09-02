@@ -108,6 +108,11 @@ async function confirmedBooking(hour = 17) {
 
   await settleOrder({ authority: order!.authority!, gateway, now: NOW });
 
+  // زمان ساختِ دیتابیس به ساعت واقعی اجرای تست وابسته است. جلسه‌ی fixture
+  // تاریخ ثابتی دارد، پس آن را هم به ساعت ثابت سناریو برمی‌گردانیم تا
+  // شرط «موعد یادآوری بعد از زمان رزرو باشد» با گذشت تقویم نشکند.
+  await db.update(bookings).set({ createdAt: NOW }).where(eq(bookings.id, booking.id));
+
   return booking;
 }
 
