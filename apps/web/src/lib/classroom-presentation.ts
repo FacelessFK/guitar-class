@@ -107,7 +107,9 @@ export function classroomCounterpartLabel(
   return `${booking.counterpartName} · ${booking.role === "TEACHER" ? "هنرجو" : "استاد"}`;
 }
 
-export function classroomDashboardHref(role: BookingDetail["role"]): string {
+export function classroomDashboardHref(
+  role: BookingDetail["role"],
+): "/teacher" | "/dashboard" {
   return role === "TEACHER" ? "/teacher" : "/dashboard";
 }
 
@@ -136,4 +138,17 @@ export function attendanceEventForJitsiEvent(
   if (event === "videoConferenceJoined") return "JOINED";
   if (event === "videoConferenceLeft" || event === "readyToClose") return "LEFT";
   return null;
+}
+
+/**
+ * payloadهای IFrame از مرز جاوااسکریپت خارجی می‌آیند و نباید صرفاً با
+ * type assertion به وضعیت کنترل تبدیل شوند. فقط بولین واقعی پذیرفته می‌شود.
+ */
+export function jitsiEventBoolean(
+  payload: unknown,
+  key: "muted" | "on",
+): boolean | null {
+  if (!payload || typeof payload !== "object") return null;
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "boolean" ? value : null;
 }

@@ -7,6 +7,7 @@ import {
   classroomDashboardHref,
   classroomSessionTypeLabel,
   classroomTimingPresentation,
+  jitsiEventBoolean,
   mediaControlLabel,
 } from "./classroom-presentation";
 
@@ -80,5 +81,12 @@ describe("safe control and event labels", () => {
     expect(attendanceEventForJitsiEvent("videoConferenceJoined")).toBe("JOINED");
     expect(attendanceEventForJitsiEvent("videoConferenceLeft")).toBe("LEFT");
     expect(attendanceEventForJitsiEvent("readyToClose")).toBe("LEFT");
+  });
+
+  it("فقط وضعیت بولینی واقعی جیتسی را به کنترل‌ها راه می‌دهد", () => {
+    expect(jitsiEventBoolean({ muted: true }, "muted")).toBe(true);
+    expect(jitsiEventBoolean({ on: false }, "on")).toBe(false);
+    expect(jitsiEventBoolean({ muted: "false" }, "muted")).toBeNull();
+    expect(jitsiEventBoolean(null, "muted")).toBeNull();
   });
 });

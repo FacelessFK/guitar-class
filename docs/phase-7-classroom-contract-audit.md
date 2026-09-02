@@ -62,9 +62,11 @@ visual migration. It was completed before changing the room UI.
 
 ## Attendance, leave, completion, and no-show
 
-- `videoConferenceJoined` reports `JOINED`. Current `participantLeft` and
-  `readyToClose` listeners report `LEFT`; `readyToClose` then navigates to the
-  relevant app dashboard.
+- `videoConferenceJoined` reports `JOINED`. The pre-migration page incorrectly
+  reported the current user as `LEFT` when a remote `participantLeft` event
+  arrived. The migrated page only maps local `videoConferenceLeft` and
+  `readyToClose` events to `LEFT`; `readyToClose` then navigates to the
+  booking-role-appropriate dashboard.
 - A first `JOINED` sets `actualStartedAt`, records the correct side's joined
   timestamp, and moves `CONFIRMED` to `IN_PROGRESS`. Repeated joins do not move
   the first timestamps.
@@ -106,3 +108,18 @@ visual migration. It was completed before changing the room UI.
 - Keep device selection and detailed media permission recovery inside Jitsi
   unless the host safely implements the documented device functions and error
   events. Do not duplicate a partial picker.
+
+## Migration implementation notes
+
+- The host control rail is disabled until Jitsi reports a real local join.
+  Microphone and camera labels are synchronized from Jitsi mute events, and a
+  control stays disabled if its initial state cannot be read.
+- Screen share is only rendered when the browser exposes `getDisplayMedia`;
+  the actual capture and share lifecycle remains owned by Jitsi.
+- Participant presence is derived from Jitsi participant events/count, not from
+  booking status. Connection quality is deliberately not claimed.
+- Media permission/device errors remain visible and point to Jitsi's complete
+  in-frame device settings. The host does not claim that permission was granted.
+- The leave confirmation states the real reversible semantics. It asks Jitsi
+  to hang up, reports only the local leave, and returns to the destination
+  derived from `BookingDetail.role`; no completion transition is introduced.

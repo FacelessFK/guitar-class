@@ -26,7 +26,7 @@ export default function RoomLayout({
     <>
       <SessionBootstrap />
       <RequireAuth>
-        <div className="flex h-screen flex-col overflow-hidden bg-bg leading-[1.7]">
+        <div className="flex h-screen h-dvh flex-col overflow-hidden bg-bg leading-[1.7]">
           {children}
         </div>
       </RequireAuth>

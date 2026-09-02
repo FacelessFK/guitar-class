@@ -18,6 +18,9 @@ export interface JitsiApi {
   addListener(event: string, handler: (payload?: unknown) => void): void;
   dispose(): void;
   executeCommand(command: string, ...args: unknown[]): void;
+  getNumberOfParticipants?(): number;
+  isAudioMuted?(): Promise<boolean>;
+  isVideoMuted?(): Promise<boolean>;
 }
 
 export interface JitsiOptions {
