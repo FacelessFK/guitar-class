@@ -187,6 +187,13 @@ describe("وُرکر نگه‌داری", () => {
     ).rejects.toThrow(/جاب ناشناخته/);
   });
 
+  it("نتیجه‌ی جاب بستن جلسه برای ذخیره در BullMQ قابل JSON شدن است", async () => {
+    const result = await processMaintenanceJob({ name: CLOSE_SESSIONS_JOB } as never);
+
+    expect(() => JSON.stringify(result)).not.toThrow();
+    expect(result).toMatchObject({ credited: "0" });
+  });
+
   it("اجرای دوباره‌ی جارو چیز تازه‌ای عوض نمی‌کند", async () => {
     await makeStaleBooking();
 

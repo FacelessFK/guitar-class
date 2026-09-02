@@ -31,7 +31,7 @@ const logger = new Logger("Worker");
 
 export type JobResult =
   | MaintenanceResult
-  | SessionCloseResult
+  | (Omit<SessionCloseResult, "credited"> & { credited: string })
   | ReminderResult
   | RetentionResult
   | PayoutRunResult;
@@ -47,8 +47,14 @@ export async function processMaintenanceJob(job: Job): Promise<JobResult> {
   switch (job.name) {
     case EXPIRE_HOLDS_JOB:
       return runMaintenance();
-    case CLOSE_SESSIONS_JOB:
-      return runSessionClose();
+    case CLOSE_SESSIONS_JOB: {
+      const result = await runSessionClose();
+
+      // BullMQ نتیجه‌ی هندلر را با JSON.stringify در Redis می‌نویسد و
+      // bigint در JSON پشتیبانی نمی‌شود. مبلغ را دقیق و بدون تبدیل به
+      // number (و خطر از دست رفتن دقت) به رشته تبدیل می‌کنیم.
+      return { ...result, credited: result.credited.toString() };
+    }
     case SEND_REMINDERS_JOB:
       return runReminders();
     case CLEANUP_MEDIA_JOB:
